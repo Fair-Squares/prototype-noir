@@ -5,6 +5,7 @@ Links to essential documentation for developing Fair Squares.
 ## Aztec Network
 
 - **LLMs.txt (full docs index):** https://docs.aztec.network/llms.txt
+- **TypeScript API summary:** https://docs.aztec.network/typescript-api/devnet/llm-summary.txt
 - **Getting Started (local network):** https://docs.aztec.network/developers/getting_started_on_local_network
 - **Counter Contract Tutorial:** https://docs.aztec.network/developers/docs/tutorials/contract_tutorials/counter_contract
 - **Token Contract Tutorial:** https://docs.aztec.network/developers/docs/tutorials/contract_tutorials/token_contract
