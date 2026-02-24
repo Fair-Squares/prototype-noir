@@ -17,7 +17,7 @@ export default function GovernancePage() {
 
   const handleVote = async (proposalId: number, voteYes: boolean) => {
     if (!address) {
-      setVoteMessage({ type: "error", text: "Connect your wallet to vote" });
+      setVoteMessage({ type: "error", text: "Connect your wallet first" });
       return;
     }
     setVotingId(proposalId);
@@ -27,12 +27,12 @@ export default function GovernancePage() {
       if (result.success) {
         setVoteMessage({
           type: "success",
-          text: `Vote ${voteYes ? "YES" : "NO"} cast on proposal #${proposalId} -- ZK proof verified`,
+          text: `Your ${voteYes ? "yes" : "no"} vote on proposal #${proposalId} has been recorded.`,
         });
         const updated = await fetchProposals();
         setProposals(updated);
       } else {
-        setVoteMessage({ type: "error", text: result.error ?? "Vote failed" });
+        setVoteMessage({ type: "error", text: result.error ?? "Something went wrong" });
       }
     } finally {
       setVotingId(null);
@@ -43,9 +43,9 @@ export default function GovernancePage() {
     <div className="space-y-8">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-text-primary mb-2">Governance</h1>
-          <p className="text-text-secondary">
-            Vote on property acquisitions. Your vote is private -- only aggregate results are public.
+          <h1 className="text-2xl font-bold text-fs-anthracite mb-1">Proposals</h1>
+          <p className="text-gray-500">
+            Vote on which properties the fund should buy. Your vote is anonymous.
           </p>
         </div>
         <WalletConnect onConnect={setAddress} />
@@ -55,8 +55,8 @@ export default function GovernancePage() {
         <div
           className={`rounded-xl p-4 text-sm font-medium ${
             voteMessage.type === "success"
-              ? "bg-fs-teal/10 border border-fs-teal/20 text-fs-teal"
-              : "bg-fs-magenta/10 border border-fs-magenta/20 text-fs-magenta-light"
+              ? "bg-fs-mint text-fs-teal-dark"
+              : "bg-red-50 text-red-600"
           }`}
         >
           {voteMessage.text}
@@ -64,15 +64,10 @@ export default function GovernancePage() {
       )}
 
       {proposals.length === 0 ? (
-        <div className="rounded-2xl bg-surface-card border border-surface-border p-14 text-center">
-          <div className="w-12 h-12 rounded-xl bg-surface-raised flex items-center justify-center mx-auto mb-4">
-            <svg className="w-6 h-6 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 0 1-2.25 2.25M16.5 7.5V18a2.25 2.25 0 0 0 2.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 0 0 2.25 2.25h13.5M6 7.5h3v3H6V7.5Z" />
-            </svg>
-          </div>
-          <p className="text-text-primary font-semibold text-lg mb-2">No proposals yet</p>
-          <p className="text-sm text-text-muted">
-            When the housing council submits a property for acquisition, it will appear here for voting.
+        <div className="rounded-xl bg-gray-50 p-14 text-center">
+          <p className="font-semibold text-fs-anthracite text-lg mb-2">No proposals yet</p>
+          <p className="text-sm text-gray-400">
+            When a property is put forward for purchase, it will appear here for everyone to vote on.
           </p>
         </div>
       ) : (
@@ -87,18 +82,6 @@ export default function GovernancePage() {
           ))}
         </div>
       )}
-
-      {/* Privacy note */}
-      <div className="bg-fs-teal/5 border border-fs-teal/10 rounded-xl p-4 text-sm text-fs-teal flex items-start gap-2">
-        <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-        </svg>
-        <span>
-          <strong>Private voting:</strong> When you cast a vote,
-          it runs in your local PXE. A ZK nullifier prevents double-voting without revealing
-          your identity. Tallies update publicly, but nobody can see who voted which way.
-        </span>
-      </div>
     </div>
   );
 }

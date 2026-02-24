@@ -14,73 +14,37 @@ interface FundStatsProps {
 }
 
 const STAT_CARDS = [
-  {
-    key: "totalDeposits" as const,
-    label: "Total Fund Size",
-    accent: "text-fs-teal",
-    borderAccent: "border-fs-teal/15",
-    glow: "shadow-[0_0_24px_rgba(76,189,176,0.08)]",
-  },
-  {
-    key: "totalInDefi" as const,
-    label: "Generating Yield",
-    accent: "text-fs-teal-light",
-    borderAccent: "border-fs-teal/10",
-    glow: "",
-  },
-  {
-    key: "totalAllocated" as const,
-    label: "Reserved for Housing",
-    accent: "text-fs-magenta-light",
-    borderAccent: "border-fs-magenta/15",
-    glow: "shadow-[0_0_24px_rgba(196,22,103,0.06)]",
-  },
-  {
-    key: "available" as const,
-    label: "Available to Deploy",
-    accent: "text-text-primary",
-    borderAccent: "border-surface-border",
-    glow: "",
-  },
+  { key: "totalDeposits" as const, label: "Fund Size", color: "text-fs-teal" },
+  { key: "totalInDefi" as const, label: "Earning Returns", color: "text-fs-anthracite" },
+  { key: "totalAllocated" as const, label: "In Housing", color: "text-fs-magenta" },
+  { key: "available" as const, label: "Ready to Deploy", color: "text-fs-anthracite" },
 ];
 
 export default function FundStats(props: FundStatsProps) {
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {STAT_CARDS.map((card) => (
-          <div
-            key={card.key}
-            className={`rounded-2xl bg-surface-card border ${card.borderAccent} p-5 ${card.glow} card-hover`}
-          >
-            <span className="text-sm text-text-muted font-medium block mb-3">{card.label}</span>
-            <p className={`text-2xl font-bold ${card.accent} tracking-tight`}>
+          <div key={card.key} className="rounded-xl bg-gray-50 p-5">
+            <span className="text-sm text-gray-400 font-medium">{card.label}</span>
+            <p className={`text-2xl font-bold mt-1 ${card.color}`}>
               {formatEUR(props[card.key])}
             </p>
           </div>
         ))}
       </div>
 
-      {/* Secondary stats */}
-      <div className="flex items-center gap-6 px-1">
-        <div className="flex items-center gap-2 text-sm text-text-muted">
-          <span className="font-semibold text-text-primary">{props.investorCount}</span> investors
-        </div>
-        <div className="w-px h-4 bg-surface-border" />
-        <div className="flex items-center gap-2 text-sm text-text-muted">
-          <span className="font-semibold text-fs-teal">{formatEUR(props.totalYield)}</span> yield generated
-        </div>
-        <div className="w-px h-4 bg-surface-border" />
-        <div className="flex items-center gap-2 text-sm text-text-muted">
-          <span className="font-semibold text-text-primary">3%</span> target APY
-        </div>
+      <div className="flex items-center gap-6 px-1 text-sm text-gray-400">
+        <span><strong className="text-fs-anthracite">{props.investorCount}</strong> investors</span>
+        <span className="text-gray-200">|</span>
+        <span><strong className="text-fs-teal">{formatEUR(props.totalYield)}</strong> returns paid out</span>
+        <span className="text-gray-200">|</span>
+        <span><strong className="text-fs-anthracite">~3%</strong> yearly return</span>
       </div>
 
       {props.isPaused && (
-        <div className="rounded-xl bg-fs-magenta/10 border border-fs-magenta/20 p-4 text-center">
-          <span className="text-fs-magenta-light font-medium text-sm">
-            Fund is currently paused -- deposits and withdrawals are disabled
-          </span>
+        <div className="rounded-xl bg-amber-50 border border-amber-100 p-4 text-center text-amber-700 text-sm font-medium">
+          The fund is temporarily paused. No deposits or withdrawals at this time.
         </div>
       )}
     </div>

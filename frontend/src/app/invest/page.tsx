@@ -38,10 +38,10 @@ export default function InvestPage() {
     setTxMessage(null);
     const result = await depositFunds(address, parseFloat(amount));
     if (result.success) {
-      setTxMessage({ type: "success", text: `Deposited EUR ${amount} -- ZK proof verified` });
+      setTxMessage({ type: "success", text: `Done! EUR ${amount} deposited into the fund.` });
       await refreshStats();
     } else {
-      setTxMessage({ type: "error", text: result.error ?? "Deposit failed" });
+      setTxMessage({ type: "error", text: result.error ?? "Something went wrong" });
     }
   };
 
@@ -50,10 +50,10 @@ export default function InvestPage() {
     setTxMessage(null);
     const result = await withdrawFunds(address, parseFloat(amount));
     if (result.success) {
-      setTxMessage({ type: "success", text: `Withdrew EUR ${amount} -- ZK proof verified` });
+      setTxMessage({ type: "success", text: `Done! EUR ${amount} withdrawn from the fund.` });
       await refreshStats();
     } else {
-      setTxMessage({ type: "error", text: result.error ?? "Withdrawal failed" });
+      setTxMessage({ type: "error", text: result.error ?? "Something went wrong" });
     }
   };
 
@@ -61,9 +61,9 @@ export default function InvestPage() {
     <div className="space-y-8">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-text-primary mb-2">Invest</h1>
-          <p className="text-text-secondary">
-            Deposit into the housing fund or withdraw your share. All transactions are private.
+          <h1 className="text-2xl font-bold text-fs-anthracite mb-1">Invest</h1>
+          <p className="text-gray-500">
+            Put money in or take it out. All transactions are completely private.
           </p>
         </div>
         <WalletConnect onConnect={setAddress} />
@@ -73,8 +73,8 @@ export default function InvestPage() {
         <div
           className={`rounded-xl p-4 text-sm font-medium ${
             txMessage.type === "success"
-              ? "bg-fs-teal/10 border border-fs-teal/20 text-fs-teal"
-              : "bg-fs-magenta/10 border border-fs-magenta/20 text-fs-magenta-light"
+              ? "bg-fs-mint text-fs-teal-dark"
+              : "bg-red-50 text-red-600"
           }`}
         >
           {txMessage.text}
