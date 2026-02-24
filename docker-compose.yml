@@ -1,14 +1,14 @@
-# Fair Squares — Local Development Stack
+# Fair Squares -- Local Development Stack
 #
 # Usage:
-#   docker compose up                     → Frontend only (simulation mode, instant)
-#   docker compose --profile aztec up     → Full stack with Aztec local network
+#   docker compose up                     -> Frontend only (simulation mode, instant)
+#   docker compose --profile aztec up     -> Full stack with Aztec local network
 #
 # The frontend works standalone with an in-memory simulation engine.
 # Add the 'aztec' profile when you want real Aztec local network + contract deployment.
 
 services:
-  # ── Frontend (always runs) ──────────────────────────────────────────────
+  # -- Frontend (always runs) --------------------------------------------------
   frontend:
     build: ./frontend
     ports:
@@ -29,17 +29,35 @@ services:
       retries: 6
       start_period: 15s
 
-  # ── Aztec Local Network (includes Anvil L1) ────────────────────────────
-  # `aztec start --local-network` boots everything: Anvil, L1 contracts,
-  # Aztec node, PXE, and pre-funded test accounts.
+  # -- Local Ethereum L1 (Anvil) -----------------------------------------------
+  # The Aztec Docker image requires an external L1 RPC URL.
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:latest
+    profiles: ["aztec"]
+    command: ["anvil", "--host", "0.0.0.0", "--port", "8545", "--chain-id", "31337"]
+    ports:
+      - "8545:8545"
+    healthcheck:
+      test: ["CMD", "cast", "block-number", "--rpc-url", "http://localhost:8545"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  # -- Aztec Local Network (PXE + Node) ----------------------------------------
   aztec:
     image: aztecprotocol/aztec:4.0.0-devnet.2-patch.0
     profiles: ["aztec"]
+    depends_on:
+      anvil:
+        condition: service_healthy
     command: start --local-network
     ports:
-      - "8080:8080"   # Aztec PXE / JSON-RPC
+      - "8080:8080"
     environment:
       LOG_LEVEL: info
+      ETHEREUM_HOSTS: http://anvil:8545
+      L1_CHAIN_ID: "31337"
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/status"]
       interval: 10s
@@ -47,7 +65,7 @@ services:
       retries: 30
       start_period: 180s
 
-  # ── Bootstrap (compile + deploy contracts) ──────────────────────────────
+  # -- Bootstrap (compile + deploy contracts) -----------------------------------
   # Uses the same Aztec image so CLI tools (aztec, aztec-wallet) are available.
   aztec-bootstrap:
     image: aztecprotocol/aztec:4.0.0-devnet.2-patch.0
