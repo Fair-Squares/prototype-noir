@@ -5,7 +5,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Fair Squares - Affordable Housing Fund",
-  description: "Invest in affordable housing. Your identity stays private, the impact is public.",
+  description: "Community-funded affordable housing. Fair returns for investors, fair rents for tenants.",
 };
 
 const NAV_ITEMS = [
@@ -18,18 +18,17 @@ const NAV_ITEMS = [
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-white text-fs-anthracite min-h-screen antialiased">
-        {/* Navigation */}
-        <header className="border-b border-gray-100 bg-white sticky top-0 z-50">
-          <div className="max-w-6xl mx-auto px-6 flex items-center justify-between h-16">
-            <Link href="/" className="flex items-center gap-3">
+      <body className="bg-bg text-text-1 min-h-screen antialiased">
+        <header className="bg-bg sticky top-0 z-50 border-b border-border">
+          <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-14">
+            <Link href="/" className="flex items-center gap-2.5">
               <Image
-                src="/brand/fs-light-dark.png"
+                src="/brand/fs-dark.png"
                 alt="Fair Squares"
-                width={32}
-                height={32}
+                width={28}
+                height={28}
               />
-              <span className="font-bold text-lg tracking-tight">Fair Squares</span>
+              <span className="font-bold text-[15px] text-text-1">Fair Squares</span>
             </Link>
 
             <nav className="flex items-center gap-1">
@@ -37,26 +36,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="px-4 py-2 rounded-lg text-sm text-gray-500 hover:text-fs-anthracite hover:bg-gray-50 font-medium"
+                  className="px-3 py-1.5 rounded-md text-[13px] text-text-2 hover:text-text-1 font-medium"
                 >
                   {item.label}
                 </Link>
               ))}
             </nav>
 
-            <a
-              href="/kyc"
-              className="px-4 py-2 rounded-lg bg-fs-teal text-white text-sm font-semibold hover:bg-fs-teal-dark"
-            >
-              Get Started
-            </a>
+            <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-fs-teal text-white text-[13px] font-semibold hover:bg-fs-teal-dark">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 0 0-2.25-2.25H15a3 3 0 1 1-6 0H5.25A2.25 2.25 0 0 0 3 12m18 0v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 9m18 0V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v3" />
+              </svg>
+              Connect Wallet
+            </button>
           </div>
         </header>
 
-        <main className="max-w-6xl mx-auto px-6 py-10">{children}</main>
+        <main className="max-w-7xl mx-auto px-6 py-8">{children}</main>
 
-        <footer className="border-t border-gray-100 mt-20 py-8 text-center text-sm text-gray-400">
-          Fair Squares &middot; Making housing affordable, one building at a time
+        <footer className="border-t border-border mt-20 py-6 text-center text-[13px] text-text-3">
+          Fair Squares &middot; Community-funded affordable housing
         </footer>
       </body>
     </html>

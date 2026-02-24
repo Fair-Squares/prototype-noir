@@ -11,49 +11,37 @@ export default function PortfolioPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    async function load() {
-      if (!address) return;
-      setLoading(true);
-      try {
-        const data = await fetchPortfolio(address);
-        setPortfolio(data);
-      } catch (e) {
-        console.error("Failed to load portfolio:", e);
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
+    if (!address) return;
+    setLoading(true);
+    fetchPortfolio(address)
+      .then(setPortfolio)
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, [address]);
 
   return (
     <div className="space-y-8">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-fs-anthracite mb-1">My Account</h1>
-          <p className="text-gray-500">Your investment in the housing fund.</p>
+          <h1 className="text-2xl font-bold mb-1">My Account</h1>
+          <p className="text-text-2 text-sm">Your position in the housing fund.</p>
         </div>
         <WalletConnect onConnect={setAddress} />
       </div>
 
       {!address ? (
-        <div className="rounded-xl bg-gray-50 p-14 text-center">
-          <p className="font-semibold text-fs-anthracite text-lg mb-2">
-            Connect to see your balance
-          </p>
-          <p className="text-sm text-gray-400">
-            Your balance is private and only visible to you.
-          </p>
+        <div className="rounded-xl bg-card p-14 text-center">
+          <p className="font-semibold text-text-1 text-lg mb-2">Connect to see your balance</p>
+          <p className="text-sm text-text-3">Your fund tokens (FSFT) represent your share of the fund.</p>
         </div>
       ) : (
         <>
           <PrivateBalance portfolio={portfolio} isLoading={loading} />
 
-          <div className="rounded-xl bg-white border border-gray-100 p-6">
-            <h2 className="font-semibold text-fs-anthracite mb-2">Transaction History</h2>
-            <p className="text-sm text-gray-400">
-              Your transaction history is stored locally and is completely private.
-              Nobody else can see your past deposits or withdrawals.
+          <div className="rounded-xl bg-card p-6">
+            <h2 className="font-semibold text-text-1 mb-2">Transactions</h2>
+            <p className="text-sm text-text-3">
+              Your deposit and withdrawal history will appear here.
             </p>
           </div>
         </>

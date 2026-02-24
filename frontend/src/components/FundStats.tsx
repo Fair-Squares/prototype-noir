@@ -14,10 +14,10 @@ interface FundStatsProps {
 }
 
 const STAT_CARDS = [
-  { key: "totalDeposits" as const, label: "Fund Size", color: "text-fs-teal" },
-  { key: "totalInDefi" as const, label: "Earning Returns", color: "text-fs-anthracite" },
-  { key: "totalAllocated" as const, label: "In Housing", color: "text-fs-magenta" },
-  { key: "available" as const, label: "Ready to Deploy", color: "text-fs-anthracite" },
+  { key: "totalDeposits" as const, label: "Total fund size" },
+  { key: "totalInDefi" as const, label: "Earning returns" },
+  { key: "totalAllocated" as const, label: "Reserved for housing" },
+  { key: "available" as const, label: "Ready to deploy" },
 ];
 
 export default function FundStats(props: FundStatsProps) {
@@ -25,26 +25,24 @@ export default function FundStats(props: FundStatsProps) {
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {STAT_CARDS.map((card) => (
-          <div key={card.key} className="rounded-xl bg-gray-50 p-5">
-            <span className="text-sm text-gray-400 font-medium">{card.label}</span>
-            <p className={`text-2xl font-bold mt-1 ${card.color}`}>
+          <div key={card.key} className="rounded-xl bg-card p-5">
+            <span className="text-xs text-text-3 font-medium uppercase tracking-wide">{card.label}</span>
+            <p className="text-2xl font-bold mt-2 text-text-1">
               {formatEUR(props[card.key])}
             </p>
           </div>
         ))}
       </div>
 
-      <div className="flex items-center gap-6 px-1 text-sm text-gray-400">
-        <span><strong className="text-fs-anthracite">{props.investorCount}</strong> investors</span>
-        <span className="text-gray-200">|</span>
-        <span><strong className="text-fs-teal">{formatEUR(props.totalYield)}</strong> returns paid out</span>
-        <span className="text-gray-200">|</span>
-        <span><strong className="text-fs-anthracite">~3%</strong> yearly return</span>
+      <div className="flex items-center gap-6 text-[13px] text-text-3">
+        <span><strong className="text-text-1">{props.investorCount}</strong> investors</span>
+        <span><strong className="text-fs-teal">{formatEUR(props.totalYield)}</strong> returns paid</span>
+        <span><strong className="text-text-1">~3%</strong> target annual return</span>
       </div>
 
       {props.isPaused && (
-        <div className="rounded-xl bg-amber-50 border border-amber-100 p-4 text-center text-amber-700 text-sm font-medium">
-          The fund is temporarily paused. No deposits or withdrawals at this time.
+        <div className="rounded-xl bg-fs-magenta/10 p-4 text-center text-fs-magenta-light text-sm font-medium">
+          The fund is temporarily paused
         </div>
       )}
     </div>

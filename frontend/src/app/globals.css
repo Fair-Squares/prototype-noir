@@ -15,20 +15,30 @@
 }
 
 @theme {
-  /* Fair Squares brand */
   --color-fs-magenta: #C41667;
   --color-fs-magenta-light: #D93D85;
   --color-fs-teal: #4CBDB0;
   --color-fs-teal-light: #6DD4C8;
   --color-fs-teal-dark: #3A9A8F;
   --color-fs-anthracite: #2A2D34;
-  --color-fs-mint: #E8F5F2;
+  --color-fs-mint: #E0F0EC;
+
+  --color-bg: #111827;
+  --color-card: #1a2032;
+  --color-card-hover: #212a3d;
+  --color-border: rgba(255, 255, 255, 0.06);
+
+  --color-text-1: #f0f2f5;
+  --color-text-2: #9ca3af;
+  --color-text-3: #5a5e72;
 }
 
 body {
+  background: var(--color-bg);
+  color: var(--color-text-1);
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
 button, a, input, [role="button"] {
-  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
 }

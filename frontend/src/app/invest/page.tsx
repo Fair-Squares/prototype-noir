@@ -18,27 +18,17 @@ export default function InvestPage() {
   const [stats, setStats] = useState<FundStatsType | null>(null);
   const [txMessage, setTxMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  useEffect(() => {
-    fetchFundStats().then(setStats);
-  }, []);
+  useEffect(() => { fetchFundStats().then(setStats); }, []);
+  useEffect(() => { if (address) fetchKYCStatus(address).then(setIsKYCVerified); }, [address]);
 
-  useEffect(() => {
-    if (address) {
-      fetchKYCStatus(address).then(setIsKYCVerified);
-    }
-  }, [address]);
-
-  const refreshStats = async () => {
-    const newStats = await fetchFundStats();
-    setStats(newStats);
-  };
+  const refreshStats = async () => { setStats(await fetchFundStats()); };
 
   const handleDeposit = async (amount: string) => {
     if (!address) return;
     setTxMessage(null);
     const result = await depositFunds(address, parseFloat(amount));
     if (result.success) {
-      setTxMessage({ type: "success", text: `Done! EUR ${amount} deposited into the fund.` });
+      setTxMessage({ type: "success", text: `EUR ${amount} deposited into the fund.` });
       await refreshStats();
     } else {
       setTxMessage({ type: "error", text: result.error ?? "Something went wrong" });
@@ -50,7 +40,7 @@ export default function InvestPage() {
     setTxMessage(null);
     const result = await withdrawFunds(address, parseFloat(amount));
     if (result.success) {
-      setTxMessage({ type: "success", text: `Done! EUR ${amount} withdrawn from the fund.` });
+      setTxMessage({ type: "success", text: `EUR ${amount} withdrawn from the fund.` });
       await refreshStats();
     } else {
       setTxMessage({ type: "error", text: result.error ?? "Something went wrong" });
@@ -61,22 +51,16 @@ export default function InvestPage() {
     <div className="space-y-8">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-fs-anthracite mb-1">Invest</h1>
-          <p className="text-gray-500">
-            Put money in or take it out. All transactions are completely private.
-          </p>
+          <h1 className="text-2xl font-bold mb-1">Invest</h1>
+          <p className="text-text-2 text-sm">Deposit into or withdraw from the housing fund.</p>
         </div>
         <WalletConnect onConnect={setAddress} />
       </div>
 
       {txMessage && (
-        <div
-          className={`rounded-xl p-4 text-sm font-medium ${
-            txMessage.type === "success"
-              ? "bg-fs-mint text-fs-teal-dark"
-              : "bg-red-50 text-red-600"
-          }`}
-        >
+        <div className={`rounded-lg p-3 text-sm font-medium ${
+          txMessage.type === "success" ? "bg-fs-teal/10 text-fs-teal" : "bg-fs-magenta/10 text-fs-magenta-light"
+        }`}>
           {txMessage.text}
         </div>
       )}

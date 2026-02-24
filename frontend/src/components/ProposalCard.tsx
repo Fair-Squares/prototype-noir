@@ -16,32 +16,28 @@ export default function ProposalCard({ proposal, onVote, isVoting }: ProposalCar
   const isExpired = deadline < new Date();
   const statusLabel = PROPOSAL_STATUS[proposal.status] ?? "Unknown";
 
-  const statusStyles: Record<number, string> = {
-    0: "text-fs-teal bg-fs-mint",
-    1: "text-blue-600 bg-blue-50",
-    2: "text-fs-magenta bg-pink-50",
-    3: "text-purple-600 bg-purple-50",
+  const statusColor: Record<number, string> = {
+    0: "text-fs-teal bg-fs-teal/10",
+    1: "text-blue-400 bg-blue-400/10",
+    2: "text-fs-magenta-light bg-fs-magenta/10",
+    3: "text-purple-400 bg-purple-400/10",
   };
 
   return (
-    <div className="rounded-xl bg-white border border-gray-100 p-5 hover:shadow-md transition-shadow">
+    <div className="rounded-xl bg-card p-5">
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 mr-3">
-          <h3 className="font-semibold text-fs-anthracite">
+          <h3 className="font-semibold text-text-1">
             {proposal.title || `Proposal #${proposal.id}`}
           </h3>
           {proposal.description && (
-            <p className="text-sm text-gray-500 mt-1 line-clamp-2">{proposal.description}</p>
+            <p className="text-sm text-text-2 mt-1 line-clamp-2">{proposal.description}</p>
           )}
-          <p className="text-sm text-gray-400 mt-1">
-            Budget: <span className="font-semibold text-fs-anthracite">{formatEUR(proposal.amount)}</span>
+          <p className="text-sm text-text-3 mt-1">
+            Budget: <span className="text-text-1 font-medium">{formatEUR(proposal.amount)}</span>
           </p>
         </div>
-        <span
-          className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
-            statusStyles[proposal.status] ?? "text-gray-500 bg-gray-50"
-          }`}
-        >
+        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${statusColor[proposal.status] ?? "text-text-3 bg-card"}`}>
           {statusLabel}
         </span>
       </div>
@@ -50,23 +46,22 @@ export default function ProposalCard({ proposal, onVote, isVoting }: ProposalCar
       <div className="mb-3">
         <div className="flex justify-between text-xs font-medium mb-1.5">
           <span className="text-fs-teal">Yes: {proposal.yesVotes}</span>
-          <span className="text-fs-magenta">No: {proposal.noVotes}</span>
+          <span className="text-fs-magenta-light">No: {proposal.noVotes}</span>
         </div>
-        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-bg rounded-full overflow-hidden">
           {totalVotes > 0 && (
             <div
-              className="h-full bg-fs-teal rounded-full transition-all duration-500"
+              className="h-full bg-fs-teal rounded-full"
               style={{ width: `${yesPercent}%` }}
             />
           )}
         </div>
         {totalVotes > 0 && (
-          <p className="text-xs text-gray-400 mt-1 text-right">{yesPercent}% in favour</p>
+          <p className="text-xs text-text-3 mt-1 text-right">{yesPercent}% in favour</p>
         )}
       </div>
 
-      {/* Deadline */}
-      <p className="text-xs text-gray-400 mb-4">
+      <p className="text-xs text-text-3 mb-4">
         {isActive && !isExpired
           ? `Voting closes ${deadline.toLocaleDateString("en-NL", { day: "numeric", month: "short", year: "numeric" })}`
           : isExpired && isActive
@@ -74,30 +69,23 @@ export default function ProposalCard({ proposal, onVote, isVoting }: ProposalCar
             : `Closed ${deadline.toLocaleDateString("en-NL", { day: "numeric", month: "short", year: "numeric" })}`}
       </p>
 
-      {/* Vote buttons */}
       {isActive && !isExpired && onVote && (
         <div className="flex gap-2">
           <button
             onClick={() => onVote(proposal.id, true)}
             disabled={isVoting}
-            className="flex-1 py-2.5 rounded-lg bg-fs-mint text-fs-teal-dark text-sm font-semibold hover:bg-fs-teal/15 disabled:opacity-40"
+            className="flex-1 py-2 rounded-lg bg-fs-teal/10 text-fs-teal text-sm font-semibold hover:bg-fs-teal/20 disabled:opacity-40"
           >
-            {isVoting ? "Submitting..." : "Vote Yes"}
+            {isVoting ? "..." : "Vote Yes"}
           </button>
           <button
             onClick={() => onVote(proposal.id, false)}
             disabled={isVoting}
-            className="flex-1 py-2.5 rounded-lg bg-pink-50 text-fs-magenta text-sm font-semibold hover:bg-pink-100 disabled:opacity-40"
+            className="flex-1 py-2 rounded-lg bg-fs-magenta/10 text-fs-magenta-light text-sm font-semibold hover:bg-fs-magenta/20 disabled:opacity-40"
           >
-            {isVoting ? "Submitting..." : "Vote No"}
+            {isVoting ? "..." : "Vote No"}
           </button>
         </div>
-      )}
-
-      {isActive && !isExpired && (
-        <p className="text-xs text-gray-400 mt-3 text-center">
-          Your vote is anonymous
-        </p>
       )}
     </div>
   );

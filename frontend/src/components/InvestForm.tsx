@@ -34,24 +34,19 @@ export default function InvestForm({ isKYCVerified, isConnected, onDeposit, onWi
 
   if (!isConnected) {
     return (
-      <div className="rounded-xl bg-gray-50 p-12 text-center">
-        <p className="font-semibold text-fs-anthracite mb-1">Connect your wallet to invest</p>
-        <p className="text-sm text-gray-400">Your balance is private and only visible to you.</p>
+      <div className="rounded-xl bg-card p-12 text-center">
+        <p className="font-semibold text-text-1 mb-1">Connect your wallet to invest</p>
+        <p className="text-sm text-text-3">Your share in the fund is tracked by fund tokens (FSFT)</p>
       </div>
     );
   }
 
   if (!isKYCVerified) {
     return (
-      <div className="rounded-xl bg-amber-50 border border-amber-100 p-10 text-center">
-        <p className="font-semibold text-fs-anthracite mb-2">Verify your identity first</p>
-        <p className="text-sm text-gray-500 mb-4">
-          We need a quick identity check before you can invest. Your personal details are never stored.
-        </p>
-        <a
-          href="/kyc"
-          className="inline-flex items-center gap-1 text-fs-teal hover:text-fs-teal-dark font-medium text-sm"
-        >
+      <div className="rounded-xl bg-card p-10 text-center">
+        <p className="font-semibold text-text-1 mb-2">Verify your identity first</p>
+        <p className="text-sm text-text-3 mb-4">Quick identity check required before investing. Your details are not stored on-chain.</p>
+        <a href="/kyc" className="text-fs-teal hover:text-fs-teal-light font-medium text-sm">
           Verify now &rarr;
         </a>
       </div>
@@ -59,55 +54,54 @@ export default function InvestForm({ isKYCVerified, isConnected, onDeposit, onWi
   }
 
   return (
-    <div className="rounded-xl bg-white border border-gray-100 p-6">
-      {/* Mode toggle */}
-      <div className="flex gap-2 mb-6 bg-gray-50 rounded-lg p-1">
+    <div className="rounded-xl bg-card p-6">
+      {/* Tabs */}
+      <div className="flex gap-0 mb-6 border-b border-border">
         {(["deposit", "withdraw"] as const).map((m) => (
           <button
             key={m}
             onClick={() => setMode(m)}
-            className={`flex-1 py-2.5 rounded-md text-sm font-semibold ${
+            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px capitalize ${
               mode === m
-                ? "bg-white text-fs-anthracite shadow-sm"
-                : "text-gray-400 hover:text-gray-600"
+                ? "border-fs-teal text-text-1"
+                : "border-transparent text-text-3 hover:text-text-2"
             }`}
           >
-            {m === "deposit" ? "Deposit" : "Withdraw"}
+            {m}
           </button>
         ))}
       </div>
 
       {/* Amount */}
       <div className="mb-5">
-        <label className="block text-sm text-gray-500 mb-2 font-medium">Amount</label>
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-xs text-text-3 font-medium">Amount</label>
+          <span className="text-xs text-text-3">Balance: EUR 0.00</span>
+        </div>
         <input
           type="number"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          placeholder="0.00"
+          placeholder="0"
           min="0"
           step="100"
-          className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-fs-anthracite text-lg font-medium focus:outline-none focus:ring-2 focus:ring-fs-teal/30 focus:border-fs-teal placeholder:text-gray-300"
+          className="w-full bg-bg border border-border rounded-lg px-4 py-3 text-text-1 text-xl font-medium focus:outline-none focus:border-fs-teal/40 placeholder:text-text-3"
         />
         <div className="flex gap-2 mt-3">
           {[1000, 5000, 10000, 50000].map((v) => (
             <button
               key={v}
               onClick={() => setAmount(String(v))}
-              className="px-3 py-1.5 rounded-md bg-gray-50 text-gray-500 text-xs font-medium hover:bg-gray-100"
+              className="px-3 py-1 rounded-md bg-bg text-text-3 text-xs font-medium hover:text-text-2 border border-border"
             >
-              EUR {v.toLocaleString()}
+              {v.toLocaleString()}
             </button>
           ))}
         </div>
       </div>
 
-      <p className="text-xs text-gray-400 mb-5">
-        Your {mode} is completely private. Nobody can see who you are or how much you {mode === "deposit" ? "put in" : "take out"}.
-      </p>
-
       {error && (
-        <div className="bg-red-50 border border-red-100 rounded-lg p-3 mb-5 text-sm text-red-600">
+        <div className="bg-fs-magenta/10 rounded-lg p-3 mb-5 text-sm text-fs-magenta-light">
           {error}
         </div>
       )}
@@ -115,13 +109,9 @@ export default function InvestForm({ isKYCVerified, isConnected, onDeposit, onWi
       <button
         onClick={handleSubmit}
         disabled={loading || !amount || parseFloat(amount) <= 0}
-        className="w-full py-3 rounded-lg bg-fs-teal hover:bg-fs-teal-dark text-white font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+        className="w-full py-3 rounded-lg bg-fs-teal hover:bg-fs-teal-dark text-white font-semibold disabled:opacity-40 disabled:cursor-not-allowed text-sm"
       >
-        {loading
-          ? "Processing..."
-          : mode === "deposit"
-            ? `Deposit EUR ${amount || "0"}`
-            : `Withdraw EUR ${amount || "0"}`}
+        {loading ? "Processing..." : mode === "deposit" ? "Deposit" : "Withdraw"}
       </button>
     </div>
   );
