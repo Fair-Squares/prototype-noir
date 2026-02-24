@@ -31,18 +31,18 @@ export default function Dashboard() {
             <a href="/invest" className="px-5 py-2.5 rounded-lg bg-fs-teal text-white text-sm font-semibold hover:bg-fs-teal-dark">
               Start investing
             </a>
-            <a href="/governance" className="px-5 py-2.5 rounded-lg bg-card text-text-2 text-sm font-semibold hover:text-text-1">
+            <a href="/governance" className="px-5 py-2.5 rounded-lg bg-white border border-border text-text-2 text-sm font-semibold hover:text-text-1 hover:border-text-3">
               View proposals
             </a>
           </div>
         </div>
         <div className="hidden lg:block">
           <Image
-            src="/brand/fs-dark.png"
+            src="/brand/fs-light-dark.png"
             alt="Fair Squares"
-            width={200}
-            height={200}
-            className="opacity-30"
+            width={180}
+            height={180}
+            className="opacity-20"
           />
         </div>
       </div>
@@ -66,7 +66,7 @@ export default function Dashboard() {
       <section>
         <h2 className="text-lg font-bold mb-5">Fund overview</h2>
         {error ? (
-          <div className="rounded-xl bg-card p-4 text-red-400 text-sm">
+          <div className="rounded-xl bg-card p-4 text-red-500 text-sm">
             Could not load fund data: {error}
           </div>
         ) : stats ? (
@@ -110,11 +110,11 @@ export default function Dashboard() {
               key={item.step}
               className={`flex items-start gap-5 p-6 ${i > 0 ? "border-t border-border" : ""}`}
             >
-              <div className="w-8 h-8 rounded-full bg-fs-teal/10 text-fs-teal flex items-center justify-center text-sm font-bold shrink-0">
+              <div className="w-8 h-8 rounded-full bg-fs-mint text-fs-teal-dark flex items-center justify-center text-sm font-bold shrink-0">
                 {item.step}
               </div>
               <div>
-                <h3 className="font-semibold text-text-1 mb-1">{item.title}</h3>
+                <h3 className="font-semibold mb-1">{item.title}</h3>
                 <p className="text-sm text-text-2 leading-relaxed">{item.desc}</p>
               </div>
             </div>

@@ -35,7 +35,7 @@ export default function InvestForm({ isKYCVerified, isConnected, onDeposit, onWi
   if (!isConnected) {
     return (
       <div className="rounded-xl bg-card p-12 text-center">
-        <p className="font-semibold text-text-1 mb-1">Connect your wallet to invest</p>
+        <p className="font-semibold mb-1">Connect your wallet to invest</p>
         <p className="text-sm text-text-3">Your share in the fund is tracked by fund tokens (FSFT)</p>
       </div>
     );
@@ -44,11 +44,9 @@ export default function InvestForm({ isKYCVerified, isConnected, onDeposit, onWi
   if (!isKYCVerified) {
     return (
       <div className="rounded-xl bg-card p-10 text-center">
-        <p className="font-semibold text-text-1 mb-2">Verify your identity first</p>
-        <p className="text-sm text-text-3 mb-4">Quick identity check required before investing. Your details are not stored on-chain.</p>
-        <a href="/kyc" className="text-fs-teal hover:text-fs-teal-light font-medium text-sm">
-          Verify now &rarr;
-        </a>
+        <p className="font-semibold mb-2">Verify your identity first</p>
+        <p className="text-sm text-text-3 mb-4">Quick identity check required before investing.</p>
+        <a href="/kyc" className="text-fs-teal hover:text-fs-teal-dark font-medium text-sm">Verify now &rarr;</a>
       </div>
     );
   }
@@ -72,7 +70,6 @@ export default function InvestForm({ isKYCVerified, isConnected, onDeposit, onWi
         ))}
       </div>
 
-      {/* Amount */}
       <div className="mb-5">
         <div className="flex items-center justify-between mb-2">
           <label className="text-xs text-text-3 font-medium">Amount</label>
@@ -85,7 +82,7 @@ export default function InvestForm({ isKYCVerified, isConnected, onDeposit, onWi
           placeholder="0"
           min="0"
           step="100"
-          className="w-full bg-bg border border-border rounded-lg px-4 py-3 text-text-1 text-xl font-medium focus:outline-none focus:border-fs-teal/40 placeholder:text-text-3"
+          className="w-full bg-bg border border-border rounded-lg px-4 py-3 text-text-1 text-xl font-medium focus:outline-none focus:border-fs-teal placeholder:text-text-3"
         />
         <div className="flex gap-2 mt-3">
           {[1000, 5000, 10000, 50000].map((v) => (
@@ -101,9 +98,7 @@ export default function InvestForm({ isKYCVerified, isConnected, onDeposit, onWi
       </div>
 
       {error && (
-        <div className="bg-fs-magenta/10 rounded-lg p-3 mb-5 text-sm text-fs-magenta-light">
-          {error}
-        </div>
+        <div className="bg-red-50 border border-red-100 rounded-lg p-3 mb-5 text-sm text-red-600">{error}</div>
       )}
 
       <button

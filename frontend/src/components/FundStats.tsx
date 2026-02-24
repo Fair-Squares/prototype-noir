@@ -27,9 +27,7 @@ export default function FundStats(props: FundStatsProps) {
         {STAT_CARDS.map((card) => (
           <div key={card.key} className="rounded-xl bg-card p-5">
             <span className="text-xs text-text-3 font-medium uppercase tracking-wide">{card.label}</span>
-            <p className="text-2xl font-bold mt-2 text-text-1">
-              {formatEUR(props[card.key])}
-            </p>
+            <p className="text-2xl font-bold mt-2">{formatEUR(props[card.key])}</p>
           </div>
         ))}
       </div>
@@ -41,7 +39,7 @@ export default function FundStats(props: FundStatsProps) {
       </div>
 
       {props.isPaused && (
-        <div className="rounded-xl bg-fs-magenta/10 p-4 text-center text-fs-magenta-light text-sm font-medium">
+        <div className="rounded-xl bg-fs-magenta/10 p-4 text-center text-fs-magenta text-sm font-medium">
           The fund is temporarily paused
         </div>
       )}

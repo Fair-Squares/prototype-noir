@@ -60,10 +60,10 @@ services:
       L1_CHAIN_ID: "31337"
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/status"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 180s
+      interval: 15s
+      timeout: 10s
+      retries: 40
+      start_period: 300s
 
   # -- Bootstrap (compile + deploy contracts) -----------------------------------
   # Uses the same Aztec image so CLI tools (aztec, aztec-wallet) are available.

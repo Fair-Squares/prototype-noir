@@ -23,14 +23,14 @@
   --color-fs-anthracite: #2A2D34;
   --color-fs-mint: #E0F0EC;
 
-  --color-bg: #111827;
-  --color-card: #1a2032;
-  --color-card-hover: #212a3d;
-  --color-border: rgba(255, 255, 255, 0.06);
+  --color-bg: #f5f6f8;
+  --color-card: #ffffff;
+  --color-card-hover: #fafbfc;
+  --color-border: #e8eaed;
 
-  --color-text-1: #f0f2f5;
-  --color-text-2: #9ca3af;
-  --color-text-3: #5a5e72;
+  --color-text-1: #1a1d26;
+  --color-text-2: #6b7280;
+  --color-text-3: #9ca3af;
 }
 
 body {
