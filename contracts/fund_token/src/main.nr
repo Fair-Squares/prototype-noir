@@ -1,14 +1,14 @@
 use aztec::macros::aztec;
 
-/// FundToken (FSFT) — Fair Squares Fund Token.
+/// FundToken (FSFT) -- Fair Squares Fund Token.
 ///
 /// Based on the BobToken pattern from the official Aztec v4 token tutorial.
 ///
 /// Privacy:
-///   PUBLIC:  total_supply, admin — visible to everyone
+///   PUBLIC:  total_supply, admin -- visible to everyone
 ///   PRIVATE: individual balances (per-user notes in their PXE via BalanceSet)
 ///
-/// Investors cannot see each other's balances — only their own.
+/// Investors cannot see each other's balances -- only their own.
 #[aztec]
 pub contract FundToken {
     use aztec::{
@@ -40,7 +40,7 @@ pub contract FundToken {
         self.storage.total_supply.write(0);
     }
 
-    // ── Public Minting ──────────────────────────────────────────────────
+    // -- Public Minting --------------------------------------------------
 
     #[external("public")]
     fn mint_public(to: AztecAddress, amount: u64) {
@@ -54,11 +54,11 @@ pub contract FundToken {
         self.storage.total_supply.write(supply + amount);
     }
 
-    // ── Private Minting (admin-only, verified via enqueued public check) ─
+    // -- Private Minting (admin-only, verified via enqueued public check) -
 
     #[external("private")]
     fn mint_private(to: AztecAddress, amount: u64) {
-        // Enqueue ownership check — reverts entire tx if not admin
+        // Enqueue ownership check -- reverts entire tx if not admin
         self.enqueue_self._assert_is_admin(self.msg_sender());
 
         // Mint privately (creates encrypted notes for recipient)
@@ -70,7 +70,7 @@ pub contract FundToken {
         self.enqueue_self._increase_supply(amount);
     }
 
-    // ── Public → Private (shield tokens) ─────────────────────────────────
+    // -- Public -> Private (shield tokens) ---------------------------------
 
     #[external("private")]
     fn public_to_private(amount: u64) {
@@ -85,7 +85,7 @@ pub contract FundToken {
         );
     }
 
-    // ── Private → Public (unshield tokens) ───────────────────────────────
+    // -- Private -> Public (unshield tokens) -------------------------------
 
     #[external("private")]
     fn private_to_public(amount: u64) {
@@ -100,7 +100,7 @@ pub contract FundToken {
         self.enqueue_self._credit_public_balance(sender, amount);
     }
 
-    // ── Public Transfer ──────────────────────────────────────────────────
+    // -- Public Transfer --------------------------------------------------
 
     #[external("public")]
     fn transfer_public(to: AztecAddress, amount: u64) {
@@ -113,7 +113,7 @@ pub contract FundToken {
         self.storage.public_balances.at(to).write(recipient_balance + amount);
     }
 
-    // ── Private Transfer (fully private, no one sees who/how much) ───────
+    // -- Private Transfer (fully private, no one sees who/how much) -------
 
     #[external("private")]
     fn transfer_private(to: AztecAddress, amount: u64) {
@@ -130,7 +130,7 @@ pub contract FundToken {
         );
     }
 
-    // ── Public Burn ──────────────────────────────────────────────────────
+    // -- Public Burn ------------------------------------------------------
 
     #[external("public")]
     fn burn_public(from: AztecAddress, amount: u64) {
@@ -145,7 +145,7 @@ pub contract FundToken {
         self.storage.total_supply.write(supply - amount);
     }
 
-    // ── Admin Transfer ───────────────────────────────────────────────────
+    // -- Admin Transfer ---------------------------------------------------
 
     #[external("public")]
     fn set_admin(new_admin: AztecAddress) {
@@ -154,7 +154,7 @@ pub contract FundToken {
         self.storage.admin.write(new_admin);
     }
 
-    // ── Internal helpers (called via enqueue from private functions) ──────
+    // -- Internal helpers (called via enqueue from private functions) ------
 
     #[external("public")]
     #[only_self]
@@ -184,7 +184,7 @@ pub contract FundToken {
         self.storage.public_balances.at(owner).write(balance + amount);
     }
 
-    // ── View Functions ───────────────────────────────────────────────────
+    // -- View Functions ---------------------------------------------------
 
     #[external("public")]
     #[view]

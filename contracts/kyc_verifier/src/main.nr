@@ -6,7 +6,7 @@ use aztec::macros::aztec;
 ///   - Whether an address is KYC-verified is PUBLIC (required for HousingFund gate-checks)
 ///   - Identity documents / personal data never touch the chain
 ///   - A trusted backend verifier (run after zkPassport SDK verification) calls register_kyc
-///   - The address itself is pseudonymous — users can create fresh addresses
+///   - The address itself is pseudonymous -- users can create fresh addresses
 #[aztec]
 pub contract KYCVerifier {
     use aztec::{

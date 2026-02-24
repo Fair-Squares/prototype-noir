@@ -1,14 +1,14 @@
 use aztec::macros::aztec;
 
-/// Governance — voting on property acquisitions for Fair Squares.
+/// Governance -- voting on property acquisitions for Fair Squares.
 ///
 /// Prototype: public voting (simple, compiles reliably).
 /// Future: private voting with nullifier-based double-vote prevention.
 ///
 /// Flow:
-///   1. Council or admin creates proposals — public
-///   2. Any verified user calls cast_vote(proposal_id, vote_yes) — public
-///   3. After deadline, anyone calls finalize_proposal() — public
+///   1. Council or admin creates proposals -- public
+///   2. Any verified user calls cast_vote(proposal_id, vote_yes) -- public
+///   3. After deadline, anyone calls finalize_proposal() -- public
 #[aztec]
 pub contract Governance {
     use aztec::{
@@ -43,7 +43,7 @@ pub contract Governance {
         p_status: Map<Field, PublicMutable<u8, Context>, Context>,
         p_proposer: Map<Field, PublicMutable<AztecAddress, Context>, Context>,
 
-        // Track who has voted (voter_address + proposal_id → bool)
+        // Track who has voted (voter_address + proposal_id -> bool)
         // Key: hash of voter + proposal_id (stored as a Map<Field, ...>)
         has_voted: Map<Field, PublicMutable<bool, Context>, Context>,
     }
@@ -58,7 +58,7 @@ pub contract Governance {
         self.storage.proposal_count.write(0);
     }
 
-    // ── Create a new proposal ────────────────────────────────────────────
+    // -- Create a new proposal --------------------------------------------
 
     #[external("public")]
     fn create_proposal(description_hash: Field, amount: u64) -> pub u32 {
@@ -84,7 +84,7 @@ pub contract Governance {
         proposal_id
     }
 
-    // ── Cast a vote (public for prototype) ───────────────────────────────
+    // -- Cast a vote (public for prototype) -------------------------------
     // Double-vote prevention uses a public map keyed by voter+proposal hash.
     // Future: replace with private voting + nullifiers.
 
@@ -115,7 +115,7 @@ pub contract Governance {
         }
     }
 
-    // ── Finalize a proposal ──────────────────────────────────────────────
+    // -- Finalize a proposal ----------------------------------------------
 
     #[external("public")]
     fn finalize_proposal(proposal_id: u32) {
@@ -141,7 +141,7 @@ pub contract Governance {
         }
     }
 
-    // ── View functions ───────────────────────────────────────────────────
+    // -- View functions ---------------------------------------------------
 
     #[external("public")]
     #[view]

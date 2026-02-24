@@ -1,10 +1,10 @@
 use aztec::macros::aztec;
 
-/// HousingFund — the core Fair Squares protocol contract.
+/// HousingFund -- the core Fair Squares protocol contract.
 ///
 /// PUBLIC state: total deposits, total in DeFi, total allocated, pause status
 ///
-/// Flow (prototype — public-only for compilation safety):
+/// Flow (prototype -- public-only for compilation safety):
 ///   1. User calls deposit(amount)
 ///   2. Total deposits increment
 ///   3. Admin/governance can deploy to DeFi or reserve for property
@@ -29,7 +29,7 @@ pub contract HousingFund {
         fund_token: PublicMutable<AztecAddress, Context>,
         defi_vault: PublicMutable<AztecAddress, Context>,
         governance: PublicMutable<AztecAddress, Context>,
-        // Fund accounting (all public — transparent to investors)
+        // Fund accounting (all public -- transparent to investors)
         total_deposits: PublicMutable<u64, Context>,
         total_in_defi: PublicMutable<u64, Context>,
         total_allocated: PublicMutable<u64, Context>,
@@ -48,7 +48,7 @@ pub contract HousingFund {
         self.storage.is_paused.write(false);
     }
 
-    // ── Contract wiring (called after all contracts are deployed) ─────────
+    // -- Contract wiring (called after all contracts are deployed) ---------
 
     #[external("public")]
     fn set_contracts(
@@ -64,7 +64,7 @@ pub contract HousingFund {
         self.storage.governance.write(governance);
     }
 
-    // ── Core operations ──────────────────────────────────────────────────
+    // -- Core operations --------------------------------------------------
 
     #[external("public")]
     fn deposit(amount: u64) {
@@ -89,7 +89,7 @@ pub contract HousingFund {
         self.storage.total_deposits.write(deposits - amount);
     }
 
-    // ── DeFi management ──────────────────────────────────────────────────
+    // -- DeFi management --------------------------------------------------
 
     #[external("public")]
     fn deploy_to_defi(amount: u64) {
@@ -120,7 +120,7 @@ pub contract HousingFund {
         self.storage.total_in_defi.write(in_defi - amount);
     }
 
-    // ── Governance: Property reservation ─────────────────────────────────
+    // -- Governance: Property reservation ---------------------------------
 
     #[external("public")]
     fn reserve_for_property(amount: u64) {
@@ -139,7 +139,7 @@ pub contract HousingFund {
         self.storage.total_allocated.write(allocated + amount);
     }
 
-    // ── Emergency controls ───────────────────────────────────────────────
+    // -- Emergency controls -----------------------------------------------
 
     #[external("public")]
     fn pause() {
@@ -153,7 +153,7 @@ pub contract HousingFund {
         self.storage.is_paused.write(false);
     }
 
-    // ── View functions ───────────────────────────────────────────────────
+    // -- View functions ---------------------------------------------------
 
     #[external("public")]
     #[view]

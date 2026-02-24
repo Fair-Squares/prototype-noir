@@ -1,6 +1,6 @@
 use aztec::macros::aztec;
 
-/// DeFiVault — yield generation stub for Fair Squares.
+/// DeFiVault -- yield generation stub for Fair Squares.
 ///
 /// Simplified model: tracks deposits and manually-accrued yield.
 /// In production, this would integrate with real DeFi protocols.
