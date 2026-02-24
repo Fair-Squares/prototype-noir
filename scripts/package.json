@@ -1,0 +1,17 @@
+{
+  "name": "fair-squares-noir-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "deploy": "npx ts-node deploy.ts"
+  },
+  "dependencies": {
+    "@aztec/aztec.js": "4.0.0-devnet.2-patch.1",
+    "@aztec/accounts": "4.0.0-devnet.2-patch.1"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3",
+    "@types/node": "^20.11.0"
+  }
+}

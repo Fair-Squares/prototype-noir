@@ -1,0 +1,84 @@
+# Fair Squares — Local Development Stack
+#
+# Usage:
+#   docker compose up              → Frontend only (simulation mode, instant)
+#   docker compose --profile aztec up  → Full stack with Aztec local network
+#
+# The frontend works standalone with an in-memory simulation engine.
+# Add the 'aztec' profile when you want real Aztec local network + contract deployment.
+
+services:
+  # ── Local Ethereum L1 (Anvil) for Aztec local network ───────────────────
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:latest
+    profiles: ["aztec"]
+    command: ["anvil", "--host", "0.0.0.0", "--port", "8545", "--chain-id", "31337"]
+    ports:
+      - "8545:8545"
+    healthcheck:
+      test: ["CMD", "cast", "block-number", "--rpc-url", "http://localhost:8545"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  # ── Frontend (always runs) ──────────────────────────────────────────────
+  frontend:
+    build: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      - NEXT_PUBLIC_DEV_MODE=true
+      - NEXT_PUBLIC_SIMULATION=false
+      - AZTEC_LIVE=true
+      - NEXT_PUBLIC_AZTEC_PXE_URL=http://aztec-sandbox:8080
+      - NEXT_TELEMETRY_DISABLED=1
+    volumes:
+      # Hot-reload with full project mount.
+      - ./frontend:/app
+      - /app/node_modules
+      # Read-only access to compiled contract artifacts for live mode routes.
+      - ./contracts:/contracts:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  # ── Aztec Local Network (optional — use --profile aztec) ────────────────
+  aztec-sandbox:
+    image: aztecprotocol/aztec:4.0.0-devnet.2-patch.1
+    profiles: ["aztec"]
+    depends_on:
+      anvil:
+        condition: service_healthy
+    ports:
+      - "8080:8080"   # Aztec PXE / JSON-RPC
+    command: start --local-network
+    environment:
+      LOG_LEVEL: info
+      ETHEREUM_HOSTS: http://anvil:8545
+      L1_CHAIN_ID: 31337
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 24
+      start_period: 180s
+
+  # ── Bootstrap (compile + deploy contracts) ──────────────────────────────
+  aztec-bootstrap:
+    image: node:22-slim
+    profiles: ["aztec"]
+    working_dir: /workspace
+    depends_on:
+      aztec-sandbox:
+        condition: service_healthy
+    environment:
+      - AZTEC_PXE_URL=http://aztec-sandbox:8080
+      - AZTEC_CLI_VERSION=4.0.0-devnet.2-patch.1
+    volumes:
+      - ./:/workspace
+    command: ["sh", "./scripts/bootstrap-local-network.sh"]
+    restart: "no"
