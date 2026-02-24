@@ -2,6 +2,13 @@
 
 A privacy-first housing investment fund built on [Aztec Network](https://aztec.network), using zero-knowledge proofs to protect investor privacy while keeping the fund fully transparent.
 
+## Reference Documentation
+
+See **[docs/REFERENCES.md](docs/REFERENCES.md)** for links to:
+- Aztec v4 docs, tutorials, and API patterns
+- zkPassport SDK (dev mode for local testing)
+- Version matrix for all dependencies
+
 ## Architecture
 
 ```
@@ -11,7 +18,7 @@ A privacy-first housing investment fund built on [Aztec Network](https://aztec.n
 │    Dashboard │ Invest │ Governance │ Portfolio │ KYC     │
 └──────────────────────────┬──────────────────────────────┘
                            │
-              API Routes (simulation engine)
+              API Routes (simulation or live Aztec)
                            │
 ┌──────────────────────────▼──────────────────────────────┐
 │              Aztec Network (optional)                    │
@@ -22,78 +29,66 @@ A privacy-first housing investment fund built on [Aztec Network](https://aztec.n
 
 ## Quick Start
 
-### Option 1: Docker (recommended)
+### Option 1: Frontend Only (simulation mode, instant)
 
 ```bash
-# Simulation mode — instant, no Aztec needed
 docker compose up
-
 # Open http://localhost:3000
 ```
 
-### Option 2: Local Node.js
+### Option 2: Full Stack with Aztec Local Network
 
 ```bash
-cd frontend
-cp .env.local.example .env.local
-npm install
-npm run dev
-
-# Open http://localhost:3000
-```
-
-### Option 3: Full Stack with Aztec Local Network
-
-```bash
-# Start Aztec local network + frontend + contract bootstrap
 docker compose --profile aztec up
-
 # Open http://localhost:3000
 ```
 
-In `--profile aztec`, Compose also starts a local `anvil` L1 node that Aztec uses
-via `ETHEREUM_HOSTS=http://anvil:8545`.
+This boots:
+1. **Aztec** local network (includes Anvil L1 + Aztec node + PXE + test accounts)
+2. **Bootstrap** container: compiles all 5 Noir contracts, deploys them, wires them together
+3. **Frontend** with live Aztec connection
 
-The `aztec-bootstrap` service waits for PXE, compiles contracts with
-`@aztec/cli@4.0.0-devnet.2-patch.1`, and runs `scripts/deploy.ts` automatically.
+### Option 3: Local Development (no Docker)
 
-Important: the app now supports partial live mode for read APIs, with automatic
-simulation fallback when live calls fail.
+```bash
+# Install Aztec CLI
+VERSION=4.0.0-devnet.2-patch.0 bash -i <(curl -sL https://install.aztec.network/4.0.0-devnet.2-patch.0)
 
-Current live-mode status:
-- `AZTEC_LIVE=true` is enabled in Docker by default.
-- Read routes (`/api/wallet/accounts`, `/api/fund/stats`, `/api/kyc/status`, `/api/portfolio`) now try Aztec first and fall back to simulation on errors.
-- Write routes (deposit/withdraw/vote/register) remain simulation-backed.
+# Start Aztec local network
+aztec start --local-network
+
+# In another terminal, compile contracts
+for c in kyc_verifier fund_token defi_vault housing_fund governance; do
+  (cd contracts/$c && aztec compile)
+done
+
+# Start frontend
+cd frontend && npm install && npm run dev
+# Open http://localhost:3000
+```
 
 ## How It Works
 
 ### Privacy Model
 
-- **Private deposits**: Nobody can see who invested or how much
-- **Private voting**: Cast governance votes without revealing your choice
+- **Private deposits**: Nobody can see who invested or how much (via FSFT private balances)
 - **Public totals**: Total fund size, yield, and vote results are visible
+- **KYC**: zkPassport verification — prove identity without revealing documents
 - **ZK proofs**: All privacy powered by Aztec's zero-knowledge proof system
 
-### Contracts (Noir)
+### Contracts (Noir / Aztec v4)
 
-| Contract | Purpose |
-|----------|---------|
-| `KYCVerifier` | On-chain KYC registry (zkPassport integration) |
-| `FundToken` (FSFT) | ERC-20 with private balances |
-| `HousingFund` | Core fund: private deposit/withdraw, public totals |
-| `Governance` | Private voting on property acquisitions |
-| `DeFiVault` | Yield stub (simulates 3% APY) |
+| Contract | Purpose | State |
+|----------|---------|-------|
+| `KYCVerifier` | On-chain KYC registry (zkPassport integration) | Public |
+| `FundToken` (FSFT) | Token with public + private balances | Hybrid |
+| `HousingFund` | Core fund: deposit/withdraw, DeFi management | Public |
+| `Governance` | Voting on property acquisitions | Public (private voting planned) |
+| `DeFiVault` | Yield stub (simulates 3% APY) | Public |
 
 ### Simulation Mode
 
-The frontend includes a full simulation engine that mimics all contract behavior in-memory. This allows:
-
-- Running without the Aztec local network
-- Instant startup for demos
-- Full interactive experience (deposit, withdraw, vote, KYC)
-- Seeded with sample data (proposals, fund stats)
-
-Enable "Dev Mode" to skip KYC verification (Skip KYC button).
+The frontend includes a full simulation engine. Enable "Dev Mode" to skip KYC verification.
 
 ## Pages
 
@@ -101,23 +96,27 @@ Enable "Dev Mode" to skip KYC verification (Skip KYC button).
 |------|-------|--------|
 | Dashboard | `/` | Public — fund stats, how it works |
 | Invest | `/invest` | Authenticated — deposit/withdraw |
-| Governance | `/governance` | Public results, private voting |
+| Governance | `/governance` | Public results, voting |
 | Portfolio | `/portfolio` | Private — your balance & share |
 | KYC | `/kyc` | Private — zkPassport verification |
 
 ## Tech Stack
 
-- **Smart Contracts**: Noir (Aztec Network)
-- **Frontend**: Next.js 15, React 19, Tailwind CSS 4
-- **Identity**: zkPassport (zero-knowledge passport verification)
-- **Aztec Runtime**: `aztecprotocol/aztec:4.0.0-devnet.2-patch.1` (Docker)
-- **Aztec JS SDK**: `@aztec/aztec.js@4.0.0-devnet.2-patch.1`
+| Component | Version |
+|-----------|---------|
+| Smart Contracts | Noir (Aztec v4) |
+| Aztec Runtime | `aztecprotocol/aztec:4.0.0-devnet.2-patch.0` |
+| Aztec.nr | `v4.0.0-devnet.2-patch.0` (aztec-nr repo) |
+| Frontend | Next.js 15, React 19, Tailwind CSS 4 |
+| Identity | zkPassport (`@zkpassport/sdk`, dev mode) |
 
 ## Project Structure
 
 ```
 fair-squares-noir/
 ├── docker-compose.yml          # Dev stack (frontend + optional Aztec)
+├── docs/
+│   └── REFERENCES.md           # Links to Aztec + zkPassport docs
 ├── contracts/                  # 5 Noir smart contracts
 │   ├── kyc_verifier/
 │   ├── fund_token/
@@ -125,6 +124,7 @@ fair-squares-noir/
 │   ├── governance/
 │   └── defi_vault/
 ├── scripts/                    # Deploy & setup scripts
+│   ├── bootstrap-local-network.sh
 │   ├── deploy.ts
 │   └── package.json
 └── frontend/                   # Next.js application

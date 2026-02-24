@@ -3,14 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "deploy": "npx ts-node deploy.ts"
+    "deploy": "npx tsx deploy.ts"
   },
   "dependencies": {
-    "@aztec/aztec.js": "4.0.0-devnet.2-patch.1",
-    "@aztec/accounts": "4.0.0-devnet.2-patch.1"
+    "@aztec/aztec.js": "4.0.0-devnet.2-patch.0",
+    "@aztec/accounts": "4.0.0-devnet.2-patch.0",
+    "@aztec/wallets": "4.0.0-devnet.2-patch.0"
   },
   "devDependencies": {
-    "ts-node": "^10.9.2",
+    "tsx": "^4.7.0",
     "typescript": "^5.3.3",
     "@types/node": "^20.11.0"
   }

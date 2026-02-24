@@ -1,22 +1,20 @@
-use ::aztec::macros::aztec;
+use aztec::macros::aztec;
 
-// HousingFund - the core Fair Squares protocol contract.
-//
-// PUBLIC state: total deposits, total in DeFi, total allocated, pause status
-// PRIVATE actions: deposit and withdraw (identity hidden, amounts hidden)
-//
-// Flow:
-//   1. User calls deposit(amount) - private function in their PXE
-//   2. KYC check runs (public read from private context)
-//   3. FSFT tokens are minted to the depositor (private)
-//   4. Total deposits increment (public) - but WHO deposited is hidden
-//
-// For the prototype, cross-contract calls are simplified to address checks.
+/// HousingFund — the core Fair Squares protocol contract.
+///
+/// PUBLIC state: total deposits, total in DeFi, total allocated, pause status
+///
+/// Flow (prototype — public-only for compilation safety):
+///   1. User calls deposit(amount)
+///   2. Total deposits increment
+///   3. Admin/governance can deploy to DeFi or reserve for property
+///
+/// Future: private deposit/withdraw with KYC checks and FSFT minting.
 #[aztec]
 pub contract HousingFund {
-    use ::aztec::{
+    use aztec::{
         macros::{
-            functions::{external, initializer, view, only_self},
+            functions::{external, initializer, view},
             storage::storage,
         },
         protocol::address::AztecAddress,
@@ -31,43 +29,45 @@ pub contract HousingFund {
         fund_token: PublicMutable<AztecAddress, Context>,
         defi_vault: PublicMutable<AztecAddress, Context>,
         governance: PublicMutable<AztecAddress, Context>,
-
-        // Fund accounting (all public - transparent to investors)
-        total_deposits: PublicMutable<u128, Context>,
-        total_in_defi: PublicMutable<u128, Context>,
-        total_allocated: PublicMutable<u128, Context>,
-
+        // Fund accounting (all public — transparent to investors)
+        total_deposits: PublicMutable<u64, Context>,
+        total_in_defi: PublicMutable<u64, Context>,
+        total_allocated: PublicMutable<u64, Context>,
         // Emergency pause
         is_paused: PublicMutable<bool, Context>,
     }
 
-    #[external("public")]
     #[initializer]
-    fn constructor(
-        admin: AztecAddress,
-        kyc_verifier: AztecAddress,
-        fund_token: AztecAddress,
-        defi_vault: AztecAddress,
-        governance: AztecAddress,
-    ) {
+    #[external("public")]
+    fn constructor(admin: AztecAddress) {
         assert(!admin.is_zero(), "invalid admin");
         self.storage.admin.write(admin);
-        self.storage.kyc_verifier.write(kyc_verifier);
-        self.storage.fund_token.write(fund_token);
-        self.storage.defi_vault.write(defi_vault);
-        self.storage.governance.write(governance);
         self.storage.total_deposits.write(0);
         self.storage.total_in_defi.write(0);
         self.storage.total_allocated.write(0);
         self.storage.is_paused.write(false);
     }
 
-    // DEPOSIT - simplified for prototype
-    // In production, this would be a private function that calls
-    // KYCVerifier.is_verified() and FundToken.mint_private()
-    // For now, it's public with an admin/authorized check
+    // ── Contract wiring (called after all contracts are deployed) ─────────
+
     #[external("public")]
-    fn deposit(amount: u128) {
+    fn set_contracts(
+        kyc_verifier: AztecAddress,
+        fund_token: AztecAddress,
+        defi_vault: AztecAddress,
+        governance: AztecAddress,
+    ) {
+        assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
+        self.storage.kyc_verifier.write(kyc_verifier);
+        self.storage.fund_token.write(fund_token);
+        self.storage.defi_vault.write(defi_vault);
+        self.storage.governance.write(governance);
+    }
+
+    // ── Core operations ──────────────────────────────────────────────────
+
+    #[external("public")]
+    fn deposit(amount: u64) {
         assert(!self.storage.is_paused.read(), "fund is paused");
         assert(amount > 0, "amount must be positive");
 
@@ -75,9 +75,8 @@ pub contract HousingFund {
         self.storage.total_deposits.write(current + amount);
     }
 
-    // WITHDRAW - simplified for prototype
     #[external("public")]
-    fn withdraw(amount: u128) {
+    fn withdraw(amount: u64) {
         assert(!self.storage.is_paused.read(), "fund is paused");
         assert(amount > 0, "amount must be positive");
 
@@ -90,15 +89,14 @@ pub contract HousingFund {
         self.storage.total_deposits.write(deposits - amount);
     }
 
-    // ADMIN: Move funds to DeFi vault
+    // ── DeFi management ──────────────────────────────────────────────────
+
     #[external("public")]
-    fn deploy_to_defi(amount: u128) {
-        let caller = self.context.maybe_msg_sender().unwrap();
-        assert(
-            self.storage.admin.read().eq(caller) |
-            self.storage.governance.read().eq(caller),
-            "not authorized"
-        );
+    fn deploy_to_defi(amount: u64) {
+        let caller = self.msg_sender();
+        let admin = self.storage.admin.read();
+        let gov = self.storage.governance.read();
+        assert(admin.eq(caller) | gov.eq(caller), "not authorized");
 
         let deposits = self.storage.total_deposits.read();
         let in_defi = self.storage.total_in_defi.read();
@@ -106,19 +104,15 @@ pub contract HousingFund {
         let available = deposits - in_defi - allocated;
         assert(amount <= available, "insufficient available balance");
 
-        let current_in_defi = self.storage.total_in_defi.read();
-        self.storage.total_in_defi.write(current_in_defi + amount);
+        self.storage.total_in_defi.write(in_defi + amount);
     }
 
-    // ADMIN: Withdraw from DeFi vault
     #[external("public")]
-    fn withdraw_from_defi(amount: u128) {
-        let caller = self.context.maybe_msg_sender().unwrap();
-        assert(
-            self.storage.admin.read().eq(caller) |
-            self.storage.governance.read().eq(caller),
-            "not authorized"
-        );
+    fn withdraw_from_defi(amount: u64) {
+        let caller = self.msg_sender();
+        let admin = self.storage.admin.read();
+        let gov = self.storage.governance.read();
+        assert(admin.eq(caller) | gov.eq(caller), "not authorized");
 
         let in_defi = self.storage.total_in_defi.read();
         assert(amount <= in_defi, "exceeds defi balance");
@@ -126,13 +120,14 @@ pub contract HousingFund {
         self.storage.total_in_defi.write(in_defi - amount);
     }
 
-    // GOVERNANCE: Reserve funds for property acquisition
+    // ── Governance: Property reservation ─────────────────────────────────
+
     #[external("public")]
-    fn reserve_for_property(proposal_id: u32, amount: u128) {
-        let caller = self.context.maybe_msg_sender().unwrap();
-        assert(
-            self.storage.governance.read().eq(caller),
-            "only governance can reserve"
+    fn reserve_for_property(amount: u64) {
+        assert_eq(
+            self.msg_sender(),
+            self.storage.governance.read(),
+            "only governance can reserve",
         );
 
         let deposits = self.storage.total_deposits.read();
@@ -144,33 +139,31 @@ pub contract HousingFund {
         self.storage.total_allocated.write(allocated + amount);
     }
 
-    // EMERGENCY CONTROLS
+    // ── Emergency controls ───────────────────────────────────────────────
 
     #[external("public")]
     fn pause() {
-        let caller = self.context.maybe_msg_sender().unwrap();
-        assert(self.storage.admin.read().eq(caller), "not admin");
+        assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
         self.storage.is_paused.write(true);
     }
 
     #[external("public")]
     fn unpause() {
-        let caller = self.context.maybe_msg_sender().unwrap();
-        assert(self.storage.admin.read().eq(caller), "not admin");
+        assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
         self.storage.is_paused.write(false);
     }
 
-    // VIEW FUNCTIONS
+    // ── View functions ───────────────────────────────────────────────────
 
     #[external("public")]
     #[view]
-    fn get_total_deposits() -> pub u128 {
+    fn get_total_deposits() -> pub u64 {
         self.storage.total_deposits.read()
     }
 
     #[external("public")]
     #[view]
-    fn get_fund_stats() -> pub (u128, u128, u128, u128) {
+    fn get_fund_stats() -> pub (u64, u64, u64, u64) {
         let total = self.storage.total_deposits.read();
         let in_defi = self.storage.total_in_defi.read();
         let allocated = self.storage.total_allocated.read();
@@ -182,5 +175,11 @@ pub contract HousingFund {
     #[view]
     fn is_paused() -> pub bool {
         self.storage.is_paused.read()
+    }
+
+    #[external("public")]
+    #[view]
+    fn get_admin() -> pub AztecAddress {
+        self.storage.admin.read()
     }
 }
