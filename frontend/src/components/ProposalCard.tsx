@@ -17,27 +17,27 @@ export default function ProposalCard({ proposal, onVote, isVoting }: ProposalCar
   const statusLabel = PROPOSAL_STATUS[proposal.status] ?? "Unknown";
 
   const statusStyles: Record<number, string> = {
-    0: "text-emerald-700 bg-emerald-50 border-emerald-200",
-    1: "text-sky-700 bg-sky-50 border-sky-200",
-    2: "text-red-600 bg-red-50 border-red-200",
-    3: "text-purple-700 bg-purple-50 border-purple-200",
+    0: "text-fs-teal bg-fs-teal/10 border-fs-teal/20",
+    1: "text-blue-400 bg-blue-400/10 border-blue-400/20",
+    2: "text-fs-magenta-light bg-fs-magenta/10 border-fs-magenta/20",
+    3: "text-purple-400 bg-purple-400/10 border-purple-400/20",
   };
 
   return (
-    <div className="rounded-xl bg-white border border-gray-200 shadow-sm p-5 hover:shadow-md transition-shadow">
-      <div className="flex items-start justify-between mb-3">
+    <div className="rounded-2xl bg-surface-card border border-surface-border p-5 card-hover">
+      <div className="flex items-start justify-between mb-4">
         <div className="flex-1 mr-3">
-          <h3 className="font-semibold text-gray-900">{proposal.title || `Proposal #${proposal.id}`}</h3>
+          <h3 className="font-semibold text-text-primary">{proposal.title || `Proposal #${proposal.id}`}</h3>
           {proposal.description && (
-            <p className="text-sm text-gray-500 mt-1 line-clamp-2">{proposal.description}</p>
+            <p className="text-sm text-text-secondary mt-1 line-clamp-2">{proposal.description}</p>
           )}
-          <p className="text-sm text-gray-400 mt-1">
-            Requesting <span className="font-semibold text-gray-700">{formatEUR(proposal.amount)}</span>
+          <p className="text-sm text-text-muted mt-1">
+            Requesting <span className="font-semibold text-text-primary">{formatEUR(proposal.amount)}</span>
           </p>
         </div>
         <span
           className={`px-2.5 py-1 rounded-full text-xs font-semibold border whitespace-nowrap ${
-            statusStyles[proposal.status] ?? "text-gray-500 bg-gray-50"
+            statusStyles[proposal.status] ?? "text-text-muted bg-surface-raised border-surface-border"
           }`}
         >
           {statusLabel}
@@ -45,30 +45,30 @@ export default function ProposalCard({ proposal, onVote, isVoting }: ProposalCar
       </div>
 
       {/* Vote bar */}
-      <div className="mb-3">
-        <div className="flex justify-between text-xs text-gray-500 mb-1.5 font-medium">
-          <span className="text-emerald-600">Yes: {proposal.yesVotes}</span>
-          <span className="text-red-500">No: {proposal.noVotes}</span>
+      <div className="mb-4">
+        <div className="flex justify-between text-xs font-medium mb-2">
+          <span className="text-fs-teal">Yes: {proposal.yesVotes}</span>
+          <span className="text-fs-magenta-light">No: {proposal.noVotes}</span>
         </div>
-        <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+        <div className="h-2 bg-surface-raised rounded-full overflow-hidden">
           {totalVotes > 0 && (
             <div
-              className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all duration-500"
+              className="h-full bg-gradient-to-r from-fs-teal to-fs-teal-light rounded-full transition-all duration-500"
               style={{ width: `${yesPercent}%` }}
             />
           )}
         </div>
         {totalVotes > 0 && (
-          <p className="text-xs text-gray-400 mt-1 text-right">{yesPercent}% approval</p>
+          <p className="text-xs text-text-muted mt-1.5 text-right">{yesPercent}% approval</p>
         )}
       </div>
 
       {/* Deadline */}
-      <p className="text-xs text-gray-400 mb-4">
+      <p className="text-xs text-text-muted mb-4">
         {isActive && !isExpired
-          ? `🗓 Voting ends: ${deadline.toLocaleDateString("en-NL", { day: "numeric", month: "short", year: "numeric" })}`
+          ? `Voting ends: ${deadline.toLocaleDateString("en-NL", { day: "numeric", month: "short", year: "numeric" })}`
           : isExpired && isActive
-            ? "⏰ Voting ended — ready to finalize"
+            ? "Voting ended -- ready to finalize"
             : `Ended: ${deadline.toLocaleDateString("en-NL", { day: "numeric", month: "short", year: "numeric" })}`}
       </p>
 
@@ -78,24 +78,26 @@ export default function ProposalCard({ proposal, onVote, isVoting }: ProposalCar
           <button
             onClick={() => onVote(proposal.id, true)}
             disabled={isVoting}
-            className="flex-1 py-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-semibold hover:bg-emerald-100 disabled:opacity-50 transition-colors"
+            className="flex-1 py-2.5 rounded-xl bg-fs-teal/10 border border-fs-teal/20 text-fs-teal text-sm font-semibold hover:bg-fs-teal/15 disabled:opacity-40 transition-colors"
           >
-            {isVoting ? "⏳ Proving…" : "✓ Vote Yes"}
+            {isVoting ? "Proving..." : "Vote Yes"}
           </button>
           <button
             onClick={() => onVote(proposal.id, false)}
             disabled={isVoting}
-            className="flex-1 py-2.5 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm font-semibold hover:bg-red-100 disabled:opacity-50 transition-colors"
+            className="flex-1 py-2.5 rounded-xl bg-fs-magenta/10 border border-fs-magenta/20 text-fs-magenta-light text-sm font-semibold hover:bg-fs-magenta/15 disabled:opacity-40 transition-colors"
           >
-            {isVoting ? "⏳ Proving…" : "✗ Vote No"}
+            {isVoting ? "Proving..." : "Vote No"}
           </button>
         </div>
       )}
 
-      {/* Privacy note */}
       {isActive && !isExpired && (
-        <p className="text-xs text-gray-400 mt-3 text-center">
-          🔒 Your vote is private — nobody can see which way you voted
+        <p className="text-xs text-text-muted mt-3 text-center flex items-center justify-center gap-1.5">
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+          </svg>
+          Your vote is private
         </p>
       )}
     </div>

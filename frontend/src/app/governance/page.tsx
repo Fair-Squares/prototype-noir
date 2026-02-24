@@ -27,9 +27,8 @@ export default function GovernancePage() {
       if (result.success) {
         setVoteMessage({
           type: "success",
-          text: `✅ Vote ${voteYes ? "YES" : "NO"} cast on proposal #${proposalId} — ZK proof verified`,
+          text: `Vote ${voteYes ? "YES" : "NO"} cast on proposal #${proposalId} -- ZK proof verified`,
         });
-        // Refresh proposals to show updated tallies
         const updated = await fetchProposals();
         setProposals(updated);
       } else {
@@ -44,21 +43,20 @@ export default function GovernancePage() {
     <div className="space-y-8">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Governance</h1>
-          <p className="text-gray-500">
-            Vote on property acquisitions. Your vote is private — only aggregate results are public.
+          <h1 className="text-2xl font-bold text-text-primary mb-2">Governance</h1>
+          <p className="text-text-secondary">
+            Vote on property acquisitions. Your vote is private -- only aggregate results are public.
           </p>
         </div>
         <WalletConnect onConnect={setAddress} />
       </div>
 
-      {/* Vote feedback */}
       {voteMessage && (
         <div
           className={`rounded-xl p-4 text-sm font-medium ${
             voteMessage.type === "success"
-              ? "bg-emerald-50 border border-emerald-200 text-emerald-700"
-              : "bg-red-50 border border-red-200 text-red-600"
+              ? "bg-fs-teal/10 border border-fs-teal/20 text-fs-teal"
+              : "bg-fs-magenta/10 border border-fs-magenta/20 text-fs-magenta-light"
           }`}
         >
           {voteMessage.text}
@@ -66,10 +64,14 @@ export default function GovernancePage() {
       )}
 
       {proposals.length === 0 ? (
-        <div className="rounded-xl bg-white border border-gray-200 shadow-sm p-12 text-center">
-          <div className="text-4xl mb-3">🗳️</div>
-          <p className="text-gray-600 font-medium text-lg mb-2">No proposals yet</p>
-          <p className="text-sm text-gray-400">
+        <div className="rounded-2xl bg-surface-card border border-surface-border p-14 text-center">
+          <div className="w-12 h-12 rounded-xl bg-surface-raised flex items-center justify-center mx-auto mb-4">
+            <svg className="w-6 h-6 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 0 1-2.25 2.25M16.5 7.5V18a2.25 2.25 0 0 0 2.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 0 0 2.25 2.25h13.5M6 7.5h3v3H6V7.5Z" />
+            </svg>
+          </div>
+          <p className="text-text-primary font-semibold text-lg mb-2">No proposals yet</p>
+          <p className="text-sm text-text-muted">
             When the housing council submits a property for acquisition, it will appear here for voting.
           </p>
         </div>
@@ -86,11 +88,16 @@ export default function GovernancePage() {
         </div>
       )}
 
-      {/* Privacy notice */}
-      <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-sm text-emerald-700">
-        🔒 <strong>Private voting:</strong> When you cast a vote,
-        it runs entirely in your local PXE. A ZK nullifier prevents double-voting without revealing
-        your identity. The yes/no tallies update publicly, but nobody can see who voted which way.
+      {/* Privacy note */}
+      <div className="bg-fs-teal/5 border border-fs-teal/10 rounded-xl p-4 text-sm text-fs-teal flex items-start gap-2">
+        <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+        </svg>
+        <span>
+          <strong>Private voting:</strong> When you cast a vote,
+          it runs in your local PXE. A ZK nullifier prevents double-voting without revealing
+          your identity. Tallies update publicly, but nobody can see who voted which way.
+        </span>
       </div>
     </div>
   );

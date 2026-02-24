@@ -1,35 +1,97 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "NexaBlack";
+  src: url("/brand/NexaBlack.otf") format("opentype");
+  font-weight: 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "NexaHeavy";
+  src: url("/brand/NexaHeavy.otf") format("opentype");
+  font-weight: 800;
+  font-display: swap;
+}
+
 @theme {
-  --color-emerald-50: #ecfdf5;
-  --color-emerald-100: #d1fae5;
-  --color-emerald-200: #a7f3d0;
-  --color-emerald-500: #10b981;
-  --color-emerald-600: #059669;
-  --color-emerald-700: #047857;
-  --color-emerald-800: #065f46;
-  --color-teal-50: #f0fdfa;
-  --color-teal-500: #14b8a6;
-  --color-teal-600: #0d9488;
+  /* Fair Squares brand */
+  --color-fs-magenta: #C41667;
+  --color-fs-magenta-light: #E0387F;
+  --color-fs-teal: #4CBDB0;
+  --color-fs-teal-light: #6DD4C8;
+  --color-fs-teal-dark: #3A9A8F;
+  --color-fs-anthracite: #2A2D34;
+  --color-fs-mint: #E0F0EC;
+
+  /* Dark theme surfaces */
+  --color-surface-base: #0B0D12;
+  --color-surface-raised: #13151C;
+  --color-surface-card: #1A1D26;
+  --color-surface-hover: #22252F;
+  --color-surface-border: rgba(255, 255, 255, 0.06);
+  --color-surface-border-hover: rgba(255, 255, 255, 0.12);
+
+  /* Text */
+  --color-text-primary: #F0F2F5;
+  --color-text-secondary: #8B8FA3;
+  --color-text-muted: #5A5E72;
 }
 
 body {
+  background: var(--color-surface-base);
+  color: var(--color-text-primary);
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
-/* Smooth transitions for interactive elements */
-* {
-  transition-property: color, background-color, border-color, box-shadow;
-  transition-duration: 150ms;
-  transition-timing-function: ease-in-out;
+/* Glow effects */
+.glow-teal {
+  box-shadow: 0 0 20px rgba(76, 189, 176, 0.15), 0 0 60px rgba(76, 189, 176, 0.05);
 }
 
-/* Remove transitions from layout-affecting properties */
-*:not(button):not(a):not(input) {
-  transition-property: none;
+.glow-magenta {
+  box-shadow: 0 0 20px rgba(196, 22, 103, 0.15), 0 0 60px rgba(196, 22, 103, 0.05);
 }
 
+.glow-teal-border {
+  border-color: rgba(76, 189, 176, 0.2);
+}
+
+.glow-magenta-border {
+  border-color: rgba(196, 22, 103, 0.2);
+}
+
+/* Gradient text */
+.gradient-text-brand {
+  background: linear-gradient(135deg, #4CBDB0 0%, #6DD4C8 50%, #C41667 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Card hover effect */
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.card-hover:hover {
+  transform: translateY(-1px);
+  border-color: rgba(76, 189, 176, 0.15);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2), 0 0 32px rgba(76, 189, 176, 0.06);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-surface-base);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-hover);
+  border-radius: 3px;
+}
+
+/* Smooth transitions */
 button, a, input, [role="button"] {
-  transition-property: color, background-color, border-color, box-shadow, opacity;
-  transition-duration: 150ms;
+  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
 }

@@ -33,10 +33,10 @@ export default function WalletConnect({ onConnect }: WalletConnectProps) {
 
   if (address) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200">
-        <div className="w-2 h-2 rounded-full bg-emerald-500" />
-        <span className="text-xs text-emerald-700 font-mono font-medium">
-          {address.slice(0, 8)}…{address.slice(-6)}
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-fs-teal/10 border border-fs-teal/20">
+        <div className="w-2 h-2 rounded-full bg-fs-teal" />
+        <span className="text-xs text-fs-teal font-mono font-medium">
+          {address.slice(0, 8)}...{address.slice(-6)}
         </span>
       </div>
     );
@@ -47,26 +47,21 @@ export default function WalletConnect({ onConnect }: WalletConnectProps) {
       <button
         onClick={() => accounts.length > 1 ? setShowPicker(!showPicker) : connect()}
         disabled={loading || accounts.length === 0}
-        className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold disabled:opacity-50 shadow-sm"
+        className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-fs-teal to-fs-teal-dark hover:from-fs-teal-light hover:to-fs-teal text-white text-sm font-semibold disabled:opacity-40 shadow-lg shadow-fs-teal/20 transition-all"
       >
-        {loading
-          ? "Connecting…"
-          : accounts.length === 0
-            ? "No accounts"
-            : "Connect Wallet"}
+        {loading ? "Connecting..." : accounts.length === 0 ? "No accounts" : "Connect Wallet"}
       </button>
 
-      {/* Account picker dropdown */}
       {showPicker && accounts.length > 1 && (
-        <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-gray-200 rounded-xl shadow-lg z-50 py-2">
-          <p className="px-3 py-1 text-xs text-gray-400 font-medium">Select account</p>
+        <div className="absolute right-0 top-full mt-2 w-72 bg-surface-card border border-surface-border rounded-xl shadow-2xl z-50 py-2">
+          <p className="px-3 py-1.5 text-xs text-text-muted font-medium">Select account</p>
           {accounts.map((acc, i) => (
             <button
               key={acc}
               onClick={() => connect(acc)}
-              className="w-full px-3 py-2 text-left hover:bg-gray-50 text-sm font-mono text-gray-700"
+              className="w-full px-3 py-2.5 text-left hover:bg-surface-hover text-sm font-mono text-text-secondary"
             >
-              Account #{i + 1}: {acc.slice(0, 10)}…{acc.slice(-8)}
+              Account #{i + 1}: {acc.slice(0, 10)}...{acc.slice(-8)}
             </button>
           ))}
         </div>
