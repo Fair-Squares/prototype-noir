@@ -36,14 +36,18 @@ export default function Dashboard() {
             </a>
           </div>
         </div>
-        <div className="hidden lg:block">
-          <Image
-            src="/brand/fs-light-dark.png"
-            alt="Fair Squares"
-            width={180}
-            height={180}
-            className="opacity-20"
-          />
+        <div className="hidden lg:flex items-center justify-center">
+          <div className="relative w-[280px] h-[280px] flex items-center justify-center">
+            {/* Soft teal glow behind the logo */}
+            <div className="absolute inset-0 bg-fs-teal/8 rounded-full blur-3xl" />
+            <Image
+              src="/brand/fs-dark-light-bg.png"
+              alt="Fair Squares"
+              width={180}
+              height={180}
+              className="relative z-10 drop-shadow-sm"
+            />
+          </div>
         </div>
       </div>
 

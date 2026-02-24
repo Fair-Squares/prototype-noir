@@ -23,10 +23,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-14">
             <Link href="/" className="flex items-center gap-2.5">
               <Image
-                src="/brand/fs-light-dark.png"
+                src="/brand/fs-dark-light-bg.png"
                 alt="Fair Squares"
-                width={28}
-                height={28}
+                width={32}
+                height={32}
+                className="rounded-sm"
               />
               <span className="font-bold text-[15px]">Fair Squares</span>
             </Link>
