@@ -133,7 +133,7 @@ deploy_contracts() {
   $AZTEC_WALLET_BIN deploy \
     "${ROOT_DIR}/contracts/kyc_verifier/target/kyc_verifier-KYCVerifier.json" \
     \
-    --from accounts:test0 \
+    --initializer __aztec_nr_internals__constructor --from accounts:test0 \
     --args accounts:test0 \
     -a kyc_verifier 2>&1 || die "KYCVerifier deploy failed"
 
@@ -142,7 +142,7 @@ deploy_contracts() {
   $AZTEC_WALLET_BIN deploy \
     "${ROOT_DIR}/contracts/fund_token/target/fund_token-FundToken.json" \
     \
-    --from accounts:test0 \
+    --initializer __aztec_nr_internals__constructor --from accounts:test0 \
     --args accounts:test0 \
     -a fund_token 2>&1 || die "FundToken deploy failed"
 
@@ -151,7 +151,7 @@ deploy_contracts() {
   $AZTEC_WALLET_BIN deploy \
     "${ROOT_DIR}/contracts/defi_vault/target/defi_vault-DeFiVault.json" \
     \
-    --from accounts:test0 \
+    --initializer __aztec_nr_internals__constructor --from accounts:test0 \
     --args accounts:test0 300 \
     -a defi_vault 2>&1 || die "DeFiVault deploy failed"
 
@@ -160,7 +160,7 @@ deploy_contracts() {
   $AZTEC_WALLET_BIN deploy \
     "${ROOT_DIR}/contracts/housing_fund/target/housing_fund-HousingFund.json" \
     \
-    --from accounts:test0 \
+    --initializer __aztec_nr_internals__constructor --from accounts:test0 \
     --args accounts:test0 \
     -a housing_fund 2>&1 || die "HousingFund deploy failed"
 
@@ -170,7 +170,7 @@ deploy_contracts() {
   $AZTEC_WALLET_BIN deploy \
     "${ROOT_DIR}/contracts/governance/target/governance-Governance.json" \
     \
-    --from accounts:test0 \
+    --initializer __aztec_nr_internals__constructor --from accounts:test0 \
     --args contracts:housing_fund accounts:test0 \
     -a governance 2>&1 || die "Governance deploy failed"
 }
