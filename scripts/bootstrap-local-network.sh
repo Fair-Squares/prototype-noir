@@ -23,6 +23,16 @@ AZTEC_BIN="node --no-warnings /usr/src/yarn-project/aztec/dest/bin/index.js"
 AZTEC_WALLET_BIN="node --no-warnings /usr/src/yarn-project/cli-wallet/dest/bin/index.js"
 # nargo: Noir compiler (aztec fork)
 NARGO_BIN="/usr/src/noir/noir-repo/target/release/nargo"
+# bb: barretenberg binary — handles AVM transpilation + VK generation
+# Docker image has bb-avm, local installs may have bb — try both
+if [ -x "/usr/src/barretenberg/cpp/build/bin/bb-avm" ]; then
+  BB_BIN="/usr/src/barretenberg/cpp/build/bin/bb-avm"
+elif [ -x "/usr/src/barretenberg/cpp/build/bin/bb" ]; then
+  BB_BIN="/usr/src/barretenberg/cpp/build/bin/bb"
+else
+  BB_BIN=$(command -v bb-avm 2>/dev/null || command -v bb 2>/dev/null || echo "")
+fi
+[ -z "$BB_BIN" ] && { log "FATAL: bb/bb-avm binary not found"; exit 1; }
 
 # -- Helpers -------------------------------------------------------------------
 
@@ -66,17 +76,23 @@ wait_for_pxe() {
 compile_contracts() {
   for c in $CONTRACTS; do
     log "Compiling contract: ${c}"
+    artifact_dir="${ROOT_DIR}/contracts/${c}/target"
     cd "${ROOT_DIR}/contracts/${c}"
 
-    # Use nargo directly (the Aztec image doesn't put aztec/nargo in PATH)
+    # Step 1: compile Noir to ACIR (nargo not in PATH, use full binary path)
     $NARGO_BIN compile --silence-warnings 2>&1 || die "Could not compile ${c}"
 
     # Verify artifact was produced
-    artifact_dir="${ROOT_DIR}/contracts/${c}/target"
     if [ ! -d "$artifact_dir" ] || [ -z "$(ls "$artifact_dir"/*.json 2>/dev/null)" ]; then
       die "No compilation artifact found for ${c} in ${artifact_dir}"
     fi
-    log "Compiled ${c} successfully"
+
+    # Step 2: AVM transpilation + VK generation (required for aztec-wallet deploy)
+    # bb aztec_process needs an absolute path — relative paths don't resolve correctly
+    log "Transpiling ${c} (AVM + VKs)..."
+    $BB_BIN aztec_process -i "${artifact_dir}" 2>&1 | grep -E "Transpil|complete|Error" || die "AVM transpilation failed for ${c}"
+
+    log "Compiled and transpiled ${c} successfully"
   done
   cd "${ROOT_DIR}"
 }
