@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { registerKYC } from "@/lib/contracts";
 
-const DEV_MODE = process.env.NEXT_PUBLIC_DEV_MODE === "true";
+const DEV_MODE =
+  process.env.NEXT_PUBLIC_DEV_MODE === "true" ||
+  process.env.NEXT_PUBLIC_SIMULATION === "true";
 
 interface KYCFlowProps {
   userAddress: string;

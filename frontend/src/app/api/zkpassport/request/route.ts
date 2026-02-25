@@ -17,10 +17,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "userAddress is required" }, { status: 400 });
     }
 
-    const isDev = process.env.NEXT_PUBLIC_DEV_MODE === "true";
+    const isSimulation =
+      process.env.NEXT_PUBLIC_SIMULATION === "true" ||
+      process.env.NEXT_PUBLIC_DEV_MODE === "true";
 
     // ── Dev mode: instant bypass ─────────────────────────────────────────
-    if (isDev) {
+    if (isSimulation) {
       const requestId = `dev_${userAddress.slice(2, 10)}_${Date.now()}`;
       return NextResponse.json({
         qrUrl: `dev://bypass?id=${requestId}&address=${userAddress}`,
@@ -35,7 +37,22 @@ export async function POST(request: NextRequest) {
     // but verification result comes via onResult callback (not polling).
     // For a proper production integration, use a persistent service.
     try {
-      const { ZKPassport } = await import("@zkpassport/sdk");
+      const sdkModule = (await import("@zkpassport/sdk")) as {
+        ZKPassport: new (domain: string) => {
+          request: (payload: {
+            name: string;
+            logo: string;
+            purpose: string;
+            scope: string;
+            devMode: boolean;
+          }) => Promise<{
+            gte: (field: string, value: number) => {
+              done: () => { url: string; requestId: string };
+            };
+          }>;
+        };
+      };
+      const { ZKPassport } = sdkModule;
       const domain = process.env.ZKPASSPORT_DOMAIN ?? "fair-squares.vercel.app";
       const zkp = new ZKPassport(domain);
 

@@ -13,6 +13,9 @@ export default function PortfolioPage() {
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
   const [loading, setLoading] = useState(false);
   const [topUpMsg, setTopUpMsg] = useState<string | null>(null);
+  const isDevOrSimulation =
+    process.env.NEXT_PUBLIC_DEV_MODE === "true" ||
+    process.env.NEXT_PUBLIC_SIMULATION === "true";
 
   const loadPortfolio = async (addr: string) => {
     setLoading(true);
@@ -66,7 +69,7 @@ export default function PortfolioPage() {
         <>
           <PrivateBalance portfolio={portfolio} isLoading={loading} />
 
-          {process.env.NEXT_PUBLIC_DEV_MODE === "true" && (
+          {isDevOrSimulation && (
             <div className="rounded-xl bg-card p-5 border border-border">
               <div className="flex items-center justify-between">
                 <div>

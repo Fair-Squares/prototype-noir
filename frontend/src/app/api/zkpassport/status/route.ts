@@ -9,13 +9,16 @@ import { NextRequest, NextResponse } from "next/server";
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const requestId = searchParams.get("requestId") ?? "";
+  const isSimulation =
+    process.env.NEXT_PUBLIC_SIMULATION === "true" ||
+    process.env.NEXT_PUBLIC_DEV_MODE === "true";
 
   if (!requestId) {
     return NextResponse.json({ error: "requestId required" }, { status: 400 });
   }
 
   // ── Dev mode: instant verification ───────────────────────────────────────
-  if (requestId.startsWith("dev_")) {
+  if (isSimulation || requestId.startsWith("dev_")) {
     return NextResponse.json({
       verified: true,
       devMode: true,
@@ -29,22 +32,23 @@ export async function GET(request: NextRequest) {
     // requestId format: "zkpassport_id::userAddress"
     const [zkId] = requestId.split("::");
 
-    const { ZKPassport } = await import("@zkpassport/sdk");
+    const sdkModule = (await import("@zkpassport/sdk")) as {
+      ZKPassport: new (domain: string) => unknown;
+    };
+    const { ZKPassport } = sdkModule;
     const domain = process.env.ZKPASSPORT_DOMAIN ?? "fair-squares.vercel.app";
-    const zkp = new ZKPassport(domain);
-
-    // v0.12+ uses bridge callbacks; polling helpers may be absent.
-    // Use feature detection so builds don't fail across SDK versions.
-    const zkpAny = zkp as unknown as {
+    const zkp = new ZKPassport(domain) as {
       getResult?: (id: string) => Promise<unknown>;
       getRequestStatus?: (id: string) => Promise<unknown>;
     };
 
+    // v0.12+ uses bridge callbacks; polling helpers may be absent.
+    // Use feature detection so builds don't fail across SDK versions.
     let result: unknown = null;
-    if (typeof zkpAny.getResult === "function") {
-      result = await zkpAny.getResult(zkId);
-    } else if (typeof zkpAny.getRequestStatus === "function") {
-      result = await zkpAny.getRequestStatus(zkId);
+    if (typeof zkp.getResult === "function") {
+      result = await zkp.getResult(zkId);
+    } else if (typeof zkp.getRequestStatus === "function") {
+      result = await zkp.getRequestStatus(zkId);
     } else {
       // No polling API exposed by current SDK build.
       return NextResponse.json({ verified: false, pending: true });
