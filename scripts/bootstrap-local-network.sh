@@ -126,76 +126,82 @@ deploy_contracts() {
   cd "${ROOT_DIR}"
 
   log "Importing test accounts..."
-  $AZTEC_WALLET_BIN import-test-accounts 2>&1 || log "WARN: Could not import test accounts (may already exist)"
+  IMPORT_OUT=$($AZTEC_WALLET_BIN import-test-accounts 2>&1) || log "WARN: Could not import test accounts"
+  # Extract test0 address from import output
+  ADMIN_ADDR=$(echo "$IMPORT_OUT" | grep -oP 'Address:\s+\K0x[0-9a-fA-F]+' | head -1)
+  log "Admin address: ${ADMIN_ADDR:-unknown}"
 
-  # Deploy KYCVerifier(admin)
-  log "Deploying KYCVerifier..."
-  $AZTEC_WALLET_BIN deploy \
-    "${ROOT_DIR}/contracts/kyc_verifier/target/kyc_verifier-KYCVerifier.json" \
-    \
-    --initializer __aztec_nr_internals__constructor --from accounts:test0 \
-    --args accounts:test0 \
-    -a kyc_verifier 2>&1 || die "KYCVerifier deploy failed"
+  _deploy() {
+    local label=$1 artifact=$2 args=$3
+    log "Deploying ${label}..."
+    local out
+    out=$($AZTEC_WALLET_BIN deploy \
+      "${ROOT_DIR}/contracts/${artifact}" \
+      --init __aztec_nr_internals__constructor \
+      --from accounts:test0 \
+      --args $args \
+      -a "${label}" 2>&1) || die "${label} deploy failed"
+    echo "$out"
+    # Extract address from "Contract deployed at 0x..."
+    echo "$out" | grep -oP '(?i)contract\s+deployed\s+at\s+\K0x[0-9a-fA-F]+'
+  }
 
-  # Deploy FundToken(admin)
-  log "Deploying FundToken..."
-  $AZTEC_WALLET_BIN deploy \
-    "${ROOT_DIR}/contracts/fund_token/target/fund_token-FundToken.json" \
-    \
-    --initializer __aztec_nr_internals__constructor --from accounts:test0 \
-    --args accounts:test0 \
-    -a fund_token 2>&1 || die "FundToken deploy failed"
+  KYC_ADDR=$(_deploy "kyc_verifier" \
+    "kyc_verifier/target/kyc_verifier-KYCVerifier.json" \
+    "accounts:test0" | tail -1)
 
-  # Deploy DeFiVault(admin, yield_rate_bps=300 i.e. 3% APY)
-  log "Deploying DeFiVault..."
-  $AZTEC_WALLET_BIN deploy \
-    "${ROOT_DIR}/contracts/defi_vault/target/defi_vault-DeFiVault.json" \
-    \
-    --initializer __aztec_nr_internals__constructor --from accounts:test0 \
-    --args accounts:test0 300 \
-    -a defi_vault 2>&1 || die "DeFiVault deploy failed"
+  TOKEN_ADDR=$(_deploy "fund_token" \
+    "fund_token/target/fund_token-FundToken.json" \
+    "accounts:test0" | tail -1)
 
-  # Deploy HousingFund(admin)
-  log "Deploying HousingFund..."
-  $AZTEC_WALLET_BIN deploy \
-    "${ROOT_DIR}/contracts/housing_fund/target/housing_fund-HousingFund.json" \
-    \
-    --initializer __aztec_nr_internals__constructor --from accounts:test0 \
-    --args accounts:test0 \
-    -a housing_fund 2>&1 || die "HousingFund deploy failed"
+  VAULT_ADDR=$(_deploy "defi_vault" \
+    "defi_vault/target/defi_vault-DeFiVault.json" \
+    "accounts:test0 300" | tail -1)
 
-  # Deploy Governance(housing_fund, council)
-  # council = test0 for the prototype
-  log "Deploying Governance..."
-  $AZTEC_WALLET_BIN deploy \
-    "${ROOT_DIR}/contracts/governance/target/governance-Governance.json" \
-    \
-    --initializer __aztec_nr_internals__constructor --from accounts:test0 \
-    --args contracts:housing_fund accounts:test0 \
-    -a governance 2>&1 || die "Governance deploy failed"
+  FUND_ADDR=$(_deploy "housing_fund" \
+    "housing_fund/target/housing_fund-HousingFund.json" \
+    "accounts:test0" | tail -1)
+
+  GOV_ADDR=$(_deploy "governance" \
+    "governance/target/governance-Governance.json" \
+    "contracts:housing_fund accounts:test0" | tail -1)
+
+  log "Deployed addresses:"
+  log "  KYCVerifier:  ${KYC_ADDR}"
+  log "  FundToken:    ${TOKEN_ADDR}"
+  log "  DeFiVault:    ${VAULT_ADDR}"
+  log "  HousingFund:  ${FUND_ADDR}"
+  log "  Governance:   ${GOV_ADDR}"
+
+  # Export for use in wire_contracts and save_addresses
+  export KYC_ADDR TOKEN_ADDR VAULT_ADDR FUND_ADDR GOV_ADDR ADMIN_ADDR
 }
 
 # -- 4. Wire contracts together ------------------------------------------------
 
 wire_contracts() {
+  # All public fns are prefixed __aztec_nr_internals__ in Aztec v4 artifacts
   log "Wiring HousingFund.set_contracts(kyc, token, vault, gov)..."
-  $AZTEC_WALLET_BIN send set_contracts \
+  $AZTEC_WALLET_BIN send __aztec_nr_internals__set_contracts \
     --from accounts:test0 \
     --contract-address contracts:housing_fund \
+    --artifact "${ROOT_DIR}/contracts/housing_fund/target/housing_fund-HousingFund.json" \
     --args contracts:kyc_verifier contracts:fund_token contracts:defi_vault contracts:governance \
     2>&1 || log "WARN: set_contracts failed"
 
   log "Wiring DeFiVault.set_housing_fund(housing_fund)..."
-  $AZTEC_WALLET_BIN send set_housing_fund \
+  $AZTEC_WALLET_BIN send __aztec_nr_internals__set_housing_fund \
     --from accounts:test0 \
     --contract-address contracts:defi_vault \
+    --artifact "${ROOT_DIR}/contracts/defi_vault/target/defi_vault-DeFiVault.json" \
     --args contracts:housing_fund \
     2>&1 || log "WARN: set_housing_fund failed"
 
   log "Wiring FundToken.set_admin(housing_fund)..."
-  $AZTEC_WALLET_BIN send set_admin \
+  $AZTEC_WALLET_BIN send __aztec_nr_internals__set_admin \
     --from accounts:test0 \
     --contract-address contracts:fund_token \
+    --artifact "${ROOT_DIR}/contracts/fund_token/target/fund_token-FundToken.json" \
     --args contracts:housing_fund \
     2>&1 || log "WARN: set_admin failed"
 }
@@ -205,15 +211,13 @@ wire_contracts() {
 save_addresses() {
   log "Extracting deployed contract addresses..."
 
-  # Resolve the admin address
-  admin_addr=$($AZTEC_WALLET_BIN get-alias "accounts:test0" 2>/dev/null || echo "UNKNOWN")
-
-  # Resolve contract addresses
-  kyc_addr=$($AZTEC_WALLET_BIN get-alias "contracts:kyc_verifier" 2>/dev/null || echo "DEPLOY_FAILED")
-  token_addr=$($AZTEC_WALLET_BIN get-alias "contracts:fund_token" 2>/dev/null || echo "DEPLOY_FAILED")
-  vault_addr=$($AZTEC_WALLET_BIN get-alias "contracts:defi_vault" 2>/dev/null || echo "DEPLOY_FAILED")
-  fund_addr=$($AZTEC_WALLET_BIN get-alias "contracts:housing_fund" 2>/dev/null || echo "DEPLOY_FAILED")
-  gov_addr=$($AZTEC_WALLET_BIN get-alias "contracts:governance" 2>/dev/null || echo "DEPLOY_FAILED")
+  # Addresses are captured during deploy_contracts and exported
+  admin_addr="${ADMIN_ADDR:-UNKNOWN}"
+  kyc_addr="${KYC_ADDR:-DEPLOY_FAILED}"
+  token_addr="${TOKEN_ADDR:-DEPLOY_FAILED}"
+  vault_addr="${VAULT_ADDR:-DEPLOY_FAILED}"
+  fund_addr="${FUND_ADDR:-DEPLOY_FAILED}"
+  gov_addr="${GOV_ADDR:-DEPLOY_FAILED}"
 
   env_content="# Auto-generated by bootstrap-local-network.sh
 # $(date -u +%Y-%m-%dT%H:%M:%SZ)
