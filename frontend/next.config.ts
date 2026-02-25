@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
   webpack: (config, { isServer }) => {
@@ -14,25 +15,22 @@ const nextConfig: NextConfig = {
       worker_threads: false,
     };
 
-    // ── @aztec/wallets/embedded: force browser export in client bundles ────
-    // The package has two exports:
-    //   "browser" → BrowserEmbeddedWallet (WASM, safe in Next.js client)
-    //   "node"    → EmbeddedWallet (NAPI binaries, Node.js only)
+    // ── @aztec/wallets/embedded: force browser (WASM) build in client ──────
+    // The package has two builds:
+    //   browser → BrowserEmbeddedWallet (WASM, safe in Next.js client)
+    //   node    → EmbeddedWallet (NAPI binaries, Node.js only — DO NOT use server-side)
     //
-    // Next.js server bundles must NOT import this at all (see aztecClient.ts).
-    // Client bundles resolve to the browser WASM build via the alias below.
+    // We alias the subpath to the concrete browser.js file using path.resolve
+    // so webpack bypasses the exports map entirely.
     if (!isServer) {
+      const browserEntry = path.resolve(
+        __dirname,
+        "node_modules/@aztec/wallets/dest/embedded/entrypoints/browser.js"
+      );
       config.resolve.alias = {
         ...config.resolve.alias,
-        "@aztec/wallets/embedded": require.resolve(
-          "@aztec/wallets/dest/embedded/entrypoints/browser.js"
-        ),
+        "@aztec/wallets/embedded": browserEntry,
       };
-    }
-
-    // ── Prevent server-only NAPI modules from appearing in client bundle ───
-    if (!isServer) {
-      config.externals = [...(config.externals ?? [])];
     }
 
     return config;
