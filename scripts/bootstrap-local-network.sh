@@ -36,7 +36,7 @@ fi
 
 # -- Helpers -------------------------------------------------------------------
 
-log() { printf '\n[bootstrap] %s\n' "$1"; }
+log() { printf '\n[bootstrap] %s\n' "$1" >&2; }
 
 die() { log "FATAL: $1"; exit 1; }
 
