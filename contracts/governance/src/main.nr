@@ -13,7 +13,7 @@ use aztec::macros::aztec;
 pub contract Governance {
     use aztec::{
         macros::{
-            functions::{external, initializer, view},
+            functions::{external, initializer},
             storage::storage,
         },
         protocol::address::AztecAddress,
@@ -143,15 +143,13 @@ pub contract Governance {
 
     // -- View functions ---------------------------------------------------
 
-    #[external("public")]
-    #[view]
-    fn get_proposal_count() -> pub u32 {
+    #[external("utility")]
+    unconstrained fn get_proposal_count() -> pub u32 {
         self.storage.proposal_count.read()
     }
 
-    #[external("public")]
-    #[view]
-    fn get_proposal(proposal_id: u32) -> pub (Field, u64, u32, u32, u8) {
+    #[external("utility")]
+    unconstrained fn get_proposal(proposal_id: u32) -> pub (Field, u64, u32, u32, u8) {
         let pid = proposal_id as Field;
         (
             self.storage.p_desc_hash.at(pid).read(),
@@ -162,9 +160,8 @@ pub contract Governance {
         )
     }
 
-    #[external("public")]
-    #[view]
-    fn get_proposal_status(proposal_id: u32) -> pub u8 {
+    #[external("utility")]
+    unconstrained fn get_proposal_status(proposal_id: u32) -> pub u8 {
         let pid = proposal_id as Field;
         self.storage.p_status.at(pid).read()
     }

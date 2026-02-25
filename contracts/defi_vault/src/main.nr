@@ -9,7 +9,7 @@ use aztec::macros::aztec;
 pub contract DeFiVault {
     use aztec::{
         macros::{
-            functions::{external, initializer, view},
+            functions::{external, initializer},
             storage::storage,
         },
         protocol::address::AztecAddress,
@@ -104,27 +104,23 @@ pub contract DeFiVault {
 
     // VIEW FUNCTIONS
 
-    #[external("public")]
-    #[view]
-    fn get_balance() -> pub u64 {
+    #[external("utility")]
+    unconstrained fn get_balance() -> pub u64 {
         self.storage.total_deposited.read() + self.storage.accrued_yield.read()
     }
 
-    #[external("public")]
-    #[view]
-    fn get_total_deposited() -> pub u64 {
+    #[external("utility")]
+    unconstrained fn get_total_deposited() -> pub u64 {
         self.storage.total_deposited.read()
     }
 
-    #[external("public")]
-    #[view]
-    fn get_accrued_yield() -> pub u64 {
+    #[external("utility")]
+    unconstrained fn get_accrued_yield() -> pub u64 {
         self.storage.accrued_yield.read()
     }
 
-    #[external("public")]
-    #[view]
-    fn get_yield_rate_bps() -> pub u32 {
+    #[external("utility")]
+    unconstrained fn get_yield_rate_bps() -> pub u32 {
         self.storage.yield_rate_bps.read()
     }
 }

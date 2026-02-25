@@ -14,7 +14,7 @@ use aztec::macros::aztec;
 pub contract HousingFund {
     use aztec::{
         macros::{
-            functions::{external, initializer, view},
+            functions::{external, initializer},
             storage::storage,
         },
         protocol::address::AztecAddress,
@@ -155,15 +155,13 @@ pub contract HousingFund {
 
     // -- View functions ---------------------------------------------------
 
-    #[external("public")]
-    #[view]
-    fn get_total_deposits() -> pub u64 {
+    #[external("utility")]
+    unconstrained fn get_total_deposits() -> pub u64 {
         self.storage.total_deposits.read()
     }
 
-    #[external("public")]
-    #[view]
-    fn get_fund_stats() -> pub (u64, u64, u64, u64) {
+    #[external("utility")]
+    unconstrained fn get_fund_stats() -> pub (u64, u64, u64, u64) {
         let total = self.storage.total_deposits.read();
         let in_defi = self.storage.total_in_defi.read();
         let allocated = self.storage.total_allocated.read();
@@ -171,15 +169,13 @@ pub contract HousingFund {
         (total, in_defi, allocated, available)
     }
 
-    #[external("public")]
-    #[view]
-    fn is_paused() -> pub bool {
+    #[external("utility")]
+    unconstrained fn is_paused() -> pub bool {
         self.storage.is_paused.read()
     }
 
-    #[external("public")]
-    #[view]
-    fn get_admin() -> pub AztecAddress {
+    #[external("utility")]
+    unconstrained fn get_admin() -> pub AztecAddress {
         self.storage.admin.read()
     }
 }

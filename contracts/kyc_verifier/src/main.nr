@@ -11,7 +11,7 @@ use aztec::macros::aztec;
 pub contract KYCVerifier {
     use aztec::{
         macros::{
-            functions::{external, initializer, view},
+            functions::{external, initializer},
             storage::storage,
         },
         protocol::address::AztecAddress,
@@ -83,21 +83,18 @@ pub contract KYCVerifier {
 
     // VIEW FUNCTIONS
 
-    #[external("public")]
-    #[view]
-    fn is_verified(user: AztecAddress) -> pub bool {
+    #[external("utility")]
+    unconstrained fn is_verified(user: AztecAddress) -> pub bool {
         self.storage.verified.at(user).read()
     }
 
-    #[external("public")]
-    #[view]
-    fn get_verified_count() -> pub u32 {
+    #[external("utility")]
+    unconstrained fn get_verified_count() -> pub u32 {
         self.storage.verified_count.read()
     }
 
-    #[external("public")]
-    #[view]
-    fn get_admin() -> pub AztecAddress {
+    #[external("utility")]
+    unconstrained fn get_admin() -> pub AztecAddress {
         self.storage.admin.read()
     }
 }
