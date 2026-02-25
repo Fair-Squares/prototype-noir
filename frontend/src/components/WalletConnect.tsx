@@ -21,7 +21,7 @@ export default function WalletConnect({
   };
 
   // Connected state
-  if (status === "connected" && activeAccount) {
+  if (status === "selected" && activeAccount) {
     return (
       <div className="flex items-center gap-2">
         {/* Account picker if multiple accounts */}
@@ -61,7 +61,7 @@ export default function WalletConnect({
   }
 
   // Connecting state
-  if (status === "connecting") {
+  if (status === "loading") {
     return (
       <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-fs-anthracite/60 text-white text-[13px] font-semibold">
         <svg
@@ -83,7 +83,7 @@ export default function WalletConnect({
             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
           />
         </svg>
-        Initializing wallet…
+        Loading accounts…
       </div>
     );
   }
