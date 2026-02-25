@@ -34,6 +34,7 @@ pub contract Governance {
         // Linked contract addresses
         housing_fund: PublicMutable<AztecAddress, Context>,
         council: PublicMutable<AztecAddress, Context>,
+        voting_window_blocks: PublicMutable<u32, Context>,
 
         // Proposal counter
         proposal_count: PublicMutable<u32, Context>,
@@ -45,6 +46,8 @@ pub contract Governance {
         p_no_votes: Map<Field, PublicMutable<u32, Context>, Context>,
         p_status: Map<Field, PublicMutable<u8, Context>, Context>,
         p_proposer: Map<Field, PublicMutable<AztecAddress, Context>, Context>,
+        p_created_block: Map<Field, PublicMutable<u32, Context>, Context>,
+        p_deadline_block: Map<Field, PublicMutable<u32, Context>, Context>,
 
         // Track who has voted (voter_address + proposal_id -> bool)
         // Key: hash of voter + proposal_id (stored as a Map<Field, ...>)
@@ -53,11 +56,13 @@ pub contract Governance {
 
     #[initializer]
     #[external("public")]
-    fn constructor(housing_fund: AztecAddress, council: AztecAddress) {
+    fn constructor(housing_fund: AztecAddress, council: AztecAddress, voting_window_blocks: u32) {
         assert(!housing_fund.is_zero(), "invalid housing_fund");
         assert(!council.is_zero(), "invalid council");
+        assert(voting_window_blocks > 0, "invalid voting window");
         self.storage.housing_fund.write(housing_fund);
         self.storage.council.write(council);
+        self.storage.voting_window_blocks.write(voting_window_blocks);
         self.storage.proposal_count.write(0);
     }
 
@@ -72,6 +77,8 @@ pub contract Governance {
 
         let proposal_id = self.storage.proposal_count.read();
         let pid = proposal_id as Field;
+        let created_block = self.context.block_number();
+        let deadline_block = created_block + self.storage.voting_window_blocks.read();
 
         self.storage.p_desc_hash.at(pid).write(description_hash);
         self.storage.p_amount.at(pid).write(amount);
@@ -79,6 +86,8 @@ pub contract Governance {
         self.storage.p_no_votes.at(pid).write(0);
         self.storage.p_status.at(pid).write(STATUS_ACTIVE);
         self.storage.p_proposer.at(pid).write(caller);
+        self.storage.p_created_block.at(pid).write(created_block);
+        self.storage.p_deadline_block.at(pid).write(deadline_block);
 
         self.storage.proposal_count.write(proposal_id + 1);
         proposal_id
@@ -125,8 +134,9 @@ pub contract Governance {
             "proposal is not active",
         );
 
-        // For prototype: anyone can finalize (no block deadline check)
-        // Future: add deadline-based check
+        let current_block = self.context.block_number();
+        let deadline_block = self.storage.p_deadline_block.at(pid).read();
+        assert(current_block >= deadline_block, "voting window still open");
 
         let yes_votes = self.storage.p_yes_votes.at(pid).read();
         let no_votes = self.storage.p_no_votes.at(pid).read();
@@ -171,7 +181,7 @@ pub contract Governance {
     }
 
     #[external("utility")]
-    unconstrained fn get_proposal(proposal_id: u32) -> pub (Field, u64, u32, u32, u8) {
+    unconstrained fn get_proposal(proposal_id: u32) -> pub (Field, u64, u32, u32, u8, u32, u32) {
         let pid = proposal_id as Field;
         (
             self.storage.p_desc_hash.at(pid).read(),
@@ -179,6 +189,8 @@ pub contract Governance {
             self.storage.p_yes_votes.at(pid).read(),
             self.storage.p_no_votes.at(pid).read(),
             self.storage.p_status.at(pid).read(),
+            self.storage.p_created_block.at(pid).read(),
+            self.storage.p_deadline_block.at(pid).read(),
         )
     }
 
@@ -186,5 +198,10 @@ pub contract Governance {
     unconstrained fn get_proposal_status(proposal_id: u32) -> pub u8 {
         let pid = proposal_id as Field;
         self.storage.p_status.at(pid).read()
+    }
+
+    #[external("utility")]
+    unconstrained fn get_voting_window_blocks() -> pub u32 {
+        self.storage.voting_window_blocks.read()
     }
 }

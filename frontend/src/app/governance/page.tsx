@@ -96,7 +96,7 @@ export default function GovernancePage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold mb-1">Proposals</h1>
-          <p className="text-text-2 text-sm">Vote on property acquisitions. FSFT is minted when a proposal executes.</p>
+          <p className="text-text-2 text-sm">Vote on property acquisitions. Voting windows are enforced on-chain by block deadlines. Executed proposals distribute FSFT to investor wallets.</p>
         </div>
         {address && (
           <button
@@ -180,7 +180,7 @@ export default function GovernancePage() {
         <div className="rounded-xl bg-card p-14 text-center">
           <p className="font-semibold text-text-1 text-lg mb-2">No proposals yet</p>
           <p className="text-sm text-text-3 mb-4">
-            Create a proposal to acquire a property. When it passes and executes, FSFT is minted.
+            Create a proposal to acquire a property. When it passes and executes, FSFT is distributed pro-rata from on-chain deposit tickets.
           </p>
           {!address && (
             <p className="text-xs text-text-3">Connect your wallet (top right) to create proposals.</p>

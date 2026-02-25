@@ -18,8 +18,8 @@ export async function GET(request: NextRequest) {
         name: "Fair Squares Fund Token",
         totalSupply: stats.fsftTotalSupply,
         decimals: 0,
-        peg: "1 FSFT = 1 EUR",
-        description: "Minted when a property is acquired",
+        peg: "valuation based",
+        description: "Distributed after governance-executed asset acquisition",
       },
       eurToken: {
         address: process.env.NEXT_PUBLIC_EUR_TOKEN_ADDRESS ?? "sim",
@@ -64,8 +64,8 @@ export async function GET(request: NextRequest) {
         name: "Fair Squares Fund Token",
         totalSupply,
         decimals: 0,
-        peg: "1 FSFT = 1 EUR",
-        description: "Minted when a property is acquired",
+        peg: "valuation based",
+        description: "Distributed after governance-executed asset acquisition",
       },
       eurToken: {
         address: eurTokenAddr || "native",

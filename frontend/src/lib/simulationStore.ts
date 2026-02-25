@@ -24,6 +24,9 @@ interface SimFundState {
   totalInDefi: number;
   totalAllocated: number;
   fsftTotalSupply: number;
+  lastAssetSalePrice: number;
+  lastFsftMinted: number;
+  tokenPriceBps: number;
   isPaused: boolean;
   investorCount: number;
   totalYield: number;
@@ -56,6 +59,12 @@ interface SimState {
   accounts: Record<string, SimAccountState>;
   proposals: SimProposal[];
   nextProposalId: number;
+}
+
+function votingWindowSeconds(): number {
+  const mins = Number(process.env.GOVERNANCE_VOTING_WINDOW_MINUTES ?? "5");
+  if (!Number.isFinite(mins) || mins <= 0) return 5 * 60;
+  return Math.max(60, Math.floor(mins * 60));
 }
 
 // ── Singleton ─────────────────────────────────────────────────────────────────
@@ -91,6 +100,9 @@ function createInitialState(): SimState {
       totalInDefi: 0,
       totalAllocated: 0,
       fsftTotalSupply: 0,     // no asset acquired yet
+      lastAssetSalePrice: 0,
+      lastFsftMinted: 0,
+      tokenPriceBps: 10_000,
       isPaused: false,
       investorCount: 1,       // test0
       totalYield: 0,
@@ -128,6 +140,9 @@ export function simGetFundStats() {
     available: Math.max(0, fund.totalDeposits - fund.totalInDefi - fund.totalAllocated),
     fsftTotalSupply: fund.fsftTotalSupply,
     totalSupply: fund.fsftTotalSupply,
+    lastAssetSalePrice: fund.lastAssetSalePrice,
+    lastFsftMinted: fund.lastFsftMinted,
+    tokenPriceBps: fund.tokenPriceBps,
     isPaused: fund.isPaused,
     investorCount: fund.investorCount,
     totalYield: fund.totalYield,
@@ -141,17 +156,26 @@ export function simGetPortfolio(address: string) {
   const acct = getOrCreateAccount(address);
   const { fund } = getState();
   const sharePercent =
-    fund.totalDeposits > 0
-      ? (acct.depositedAmount / fund.totalDeposits) * 100
+    fund.fsftTotalSupply > 0
+      ? (acct.fsftBalance / fund.fsftTotalSupply) * 100
       : 0;
+  const tokenPriceEur = fund.tokenPriceBps / 10000;
   return {
     balance: acct.fsftBalance,
     eurBalance: acct.eurBalance,
     depositedAmount: acct.depositedAmount,
     totalFundDeposits: fund.totalDeposits,
+    totalInDefi: fund.totalInDefi,
+    totalAllocated: fund.totalAllocated,
+    available: Math.max(0, fund.totalDeposits - fund.totalInDefi - fund.totalAllocated),
     totalSupply: fund.fsftTotalSupply,
     sharePercent: Math.round(sharePercent * 100) / 100,
     estimatedYield: Math.round(acct.depositedAmount * 0.03),
+    tokenPriceBps: fund.tokenPriceBps,
+    tokenPriceEur,
+    fsftMarketValue: Math.round(acct.fsftBalance * tokenPriceEur * 100) / 100,
+    lastAssetSalePrice: fund.lastAssetSalePrice,
+    lastFsftMinted: fund.lastFsftMinted,
     source: "simulation" as const,
   };
 }
@@ -239,7 +263,7 @@ export function simCreateProposal(
     yesVotes: 0,
     noVotes: 0,
     status: 0, // active
-    deadline: Math.floor(Date.now() / 1000) + 14 * 24 * 3600,
+    deadline: Math.floor(Date.now() / 1000) + votingWindowSeconds(),
     createdAt: Math.floor(Date.now() / 1000),
     proposer: proposerAddress,
     votedBy: [],
@@ -271,6 +295,9 @@ export function simFinalizeProposal(proposalId: number): { success: boolean; err
   const proposal = s.proposals.find((p) => p.id === proposalId);
   if (!proposal) return { success: false, error: "Proposal not found" };
   if (proposal.status !== 0) return { success: false, error: "Proposal is not active" };
+  if (Math.floor(Date.now() / 1000) < proposal.deadline) {
+    return { success: false, error: "Voting window is still open" };
+  }
   if (proposal.yesVotes + proposal.noVotes === 0) return { success: false, error: "No votes cast yet" };
 
   proposal.status = proposal.yesVotes > proposal.noVotes ? 1 : 2;
@@ -289,12 +316,34 @@ export function simExecuteProposal(proposalId: number): { success: boolean; erro
   proposal.status = 3; // executed
   s.fund.totalAllocated += proposal.amount;
 
-  // FSFT minting: mint proportional to proposal amount
-  // In prototype: mint to housing fund itself (represents fund ownership of the asset)
+  // FSFT minting: pro-rata to investor deposit tickets.
   const fsftToMint = proposal.amount;
-  s.fund.fsftTotalSupply += fsftToMint;
+  const investors = Object.entries(s.accounts)
+    .filter(([, acct]) => acct.depositedAmount > 0)
+    .map(([address, acct]) => ({ address, deposit: acct.depositedAmount }));
 
-  return { success: true, fsftMinted: fsftToMint };
+  if (investors.length === 0) return { success: false, error: "No investors to distribute to" };
+
+  let distributed = 0;
+  for (const inv of investors) {
+    const minted = Math.floor((fsftToMint * inv.deposit) / s.fund.totalDeposits);
+    if (minted > 0) {
+      s.accounts[inv.address].fsftBalance += minted;
+      distributed += minted;
+    }
+  }
+  const remainder = fsftToMint - distributed;
+  if (remainder > 0) {
+    s.accounts[investors[0].address].fsftBalance += remainder;
+    distributed += remainder;
+  }
+
+  s.fund.fsftTotalSupply += distributed;
+  s.fund.lastAssetSalePrice = proposal.amount;
+  s.fund.lastFsftMinted = distributed;
+  s.fund.tokenPriceBps = Math.floor((proposal.amount * 10000) / Math.max(distributed, 1));
+
+  return { success: true, fsftMinted: distributed };
 }
 
 // ── Accounts ──────────────────────────────────────────────────────────────────

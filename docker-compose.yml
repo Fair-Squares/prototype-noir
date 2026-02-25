@@ -76,7 +76,8 @@ services:
     profiles: ["aztec"]
     # Anvil ships inside the Aztec image at /opt/foundry/bin/anvil — no
     # separate foundry image needed.
-    entrypoint: ["/opt/foundry/bin/anvil", "--host", "0.0.0.0", "--port", "8545", "--chain-id", "31337"]
+    # Keep Anvil quiet by default. Override with e.g. ANVIL_LOG_ARG=-v when debugging.
+    entrypoint: ["/opt/foundry/bin/anvil", "--host", "0.0.0.0", "--port", "8545", "--chain-id", "31337", "${ANVIL_LOG_ARG:---quiet}"]
     ports:
       - "8545:8545"
     healthcheck:
@@ -97,7 +98,8 @@ services:
     ports:
       - "8080:8080"
     environment:
-      LOG_LEVEL: debug
+      # Use info by default for readability; override with AZTEC_LOG_LEVEL=debug if needed.
+      LOG_LEVEL: ${AZTEC_LOG_LEVEL:-info}
       ETHEREUM_HOSTS: http://anvil:8545
       L1_CHAIN_ID: "31337"
     healthcheck:

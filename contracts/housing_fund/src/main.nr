@@ -18,7 +18,7 @@ pub contract HousingFund {
             storage::storage,
         },
         protocol::address::AztecAddress,
-        state_vars::PublicMutable,
+        state_vars::{Map, PublicMutable},
     };
 
     #[storage]
@@ -33,6 +33,17 @@ pub contract HousingFund {
         total_deposits: PublicMutable<u64, Context>,
         total_in_defi: PublicMutable<u64, Context>,
         total_allocated: PublicMutable<u64, Context>,
+        // Investor deposit tickets (on-chain, later moved to private notes)
+        investor_count: PublicMutable<u32, Context>,
+        investor_index: Map<Field, PublicMutable<AztecAddress, Context>, Context>,
+        investor_seen: Map<AztecAddress, PublicMutable<bool, Context>, Context>,
+        deposit_tickets: Map<AztecAddress, PublicMutable<u64, Context>, Context>,
+        // Latest valuation snapshot from executed asset sale
+        last_asset_sale_price: PublicMutable<u64, Context>,
+        last_fsft_minted: PublicMutable<u64, Context>,
+        // EUR per FSFT in basis points (10000 = 1.0000 EUR/FSFT)
+        last_token_price_bps: PublicMutable<u64, Context>,
+        last_valuation_block: PublicMutable<u32, Context>,
         // Emergency pause
         is_paused: PublicMutable<bool, Context>,
     }
@@ -45,6 +56,11 @@ pub contract HousingFund {
         self.storage.total_deposits.write(0);
         self.storage.total_in_defi.write(0);
         self.storage.total_allocated.write(0);
+        self.storage.investor_count.write(0);
+        self.storage.last_asset_sale_price.write(0);
+        self.storage.last_fsft_minted.write(0);
+        self.storage.last_token_price_bps.write(0);
+        self.storage.last_valuation_block.write(0);
         self.storage.is_paused.write(false);
     }
 
@@ -70,6 +86,18 @@ pub contract HousingFund {
     fn deposit(amount: u64) {
         assert(!self.storage.is_paused.read(), "fund is paused");
         assert(amount > 0, "amount must be positive");
+        let caller = self.msg_sender();
+
+        let previous_ticket = self.storage.deposit_tickets.at(caller).read();
+        if previous_ticket == 0 {
+            if !self.storage.investor_seen.at(caller).read() {
+                let next_index = self.storage.investor_count.read();
+                self.storage.investor_index.at(next_index as Field).write(caller);
+                self.storage.investor_count.write(next_index + 1);
+                self.storage.investor_seen.at(caller).write(true);
+            }
+        }
+        self.storage.deposit_tickets.at(caller).write(previous_ticket + amount);
 
         let current = self.storage.total_deposits.read();
         self.storage.total_deposits.write(current + amount);
@@ -79,6 +107,9 @@ pub contract HousingFund {
     fn withdraw(amount: u64) {
         assert(!self.storage.is_paused.read(), "fund is paused");
         assert(amount > 0, "amount must be positive");
+        let caller = self.msg_sender();
+        let ticket = self.storage.deposit_tickets.at(caller).read();
+        assert(amount <= ticket, "insufficient deposit ticket");
 
         let deposits = self.storage.total_deposits.read();
         let in_defi = self.storage.total_in_defi.read();
@@ -86,6 +117,7 @@ pub contract HousingFund {
         let available = deposits - in_defi - allocated;
         assert(amount <= available, "insufficient available balance");
 
+        self.storage.deposit_tickets.at(caller).write(ticket - amount);
         self.storage.total_deposits.write(deposits - amount);
     }
 
@@ -124,11 +156,10 @@ pub contract HousingFund {
 
     #[external("public")]
     fn reserve_for_property(amount: u64) {
-        assert_eq(
-            self.msg_sender(),
-            self.storage.governance.read(),
-            "only governance can reserve",
-        );
+        let caller = self.msg_sender();
+        let gov = self.storage.governance.read();
+        let admin = self.storage.admin.read();
+        assert(gov.eq(caller) | admin.eq(caller), "only governance or admin can reserve");
 
         let deposits = self.storage.total_deposits.read();
         let in_defi = self.storage.total_in_defi.read();
@@ -137,6 +168,24 @@ pub contract HousingFund {
         assert(amount <= available, "insufficient available balance");
 
         self.storage.total_allocated.write(allocated + amount);
+    }
+
+    // -- Governance/accounting: valuation snapshot ------------------------
+    // Called after an executed proposal and FSFT distribution.
+    #[external("public")]
+    fn record_asset_sale(asset_sale_price: u64, minted_fsft: u64) {
+        let caller = self.msg_sender();
+        let gov = self.storage.governance.read();
+        let admin = self.storage.admin.read();
+        assert(gov.eq(caller) | admin.eq(caller), "not authorized");
+        assert(asset_sale_price > 0, "asset sale price must be positive");
+        assert(minted_fsft > 0, "minted fsft must be positive");
+
+        let token_price_bps = (asset_sale_price * 10000) / minted_fsft;
+        self.storage.last_asset_sale_price.write(asset_sale_price);
+        self.storage.last_fsft_minted.write(minted_fsft);
+        self.storage.last_token_price_bps.write(token_price_bps);
+        self.storage.last_valuation_block.write(self.context.block_number());
     }
 
     // -- Emergency controls -----------------------------------------------
@@ -161,12 +210,37 @@ pub contract HousingFund {
     }
 
     #[external("utility")]
+    unconstrained fn get_user_deposit_ticket(user: AztecAddress) -> pub u64 {
+        self.storage.deposit_tickets.at(user).read()
+    }
+
+    #[external("utility")]
+    unconstrained fn get_investor_count() -> pub u32 {
+        self.storage.investor_count.read()
+    }
+
+    #[external("utility")]
+    unconstrained fn get_investor_at(index: u32) -> pub AztecAddress {
+        self.storage.investor_index.at(index as Field).read()
+    }
+
+    #[external("utility")]
     unconstrained fn get_fund_stats() -> pub (u64, u64, u64, u64) {
         let total = self.storage.total_deposits.read();
         let in_defi = self.storage.total_in_defi.read();
         let allocated = self.storage.total_allocated.read();
         let available = total - in_defi - allocated;
         (total, in_defi, allocated, available)
+    }
+
+    #[external("utility")]
+    unconstrained fn get_valuation() -> pub (u64, u64, u64, u32) {
+        (
+            self.storage.last_asset_sale_price.read(),
+            self.storage.last_fsft_minted.read(),
+            self.storage.last_token_price_bps.read(),
+            self.storage.last_valuation_block.read(),
+        )
     }
 
     #[external("utility")]

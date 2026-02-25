@@ -24,8 +24,13 @@ export default function ProposalCard({
   const isActive = proposal.status === 0;
   const isPassed = proposal.status === 1;
   const isExecuted = proposal.status === 3;
-  const deadline = new Date(proposal.deadline * 1000);
-  const isExpired = deadline < new Date();
+  const hasBlockTiming = proposal.currentBlock !== undefined || proposal.deadlineBlock !== undefined;
+  const currentBlock = proposal.currentBlock ?? 0;
+  const deadlineBlock = proposal.deadlineBlock ?? proposal.deadline ?? 0;
+  const blocksLeft = Math.max(0, deadlineBlock - currentBlock);
+  const unixDeadline = new Date((proposal.deadline ?? 0) * 1000);
+  const minsLeft = Math.max(0, Math.ceil(((proposal.deadline ?? 0) * 1000 - Date.now()) / 60000));
+  const isExpired = hasBlockTiming ? (deadlineBlock > 0 ? currentBlock >= deadlineBlock : false) : unixDeadline < new Date();
   const statusLabel = PROPOSAL_STATUS[proposal.status] ?? "Unknown";
 
   const statusColor: Record<number, string> = {
@@ -35,7 +40,7 @@ export default function ProposalCard({
     3: "text-purple-600 bg-purple-50",
   };
 
-  const canFinalize = isActive && (isExpired || totalVotes > 0) && !!onFinalize && !!userAddress;
+  const canFinalize = isActive && isExpired && !!onFinalize && !!userAddress;
   const canExecute = isPassed && !!onExecute && !!userAddress;
 
   return (
@@ -84,17 +89,23 @@ export default function ProposalCard({
 
       {/* Deadline */}
       <p className="text-xs text-text-3 mb-4">
-        {isActive && !isExpired
-          ? `Voting closes ${deadline.toLocaleDateString("en-NL", { day: "numeric", month: "short", year: "numeric" })}`
+        {hasBlockTiming && isActive && !isExpired
+          ? `Voting closes at block ${deadlineBlock} (${blocksLeft} blocks left)`
+          : hasBlockTiming && isActive && isExpired
+          ? "Voting period ended — finalize to resolve"
+          : hasBlockTiming
+          ? `Closed at block ${deadlineBlock}`
+          : isActive && !isExpired
+          ? `Voting closes in ~${minsLeft} min`
           : isActive && isExpired
           ? "Voting period ended — finalize to resolve"
-          : `Closed ${deadline.toLocaleDateString("en-NL", { day: "numeric", month: "short", year: "numeric" })}`}
+          : `Closed ${unixDeadline.toLocaleString("en-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`}
       </p>
 
       {/* FSFT minted badge */}
       {isExecuted && (
         <div className="mb-4 rounded-lg bg-purple-50 border border-purple-100 px-3 py-2 text-xs text-purple-700 font-medium">
-          ✅ Asset acquired · {proposal.amount.toLocaleString()} FSFT minted to fund
+          Asset acquired and FSFT distributed to investor wallets
         </div>
       )}
 

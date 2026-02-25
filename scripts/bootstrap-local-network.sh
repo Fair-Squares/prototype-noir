@@ -13,6 +13,7 @@ set -eu
 ROOT_DIR="/workspace"
 OUT_DIR="${OUT_DIR:-/out}"
 AZTEC_NODE_URL="${AZTEC_NODE_URL:-http://aztec:8080}"
+GOVERNANCE_VOTING_WINDOW_BLOCKS="${GOVERNANCE_VOTING_WINDOW_BLOCKS:-10}"
 
 CONTRACTS="kyc_verifier fund_token defi_vault housing_fund governance"
 # eur_token reuses the fund_token artifact — deployed as a second instance
@@ -194,7 +195,7 @@ deploy_contracts() {
   # Governance: both args are actual addresses (aliases not valid in --args)
   GOV_ADDR=$(_deploy "governance" \
     "governance/target/governance-Governance.json" \
-    --args "${FUND_ADDR}" "${ADMIN_ADDR}")
+    --args "${FUND_ADDR}" "${ADMIN_ADDR}" "${GOVERNANCE_VOTING_WINDOW_BLOCKS}")
   [ -z "$GOV_ADDR" ] && die "governance deploy failed — no address in output"
 
   # -- Deploy EUR token (second instance of fund_token — represents EURs stablecoin) --
@@ -309,6 +310,7 @@ NEXT_PUBLIC_SIMULATION=false
 # AZTEC_LIVE=true enables real contract calls (local Docker only)
 # Vercel deployments should set AZTEC_LIVE=false
 AZTEC_LIVE=true
+GOVERNANCE_VOTING_WINDOW_BLOCKS=${GOVERNANCE_VOTING_WINDOW_BLOCKS}
 
 # Contract addresses
 NEXT_PUBLIC_KYC_VERIFIER_ADDRESS=${kyc_addr}

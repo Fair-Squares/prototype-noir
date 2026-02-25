@@ -29,7 +29,17 @@ export default function PortfolioPage() {
 
   const handleTopUp = async () => {
     if (!address) return;
-    await fetch(`/api/fund/tokens?address=${encodeURIComponent(address)}`);
+    const res = await fetch("/api/fund/tokens", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address, accountIndex, amount: 50_000 }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setTopUpMsg(data?.error ? `Top up failed: ${data.error}` : "Top up failed");
+      setTimeout(() => setTopUpMsg(null), 5000);
+      return;
+    }
     await loadPortfolio(address);
     setTopUpMsg("Demo EURs topped up to €50,000 ✓");
     setTimeout(() => setTopUpMsg(null), 4000);
@@ -39,7 +49,7 @@ export default function PortfolioPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold mb-1">My Account</h1>
-        <p className="text-text-2 text-sm">Your EUR stablecoin wallet and housing fund position.</p>
+        <p className="text-text-2 text-sm">Your EUR wallet, on-chain deposit ticket, and FSFT distribution/valuation state.</p>
       </div>
 
       {!address ? (

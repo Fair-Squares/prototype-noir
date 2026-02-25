@@ -86,8 +86,11 @@ export interface Proposal {
   yesVotes: number;
   noVotes: number;
   status: number; // 0=active, 1=passed, 2=failed, 3=executed
-  deadline: number; // unix timestamp
-  createdAt: number;
+  deadline: number; // block number (legacy alias)
+  createdAt: number; // block number (legacy alias)
+  deadlineBlock?: number;
+  createdBlock?: number;
+  currentBlock?: number;
 }
 
 export const PROPOSAL_STATUS: Record<number, string> = {
@@ -161,12 +164,21 @@ export async function executeProposal(
 // ── Portfolio ─────────────────────────────────────────────────────────────────
 
 export interface PortfolioData {
-  balance: number;         // FSFT (= EUR in fund)
+  balance: number;         // FSFT token balance
   eurBalance: number;      // EUR in wallet (available to deposit)
+  depositedAmount: number; // deposit ticket value in fund
   totalFundDeposits?: number;
+  totalInDefi?: number;
+  totalAllocated?: number;
+  available?: number;
   totalSupply: number;
   sharePercent: number;
   estimatedYield: number;
+  tokenPriceBps?: number;
+  tokenPriceEur?: number;
+  fsftMarketValue?: number;
+  lastAssetSalePrice?: number;
+  lastFsftMinted?: number;
   fundTokenSymbol?: string;
   eurTokenSymbol?: string;
 }

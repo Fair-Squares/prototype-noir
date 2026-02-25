@@ -13,10 +13,10 @@
   },
   "housing_fund-HousingFund.json": {
     "contractName": "HousingFund",
-    "hash": "8cf333f0367473b31b0948dfba0c7c7c98e5b1e3a192a517d2ce835eee56226e"
+    "hash": "a6f8c470044e140b496a3aa5adba83e00edcdba31613541e4aa8283f3dd24835"
   },
   "governance-Governance.json": {
     "contractName": "Governance",
-    "hash": "a4423ee88662c8f1061d4e747bb8abf822be80d6e9cc545b6c3426bea310494d"
+    "hash": "c27b985b798d4a2dc293528a12c8ec6cad0f34b758aac82adaf30dd71ba0a395"
   }
 }

@@ -28,7 +28,17 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
     );
   }
 
-  const { balance, eurBalance, sharePercent, estimatedYield, totalFundDeposits = 0 } = portfolio;
+  const {
+    balance,
+    eurBalance,
+    depositedAmount,
+    sharePercent,
+    estimatedYield,
+    totalFundDeposits = 0,
+    totalAllocated = 0,
+    tokenPriceEur = 1,
+    fsftMarketValue = balance,
+  } = portfolio;
 
   return (
     <div className="space-y-4">
@@ -56,8 +66,8 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
             <span className="text-xs text-fs-teal-dark font-medium uppercase tracking-wide">In Fund</span>
             <span className="px-2 py-0.5 rounded-full bg-fs-teal/10 text-fs-teal-dark text-[10px] font-bold">FSFT</span>
           </div>
-          <p className="text-3xl font-bold tabular-nums text-fs-teal-dark">{formatEUR(balance)}</p>
-          <p className="text-xs text-fs-teal-dark/60 mt-1.5">FSFT appears after governance-approved asset execution</p>
+          <p className="text-3xl font-bold tabular-nums text-fs-teal-dark">{formatEUR(fsftMarketValue)}</p>
+          <p className="text-xs text-fs-teal-dark/60 mt-1.5">{balance.toLocaleString()} FSFT distributed after executed proposals</p>
           <div className="mt-3 pt-3 border-t border-fs-teal/10 flex items-center gap-1.5 text-xs text-fs-teal-dark/60">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
@@ -68,14 +78,26 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="rounded-xl bg-card p-4">
+          <p className="text-xs text-text-3 font-medium uppercase tracking-wide mb-1.5">My deposit ticket</p>
+          <p className="text-2xl font-bold">{formatEUR(depositedAmount)}</p>
+        </div>
         <div className="rounded-xl bg-card p-4">
           <p className="text-xs text-text-3 font-medium uppercase tracking-wide mb-1.5">Total in housing fund</p>
           <p className="text-2xl font-bold">{formatEUR(totalFundDeposits)}</p>
         </div>
         <div className="rounded-xl bg-card p-4">
-          <p className="text-xs text-text-3 font-medium uppercase tracking-wide mb-1.5">Fund share</p>
+          <p className="text-xs text-text-3 font-medium uppercase tracking-wide mb-1.5">Allocated to assets</p>
+          <p className="text-2xl font-bold">{formatEUR(totalAllocated)}</p>
+        </div>
+        <div className="rounded-xl bg-card p-4">
+          <p className="text-xs text-text-3 font-medium uppercase tracking-wide mb-1.5">Fund share (FSFT)</p>
           <p className="text-2xl font-bold">{sharePercent.toFixed(2)}%</p>
+        </div>
+        <div className="rounded-xl bg-card p-4">
+          <p className="text-xs text-text-3 font-medium uppercase tracking-wide mb-1.5">FSFT price</p>
+          <p className="text-2xl font-bold text-fs-teal">€{tokenPriceEur.toFixed(4)}</p>
         </div>
         <div className="rounded-xl bg-card p-4">
           <p className="text-xs text-text-3 font-medium uppercase tracking-wide mb-1.5">Est. annual yield</p>
@@ -109,9 +131,8 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
         </svg>
         <span>
-          Your exact balances are <strong className="text-text-2">only visible to you</strong>. 
-          On-chain, only the total fund size and your FSFT token existence are public — not your amount.
-          This is enforced by Aztec&apos;s ZK proof system.
+          Private balances are shown from your PXE when available. In this local prototype, deposit tickets and FSFT
+          distribution are tracked on-chain for deterministic governance execution.
         </span>
       </div>
     </div>
