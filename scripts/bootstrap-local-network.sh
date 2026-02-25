@@ -30,6 +30,21 @@ log() { printf '\n[bootstrap] %s\n' "$1"; }
 
 die() { log "FATAL: $1"; exit 1; }
 
+# Aztec's cli-wallet doesn't ship with 'inquirer' in the Docker image.
+# Create a minimal ESM shim so the module resolves without error.
+fix_inquirer() {
+  INQDIR="/usr/src/yarn-project/node_modules/inquirer"
+  if [ ! -d "$INQDIR" ]; then
+    log "Patching missing inquirer dependency..."
+    mkdir -p "$INQDIR"
+    printf '{"name":"inquirer","version":"9.2.0","type":"module","exports":{".":{"import":"./index.js"}}}\n' \
+      > "$INQDIR/package.json"
+    printf 'const p=async()=>({});export default {prompt:p};export const prompt=p;\n' \
+      > "$INQDIR/index.js"
+    log "inquirer shim installed"
+  fi
+}
+
 # -- 1. Wait for PXE ----------------------------------------------------------
 
 wait_for_pxe() {
@@ -95,12 +110,13 @@ deploy_contracts() {
   cd "${ROOT_DIR}"
 
   log "Importing test accounts..."
-  $AZTEC_WALLET_BIN import-test-accounts 2>&1 || log "WARN: Could not import test accounts (may already exist)"
+  $AZTEC_WALLET_BIN import-test-accounts --rpc-url "${AZTEC_NODE_URL}" 2>&1 || log "WARN: Could not import test accounts (may already exist)"
 
   # Deploy KYCVerifier(admin)
   log "Deploying KYCVerifier..."
   $AZTEC_WALLET_BIN deploy \
     "${ROOT_DIR}/contracts/kyc_verifier/target/kyc_verifier-KYCVerifier.json" \
+    --rpc-url "${AZTEC_NODE_URL}" \
     --from accounts:test0 \
     --args accounts:test0 \
     -a kyc_verifier 2>&1 || die "KYCVerifier deploy failed"
@@ -109,6 +125,7 @@ deploy_contracts() {
   log "Deploying FundToken..."
   $AZTEC_WALLET_BIN deploy \
     "${ROOT_DIR}/contracts/fund_token/target/fund_token-FundToken.json" \
+    --rpc-url "${AZTEC_NODE_URL}" \
     --from accounts:test0 \
     --args accounts:test0 \
     -a fund_token 2>&1 || die "FundToken deploy failed"
@@ -117,6 +134,7 @@ deploy_contracts() {
   log "Deploying DeFiVault..."
   $AZTEC_WALLET_BIN deploy \
     "${ROOT_DIR}/contracts/defi_vault/target/defi_vault-DeFiVault.json" \
+    --rpc-url "${AZTEC_NODE_URL}" \
     --from accounts:test0 \
     --args accounts:test0 300 \
     -a defi_vault 2>&1 || die "DeFiVault deploy failed"
@@ -125,6 +143,7 @@ deploy_contracts() {
   log "Deploying HousingFund..."
   $AZTEC_WALLET_BIN deploy \
     "${ROOT_DIR}/contracts/housing_fund/target/housing_fund-HousingFund.json" \
+    --rpc-url "${AZTEC_NODE_URL}" \
     --from accounts:test0 \
     --args accounts:test0 \
     -a housing_fund 2>&1 || die "HousingFund deploy failed"
@@ -134,6 +153,7 @@ deploy_contracts() {
   log "Deploying Governance..."
   $AZTEC_WALLET_BIN deploy \
     "${ROOT_DIR}/contracts/governance/target/governance-Governance.json" \
+    --rpc-url "${AZTEC_NODE_URL}" \
     --from accounts:test0 \
     --args contracts:housing_fund accounts:test0 \
     -a governance 2>&1 || die "Governance deploy failed"
@@ -227,6 +247,7 @@ main() {
   wait_for_pxe
   compile_contracts
   generate_typescript
+  fix_inquirer
   deploy_contracts
   wire_contracts
   save_addresses
