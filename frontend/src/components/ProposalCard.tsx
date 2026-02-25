@@ -1,5 +1,6 @@
 "use client";
 
+import type { KeyboardEvent } from "react";
 import { PROPOSAL_STATUS, formatEUR, type Proposal } from "@/lib/contracts";
 
 interface ProposalCardProps {
@@ -9,6 +10,8 @@ interface ProposalCardProps {
   onExecute?: (proposalId: number, amount: number) => Promise<void>;
   isVoting?: boolean;
   userAddress?: string | null;
+  showActions?: boolean;
+  onOpen?: () => void;
 }
 
 export default function ProposalCard({
@@ -18,6 +21,8 @@ export default function ProposalCard({
   onExecute,
   isVoting,
   userAddress,
+  showActions = true,
+  onOpen,
 }: ProposalCardProps) {
   const totalVotes = proposal.yesVotes + proposal.noVotes;
   const yesPercent = totalVotes > 0 ? Math.round((proposal.yesVotes / totalVotes) * 100) : 0;
@@ -40,13 +45,31 @@ export default function ProposalCard({
     3: "text-purple-600 bg-purple-50",
   };
 
-  const canFinalize = isActive && isExpired && !!onFinalize && !!userAddress;
-  const canExecute = isPassed && !!onExecute && !!userAddress;
+  const canFinalize = showActions && isActive && isExpired && !!onFinalize && !!userAddress;
+  const canExecute = showActions && isPassed && !!onExecute && !!userAddress;
 
   const step = isExecuted ? 3 : isPassed ? 2 : isActive ? 1 : 2;
+  const isInteractive = typeof onOpen === "function";
+  const handleKeyOpen = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!isInteractive) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onOpen();
+    }
+  };
 
   return (
-    <div className={`rounded-xl bg-card border border-border p-5 ${isExecuted ? "ring-1 ring-purple-200" : ""}`}>
+    <div
+      className={`rounded-xl bg-card border p-5 ${isExecuted ? "ring-1 ring-purple-200" : ""} ${
+        isInteractive
+          ? "cursor-pointer border-border hover:border-fs-teal/40 transition-colors"
+          : "border-border"
+      }`}
+      role={isInteractive ? "button" : undefined}
+      tabIndex={isInteractive ? 0 : undefined}
+      onClick={isInteractive ? onOpen : undefined}
+      onKeyDown={handleKeyOpen}
+    >
       <div className="flex items-start justify-between mb-4 gap-3">
         <div className="min-w-0">
           <h3 className="font-semibold truncate">{proposal.title || `Proposal #${proposal.id}`}</h3>
@@ -124,7 +147,7 @@ export default function ProposalCard({
         </div>
       )}
 
-      {isActive && !isExpired && onVote && userAddress && (
+      {showActions && isActive && !isExpired && onVote && userAddress && (
         <div className="flex gap-2">
           <button
             onClick={() => onVote(proposal.id, true)}
@@ -168,8 +191,12 @@ export default function ProposalCard({
         </div>
       )}
 
-      {isActive && !userAddress && !isExecuted && (
+      {showActions && isActive && !userAddress && !isExecuted && (
         <p className="text-xs text-text-3 text-center">Connect wallet to vote</p>
+      )}
+
+      {isInteractive && (
+        <p className="text-[11px] text-text-3 mt-4">Click to open full proposal details</p>
       )}
     </div>
   );

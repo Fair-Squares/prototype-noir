@@ -24,15 +24,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <WalletProvider>
           <header className="sticky top-0 z-50 border-b border-border/80 bg-white/90 backdrop-blur-md">
             <div className="max-w-7xl mx-auto px-6 min-h-[80px] flex items-center gap-5">
-              <Link href="/" className="flex items-center gap-3 shrink-0">
+              <Link href="/" className="relative flex h-11 w-[200px] shrink-0 overflow-hidden rounded-md">
                 <Image
-                  src="/brand/fs-dark-light-bg.png"
+                  src="/brand/fs-dark.png"
                   alt="Fair Squares"
-                  width={42}
-                  height={42}
-                  className="rounded-md"
+                  fill
+                  sizes="200px"
+                  priority
+                  className="object-cover"
                 />
-                <span className="font-brand-black text-[22px] leading-none">Fair Squares</span>
               </Link>
 
               <nav className="hidden md:flex items-center gap-1 bg-bg/80 border border-border rounded-xl px-1.5 py-1 ml-auto">

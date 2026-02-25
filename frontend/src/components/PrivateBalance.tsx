@@ -80,7 +80,12 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border bg-card p-4">
+      <section className="rounded-2xl border border-border bg-card p-4 md:p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-text-1">Fund snapshot</h3>
+          <span className="text-[11px] text-text-3">Private portfolio overview</span>
+        </div>
+
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <div>
             <p className="text-xs text-text-3 font-medium uppercase tracking-wide mb-1">Total in housing fund</p>
@@ -103,15 +108,8 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
             <p className="text-xl leading-none text-fs-teal">€{tokenPriceEur.toFixed(4)}</p>
           </div>
         </div>
-      </section>
 
-      <details className="rounded-2xl border border-border bg-card p-4 group">
-        <summary className="cursor-pointer list-none flex items-center justify-between">
-          <span className="text-sm font-semibold">Valuation snapshot</span>
-          <span className="text-xs text-text-3 group-open:hidden">Show details</span>
-          <span className="text-xs text-text-3 hidden group-open:inline">Hide details</span>
-        </summary>
-        <div className="mt-3 pt-3 border-t border-border grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div className="mt-4 pt-4 border-t border-border grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
           <div>
             <p className="text-text-3 text-xs uppercase tracking-wide mb-1">Last asset sale price</p>
             <p className="font-semibold">{formatEUR(lastAssetSalePrice)}</p>
@@ -125,21 +123,21 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
             <p className="font-semibold text-fs-teal">{formatEURDecimals(estimatedYield)}</p>
           </div>
         </div>
-      </details>
 
-      {balance === 0 && (
-        <div className="rounded-xl bg-card p-5 border border-border text-center">
-          <p className="text-sm text-text-2 mb-2">
-            You have <strong>{formatEUR(eurBalance)}</strong> EURs available to invest
-          </p>
-          <a
-            href="/invest"
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-fs-teal hover:text-fs-teal-dark"
-          >
-            Start investing in affordable housing →
-          </a>
-        </div>
-      )}
+        {balance === 0 && (
+          <div className="mt-4 pt-4 border-t border-border text-center">
+            <p className="text-sm text-text-2 mb-2">
+              You have <strong>{formatEUR(eurBalance)}</strong> EURs available to invest
+            </p>
+            <a
+              href="/invest"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-fs-teal hover:text-fs-teal-dark"
+            >
+              Start investing in affordable housing →
+            </a>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

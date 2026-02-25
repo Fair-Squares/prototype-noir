@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import InvestForm from "@/components/InvestForm";
 import FundStats from "@/components/FundStats";
+import InfoTooltip from "@/components/InfoTooltip";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   fetchFundStats,
@@ -94,17 +95,37 @@ export default function InvestPage() {
 
         <div className="space-y-4">
           <div className="rounded-2xl bg-card border border-border p-5">
-            <h3 className="font-semibold mb-3 text-sm">Token model</h3>
+            <div className="flex items-center gap-1.5 mb-3">
+              <h3 className="font-semibold text-sm">Token model</h3>
+              <InfoTooltip text="EURs is your spendable stablecoin. FSFT only appears after governance executes an approved acquisition." />
+            </div>
             <div className="space-y-3">
               {[
-                { symbol: "EURs", color: "bg-blue-100 text-blue-700", title: "EUR Stablecoin", desc: "Your spendable EUR. Backed 1:1, stored as a private Aztec note — nobody can see your balance." },
-                { symbol: "FSFT", color: "bg-fs-mint text-fs-teal-dark", title: "Fund Share Token", desc: "Minted only after governance approves and executes an asset acquisition. Distribution to users follows separate rules." },
+                {
+                  symbol: "EURs",
+                  color: "bg-blue-100 text-blue-700",
+                  title: "EUR Stablecoin",
+                  summary: "Spendable balance for deposits",
+                  details:
+                    "Backed 1:1 and stored as a private Aztec note, so your wallet balance is not publicly visible.",
+                },
+                {
+                  symbol: "FSFT",
+                  color: "bg-fs-mint text-fs-teal-dark",
+                  title: "Fund Share Token",
+                  summary: "Distributed after executed proposals",
+                  details:
+                    "FSFT is minted only after governance approves and executes a property acquisition.",
+                },
               ].map((t) => (
                 <div key={t.symbol} className="flex gap-3">
                   <div className={`rounded-md px-2 py-0.5 text-xs font-bold shrink-0 h-fit mt-0.5 ${t.color}`}>{t.symbol}</div>
                   <div>
-                    <p className="text-sm font-medium">{t.title}</p>
-                    <p className="text-xs text-text-3 mt-0.5 leading-relaxed">{t.desc}</p>
+                    <p className="text-sm font-medium inline-flex items-center gap-1.5">
+                      {t.title}
+                      <InfoTooltip text={t.details} align="right" />
+                    </p>
+                    <p className="text-xs text-text-3 mt-0.5 leading-relaxed">{t.summary}</p>
                   </div>
                 </div>
               ))}
@@ -112,7 +133,10 @@ export default function InvestPage() {
           </div>
 
           <div className="rounded-2xl bg-card border border-border p-5">
-            <h3 className="font-semibold mb-3 text-sm">What happens to your EUR deposit?</h3>
+            <div className="flex items-center gap-1.5 mb-3">
+              <h3 className="font-semibold text-sm">What happens to your EUR deposit?</h3>
+              <InfoTooltip text="This flow explains when your private deposit becomes FSFT after governance decisions." />
+            </div>
             <div className="space-y-2 text-xs text-text-2">
               {[
                 ["1", "Sent to the housing fund", "Your amount is recorded privately as a deposit ticket."],

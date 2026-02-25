@@ -66,32 +66,59 @@ export default function PortfolioPage() {
           <p className="text-sm text-text-3">Use the button in the top-right to connect.</p>
         </div>
       ) : (
-        <>
-          <PrivateBalance portfolio={portfolio} isLoading={loading} />
+        <div className="grid xl:grid-cols-[1fr_320px] gap-6 items-start">
+          <div className="space-y-6">
+            <PrivateBalance portfolio={portfolio} isLoading={loading} />
 
-          {isDevOrSimulation && (
-            <div className="rounded-xl bg-card p-5 border border-border">
-              <div className="flex items-center justify-between">
-                <div>
+            <div className="rounded-xl bg-card p-6 border border-border">
+              <h2 className="font-semibold text-text-1 mb-4">Transactions</h2>
+              <div className="text-sm text-text-3 text-center py-6">
+                <p>Your deposit and withdrawal history will appear here.</p>
+                <p className="mt-1 text-xs">All transactions are provably private — amounts visible only to you.</p>
+              </div>
+            </div>
+          </div>
+
+          <aside className="rounded-xl bg-card p-5 border border-border xl:sticky xl:top-24 space-y-4">
+            <div>
+              <p className="text-xs text-text-3 uppercase tracking-wide font-medium mb-1">Quick actions</p>
+              <p className="text-sm text-text-2">Top up demo EURs or continue to investment and governance flows.</p>
+            </div>
+
+            {isDevOrSimulation ? (
+              <div className="rounded-lg bg-bg border border-border p-4">
+                <div className="mb-3">
                   <p className="text-sm font-semibold text-text-1">Demo: Top up EURs wallet</p>
                   <p className="text-xs text-text-3 mt-0.5">Get demo EURs to test the invest flow.</p>
                 </div>
-                <button onClick={handleTopUp} className="px-4 py-2 rounded-lg bg-fs-anthracite text-white text-sm font-semibold hover:bg-fs-anthracite/90 shrink-0">
+                <button
+                  onClick={handleTopUp}
+                  className="w-full px-4 py-2 rounded-lg bg-fs-anthracite text-white text-sm font-semibold hover:bg-fs-anthracite/90"
+                >
                   +{formatEUR(50_000)} EURs
                 </button>
+                {topUpMsg && <p className="text-xs text-fs-teal mt-2 font-medium">{topUpMsg}</p>}
               </div>
-              {topUpMsg && <p className="text-xs text-fs-teal mt-2 font-medium">{topUpMsg}</p>}
-            </div>
-          )}
+            ) : (
+              <div className="rounded-lg bg-bg border border-border p-4 text-xs text-text-3">
+                Demo top-up is only available in simulation mode.
+              </div>
+            )}
 
-          <div className="rounded-xl bg-card p-6 border border-border">
-            <h2 className="font-semibold text-text-1 mb-4">Transactions</h2>
-            <div className="text-sm text-text-3 text-center py-6">
-              <p>Your deposit and withdrawal history will appear here.</p>
-              <p className="mt-1 text-xs">All transactions are provably private — amounts visible only to you.</p>
-            </div>
-          </div>
-        </>
+            <a
+              href="/invest"
+              className="w-full inline-flex items-center justify-center rounded-lg bg-fs-teal text-white text-sm font-semibold py-2.5 hover:bg-fs-teal-dark"
+            >
+              Go to Invest
+            </a>
+            <a
+              href="/governance"
+              className="w-full inline-flex items-center justify-center rounded-lg border border-border text-sm font-semibold py-2.5 text-text-2 hover:text-text-1 hover:bg-bg"
+            >
+              Review Proposals
+            </a>
+          </aside>
+        </div>
       )}
     </div>
   );

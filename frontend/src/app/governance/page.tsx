@@ -20,14 +20,31 @@ export default function GovernancePage() {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(null);
 
   // Create proposal form state
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ title: "", description: "", amount: "" });
 
-  const refresh = () => fetchProposals().then(setProposals);
+  const refresh = async () => {
+    const nextProposals = await fetchProposals();
+    setProposals(nextProposals);
+    setSelectedProposal((current) => {
+      if (!current) return null;
+      return nextProposals.find((p) => p.id === current.id) ?? null;
+    });
+  };
   useEffect(() => { refresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!selectedProposal) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedProposal(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedProposal]);
 
   const notify = (type: "success" | "error", text: string) => {
     setMessage({ type, text });
@@ -193,11 +210,8 @@ export default function GovernancePage() {
             <ProposalCard
               key={p.id}
               proposal={p}
-              onVote={handleVote}
-              onFinalize={handleFinalize}
-              onExecute={handleExecute}
-              isVoting={loading}
-              userAddress={address}
+              showActions={false}
+              onOpen={() => setSelectedProposal(p)}
             />
           ))}
         </div>
@@ -212,6 +226,52 @@ export default function GovernancePage() {
         </div>
       </aside>
       </div>
+
+      {selectedProposal && (
+        <div className="fixed inset-0 z-[60] p-4 md:p-8">
+          <button
+            type="button"
+            aria-label="Close proposal modal"
+            className="absolute inset-0 bg-fs-anthracite/40 backdrop-blur-[2px]"
+            onClick={() => setSelectedProposal(null)}
+          />
+          <div className="relative mx-auto mt-6 w-full max-w-3xl max-h-[88vh] overflow-y-auto rounded-2xl border border-border bg-card p-5 md:p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-text-3 font-medium">Proposal #{selectedProposal.id}</p>
+                <h2 className="text-xl font-brand-black text-text-1">
+                  {selectedProposal.title || `Proposal #${selectedProposal.id}`}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedProposal(null)}
+                className="rounded-lg border border-border px-2.5 py-1 text-sm text-text-2 hover:text-text-1 hover:bg-bg"
+              >
+                Close
+              </button>
+            </div>
+
+            {selectedProposal.description && (
+              <p className="text-sm text-text-2 mb-4">{selectedProposal.description}</p>
+            )}
+
+            <ProposalCard
+              proposal={selectedProposal}
+              onVote={handleVote}
+              onFinalize={handleFinalize}
+              onExecute={handleExecute}
+              isVoting={loading}
+              userAddress={address}
+            />
+
+            <div className="rounded-lg bg-bg border border-border p-3 mt-4">
+              <p className="text-[11px] text-text-3 uppercase tracking-wide mb-1">Description hash</p>
+              <code className="text-xs font-mono break-all text-text-2">{selectedProposal.descHash}</code>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

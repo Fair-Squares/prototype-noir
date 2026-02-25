@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatEURDecimals } from "@/lib/contracts";
+import InfoTooltip from "@/components/InfoTooltip";
 
 interface InvestFormProps {
   isKYCVerified: boolean;
@@ -91,7 +92,12 @@ export default function InvestForm({
           <p className="text-xs text-text-3 mt-0.5">EURs stablecoin</p>
         </div>
         <div className="rounded-lg bg-fs-mint p-3 border border-transparent">
-          <p className="text-[11px] text-fs-teal-dark font-medium uppercase tracking-wide mb-1">Deposit model</p>
+          <p className="text-[11px] text-fs-teal-dark font-medium uppercase tracking-wide mb-1 inline-flex items-center gap-1.5">
+            Deposit model
+            <InfoTooltip
+              text="Deposits are recorded as private tickets first. FSFT is minted only after governance executes an approved acquisition."
+            />
+          </p>
           <p className="text-sm font-bold text-fs-teal-dark">Private deposit tickets</p>
           <p className="text-xs text-fs-teal-dark/60 mt-0.5">FSFT is not minted on deposit</p>
         </div>
@@ -100,7 +106,10 @@ export default function InvestForm({
       {/* Amount input */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label className="text-xs text-text-3 font-medium">EUR amount</label>
+          <div className="inline-flex items-center gap-1.5">
+            <label className="text-xs text-text-3 font-medium">EUR amount</label>
+            <InfoTooltip text="Amount to move from your private EURs wallet into the housing fund ticket." />
+          </div>
           <button
             onClick={() => setAmount(String(maxAmount))}
             className="text-xs text-fs-teal hover:underline font-medium"
