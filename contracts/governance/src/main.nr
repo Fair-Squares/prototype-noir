@@ -16,7 +16,10 @@ pub contract Governance {
             functions::{external, initializer},
             storage::storage,
         },
-        protocol::address::AztecAddress,
+        protocol::{
+            address::AztecAddress,
+            traits::ToField,
+        },
         state_vars::{Map, PublicMutable},
     };
 

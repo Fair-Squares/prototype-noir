@@ -73,7 +73,10 @@ services:
   anvil:
     image: ghcr.io/foundry-rs/foundry:latest
     profiles: ["aztec"]
-    command: ["anvil", "--host", "0.0.0.0", "--port", "8545", "--chain-id", "31337"]
+    # Use entrypoint (not command) to bypass the image's /bin/sh -c entrypoint
+    # which would otherwise eat the --host flag as positional args, making
+    # Anvil default to 127.0.0.1 (inaccessible from other containers).
+    entrypoint: ["anvil", "--host", "0.0.0.0", "--port", "8545", "--chain-id", "31337"]
     ports:
       - "8545:8545"
     healthcheck:
@@ -94,7 +97,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      LOG_LEVEL: info
+      LOG_LEVEL: debug
       ETHEREUM_HOSTS: http://anvil:8545
       L1_CHAIN_ID: "31337"
     healthcheck:
