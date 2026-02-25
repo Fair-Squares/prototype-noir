@@ -1,34 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
-import { deposit, seedEurBalance } from "@/lib/simulation";
 
+/**
+ * Fund deposit — requires signed transaction from the investor's account.
+ *
+ * CLI (inside aztec bootstrap container):
+ *   aztec-wallet send --from accounts:test0 \
+ *     --contract-address $HOUSING_FUND -- deposit <amount>
+ */
 export async function POST(request: NextRequest) {
-  try {
-    const { address, amount } = await request.json();
+  const { address, amount } = await request.json().catch(() => ({}));
 
-    if (!address) {
-      return NextResponse.json({ error: "address is required" }, { status: 400 });
-    }
-    if (!amount || Number(amount) <= 0) {
-      return NextResponse.json({ error: "amount must be positive" }, { status: 400 });
-    }
+  const housingFundAddr = process.env.NEXT_PUBLIC_HOUSING_FUND_ADDRESS ?? "";
 
-    // Ensure demo EUR balance exists for this wallet
-    seedEurBalance(address, 50_000);
-
-    const result = deposit(address, Number(amount));
-    if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: result.message ?? `Deposited €${amount}`,
-      source: "simulation",
-    });
-  } catch (error: unknown) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json(
+    {
+      error: "Deposits require a signed private transaction",
+      action: "Browser wallet signing (poseidon2) required — coming soon",
+      details: {
+        contract: housingFundAddr,
+        from: address,
+        amount,
+        cli: `node --no-warnings /usr/src/yarn-project/cli-wallet/dest/bin/index.js send --from accounts:test0 --contract-address ${housingFundAddr} --artifact /workspace/contracts/housing_fund/target/housing_fund-HousingFund.json -- deposit ${amount}`,
+      },
+    },
+    { status: 501 }
+  );
 }

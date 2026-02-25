@@ -249,7 +249,7 @@ save_addresses() {
 
 NEXT_PUBLIC_AZTEC_PXE_URL=http://aztec:8080
 NEXT_PUBLIC_DEV_MODE=true
-NEXT_PUBLIC_SIMULATION=true
+NEXT_PUBLIC_SIMULATION=false
 AZTEC_LIVE=false
 
 # Contract addresses

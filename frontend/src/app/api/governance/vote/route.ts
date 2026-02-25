@@ -1,45 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { castVote } from "@/lib/simulation";
-import { isLiveModeEnabled, liveCastVote } from "@/lib/aztecLive";
 
 export async function POST(request: NextRequest) {
-  try {
-    const { address, proposalId, voteYes } = await request.json();
+  const { address, proposalId, voteYes } = await request.json().catch(() => ({}));
+  const govAddr = process.env.NEXT_PUBLIC_GOVERNANCE_ADDRESS ?? "";
 
-    if (!address) {
-      return NextResponse.json({ error: "address is required" }, { status: 400 });
-    }
-    if (proposalId === undefined) {
-      return NextResponse.json({ error: "proposalId is required" }, { status: 400 });
-    }
-    if (voteYes === undefined) {
-      return NextResponse.json({ error: "voteYes is required" }, { status: 400 });
-    }
-
-    if (isLiveModeEnabled()) {
-      try {
-        await liveCastVote(address, proposalId, voteYes);
-        return NextResponse.json({
-          success: true,
-          message: `Vote ${voteYes ? "YES" : "NO"} cast on-chain on proposal #${proposalId}`,
-          source: "aztec",
-        });
-      } catch (error) {
-        console.error("[governance/vote] live mode failed, falling back to simulation", error);
-      }
-    }
-
-    const result = castVote(address, proposalId, voteYes);
-    if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: `Vote ${voteYes ? "YES" : "NO"} cast privately on proposal #${proposalId}`,
-      source: "simulation",
-    });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  return NextResponse.json(
+    {
+      error: "Voting requires a signed private transaction",
+      action: "Browser wallet signing required — coming soon",
+      details: {
+        contract: govAddr,
+        from: address,
+        proposalId,
+        voteYes,
+        cli: `node --no-warnings /usr/src/yarn-project/cli-wallet/dest/bin/index.js send --from accounts:test0 --contract-address ${govAddr} --artifact /workspace/contracts/governance/target/governance-Governance.json -- vote ${proposalId} ${voteYes ? "true" : "false"}`,
+      },
+    },
+    { status: 501 }
+  );
 }

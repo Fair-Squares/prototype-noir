@@ -1,17 +1,12 @@
 import { NextResponse } from "next/server";
-import { getAccounts } from "@/lib/simulation";
-import { getLiveAccounts, isLiveModeEnabled } from "@/lib/aztecLive";
 
+/** Returns the known devnet test accounts (same data as /api/accounts). */
 export async function GET() {
-  if (isLiveModeEnabled()) {
-    try {
-      const accounts = await getLiveAccounts();
-      return NextResponse.json({ accounts, source: "aztec" });
-    } catch (error) {
-      console.error("[wallet/accounts] live mode failed, falling back to simulation", error);
-    }
-  }
+  const admin = process.env.NEXT_PUBLIC_ADMIN_ADDRESS ?? "";
 
-  const accounts = getAccounts();
-  return NextResponse.json({ accounts, source: "simulation" });
+  const accounts = admin
+    ? [{ alias: "test0", address: admin, isAdmin: true }]
+    : [];
+
+  return NextResponse.json({ accounts, source: "live" });
 }

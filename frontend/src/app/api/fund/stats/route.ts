@@ -1,17 +1,15 @@
 import { NextResponse } from "next/server";
-import { getFundStats } from "@/lib/simulation";
-import { getLiveFundStats, isLiveModeEnabled } from "@/lib/aztecLive";
+import { getLiveFundStats } from "@/lib/aztecLive";
 
 export async function GET() {
-  if (isLiveModeEnabled()) {
-    try {
-      const stats = await getLiveFundStats();
-      return NextResponse.json({ ...stats, source: "aztec" });
-    } catch (error) {
-      console.error("[fund/stats] live mode failed, falling back to simulation", error);
-    }
+  try {
+    const stats = await getLiveFundStats();
+    return NextResponse.json(stats);
+  } catch (error) {
+    console.error("[fund/stats]", error);
+    return NextResponse.json(
+      { error: "Failed to read fund stats from chain", detail: String(error) },
+      { status: 502 }
+    );
   }
-
-  const stats = getFundStats();
-  return NextResponse.json({ ...stats, source: "simulation" });
 }

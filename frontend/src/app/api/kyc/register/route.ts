@@ -1,35 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { registerKYC } from "@/lib/simulation";
-import { isLiveModeEnabled, registerLiveKyc } from "@/lib/aztecLive";
 
+/**
+ * KYC registration requires a signed admin transaction.
+ *
+ * To register a user via CLI (run from inside the aztec bootstrap container):
+ *   aztec-wallet send --from accounts:test0 \
+ *     --contract-address $KYC_VERIFIER_ADDRESS \
+ *     --artifact kyc_verifier -- register_verifier <user_address>
+ *
+ * Browser wallet support (poseidon2 signing) is required for in-app registration.
+ */
 export async function POST(request: NextRequest) {
-  try {
-    const { userAddress, devMode } = await request.json();
+  const { userAddress } = await request.json().catch(() => ({}));
 
-    if (!userAddress) {
-      return NextResponse.json({ error: "userAddress is required" }, { status: 400 });
-    }
+  const kycAddr = process.env.NEXT_PUBLIC_KYC_VERIFIER_ADDRESS ?? "";
+  const adminAddr = process.env.NEXT_PUBLIC_ADMIN_ADDRESS ?? "";
 
-    if (devMode && process.env.NEXT_PUBLIC_DEV_MODE !== "true") {
-      return NextResponse.json({ error: "dev mode is not enabled" }, { status: 403 });
-    }
-
-    if (isLiveModeEnabled()) {
-      try {
-        await registerLiveKyc(userAddress);
-        return NextResponse.json({ success: true, userAddress, source: "aztec" });
-      } catch (error) {
-        console.error("[kyc/register] live mode failed, falling back to simulation", error);
-      }
-    }
-
-    const result = registerKYC(userAddress);
-    if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
-    }
-
-    return NextResponse.json({ success: true, userAddress, source: "simulation" });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  return NextResponse.json(
+    {
+      error: "KYC registration requires a signed admin transaction",
+      action: "Use aztec-wallet CLI or wire up browser wallet signing",
+      details: {
+        contract: kycAddr,
+        admin: adminAddr,
+        targetUser: userAddress,
+        cli: `node --no-warnings /usr/src/yarn-project/cli-wallet/dest/bin/index.js send --from accounts:test0 --contract-address ${kycAddr} --artifact /workspace/contracts/kyc_verifier/target/kyc_verifier-KYCVerifier.json -- verify ${userAddress}`,
+      },
+    },
+    { status: 501 }
+  );
 }

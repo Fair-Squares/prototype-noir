@@ -1,30 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isKYCVerified } from "@/lib/simulation";
-import { getLiveKycStatus, isLiveModeEnabled } from "@/lib/aztecLive";
+import { getLiveKYCStatus } from "@/lib/aztecLive";
 
-/**
- * GET /api/kyc/status?address=xxx
- *
- * Checks if an address is KYC-verified.
- * In simulation mode: checks in-memory store.
- * In live mode: calls KYCVerifier.is_verified() on Aztec.
- */
 export async function GET(request: NextRequest) {
-  const address = request.nextUrl.searchParams.get("address");
+  const { searchParams } = new URL(request.url);
+  const address = searchParams.get("address") ?? "";
 
   if (!address) {
-    return NextResponse.json({ error: "address is required" }, { status: 400 });
+    return NextResponse.json({ error: "address required" }, { status: 400 });
   }
 
-  if (isLiveModeEnabled()) {
-    try {
-      const verified = await getLiveKycStatus(address);
-      return NextResponse.json({ verified, address, source: "aztec" });
-    } catch (error) {
-      console.error("[kyc/status] live mode failed, falling back to simulation", error);
-    }
+  try {
+    // NOTE: KYC status for a specific address requires computing a mapping
+    // storage slot via poseidon2 hash, which needs barretenberg WASM.
+    // Until browser wallet is wired up, this returns false conservatively.
+    const verified = await getLiveKYCStatus(address);
+    return NextResponse.json({ verified, address, note: verified ? null : "private-state-requires-wallet" });
+  } catch (error) {
+    return NextResponse.json({ error: String(error) }, { status: 502 });
   }
-
-  const verified = isKYCVerified(address);
-  return NextResponse.json({ verified, address, source: "simulation" });
 }
