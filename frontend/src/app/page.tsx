@@ -51,12 +51,40 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* EUR token banner */}
+      <div className="rounded-2xl bg-card border border-border p-5 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="flex -space-x-1">
+            <div className="w-9 h-9 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center">
+              <span className="text-blue-700 text-xs font-bold">€</span>
+            </div>
+            <div className="w-9 h-9 rounded-full bg-fs-mint border-2 border-white flex items-center justify-center">
+              <span className="text-fs-teal-dark text-[10px] font-bold">FS</span>
+            </div>
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-text-1">
+              Powered by EURs &amp; FSFT — EUR stablecoin in, fund tokens out
+            </p>
+            <p className="text-xs text-text-3 mt-0.5">
+              Deposit EURs → receive FSFT (1:1 peg). Withdraw anytime. Balances are private on Aztec.
+            </p>
+          </div>
+        </div>
+        <a
+          href="/invest"
+          className="shrink-0 px-4 py-2 rounded-lg bg-fs-teal text-white text-xs font-semibold hover:bg-fs-teal-dark transition-colors"
+        >
+          Invest in EUR
+        </a>
+      </div>
+
       {/* Key numbers */}
       <div className="grid grid-cols-3 gap-px bg-border rounded-2xl overflow-hidden">
         {[
-          { value: "~3%", label: "Annual return for investors", sub: "Sustainable, capped" },
+          { value: "~3%", label: "Annual return for investors", sub: "Paid in EURs stablecoin" },
           { value: "20%", label: "Below market rent for tenants", sub: "Making housing affordable" },
-          { value: "EUR 0", label: "Minimum investment", sub: "Anyone can participate" },
+          { value: "€0", label: "Minimum investment", sub: "Deposit any EUR amount" },
         ].map((item) => (
           <div key={item.label} className="bg-card p-8">
             <p className="text-3xl font-bold text-fs-teal mb-1">{item.value}</p>

@@ -11,6 +11,8 @@ interface FundStatsProps {
   isPaused: boolean;
   investorCount: number;
   totalSupply: number;
+  fundTokenSymbol?: string;
+  eurTokenSymbol?: string;
 }
 
 const STAT_CARDS = [
@@ -21,6 +23,9 @@ const STAT_CARDS = [
 ];
 
 export default function FundStats(props: FundStatsProps) {
+  const fsft = props.fundTokenSymbol ?? "FSFT";
+  const eurs = props.eurTokenSymbol ?? "EURs";
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -32,10 +37,13 @@ export default function FundStats(props: FundStatsProps) {
         ))}
       </div>
 
-      <div className="flex items-center gap-6 text-[13px] text-text-3">
+      <div className="flex items-center gap-6 text-[13px] text-text-3 flex-wrap">
         <span><strong className="text-text-1">{props.investorCount}</strong> investors</span>
-        <span><strong className="text-fs-teal">{formatEUR(props.totalYield)}</strong> returns paid</span>
+        <span><strong className="text-fs-teal">{formatEUR(props.totalYield)}</strong> {eurs} yield paid</span>
         <span><strong className="text-text-1">~3%</strong> target annual return</span>
+        <span className="ml-auto text-[11px] px-2 py-0.5 rounded-full bg-fs-mint text-fs-teal-dark font-medium">
+          1 {fsft} = 1 {eurs} = €1
+        </span>
       </div>
 
       {props.isPaused && (

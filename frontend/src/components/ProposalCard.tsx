@@ -32,7 +32,9 @@ export default function ProposalCard({ proposal, onVote, isVoting }: ProposalCar
             <p className="text-sm text-text-2 mt-1 line-clamp-2">{proposal.description}</p>
           )}
           <p className="text-sm text-text-3 mt-1">
-            Budget: <span className="text-text-1 font-medium">{formatEUR(proposal.amount)}</span>
+            Budget:{" "}
+            <span className="text-text-1 font-medium">{formatEUR(proposal.amount)}</span>
+            <span className="ml-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full align-middle">EURs</span>
           </p>
         </div>
         <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${statusColor[proposal.status] ?? "text-text-3 bg-bg"}`}>
