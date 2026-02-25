@@ -71,16 +71,15 @@ services:
 
   # -- Local Ethereum L1 (Anvil) -----------------------------------------------
   anvil:
-    image: ghcr.io/foundry-rs/foundry:latest
+    image: *aztec-image
     profiles: ["aztec"]
-    # Use entrypoint (not command) to bypass the image's /bin/sh -c entrypoint
-    # which would otherwise eat the --host flag as positional args, making
-    # Anvil default to 127.0.0.1 (inaccessible from other containers).
-    entrypoint: ["anvil", "--host", "0.0.0.0", "--port", "8545", "--chain-id", "31337"]
+    # Anvil ships inside the Aztec image at /opt/foundry/bin/anvil — no
+    # separate foundry image needed.
+    entrypoint: ["/opt/foundry/bin/anvil", "--host", "0.0.0.0", "--port", "8545", "--chain-id", "31337"]
     ports:
       - "8545:8545"
     healthcheck:
-      test: ["CMD", "cast", "block-number", "--rpc-url", "http://localhost:8545"]
+      test: ["CMD", "/opt/foundry/bin/cast", "block-number", "--rpc-url", "http://localhost:8545"]
       interval: 5s
       timeout: 5s
       retries: 20
