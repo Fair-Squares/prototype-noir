@@ -58,8 +58,14 @@ export function useAztecWallet() {
     setState((s) => ({ ...s, status: "connecting", error: null }));
 
     try {
+      // ── 0. Resolve node URL ─────────────────────────────────────────────
+      // The browser cannot reach http://aztec:8080 (internal Docker hostname).
+      // We proxy all Aztec node calls through /api/aztec on the Next.js server.
+      // This works both locally (localhost:3000/api/aztec) and in production.
       const pxeUrl =
-        process.env.NEXT_PUBLIC_AZTEC_PXE_URL ?? "http://localhost:8080";
+        typeof window !== "undefined"
+          ? `${window.location.origin}/api/aztec`
+          : (process.env.NEXT_PUBLIC_AZTEC_PXE_URL ?? "http://aztec:8080");
 
       // ── 1. Create BrowserEmbeddedWallet (WASM PXE, no NAPI) ────────────
       // Dynamic import so webpack bundles with the "browser" export condition.
