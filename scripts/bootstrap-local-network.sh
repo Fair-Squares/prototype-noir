@@ -186,13 +186,13 @@ deploy_contracts() {
     --args accounts:test0)
   [ -z "$FUND_ADDR" ] && die "housing_fund deploy failed — no address in output"
 
-  # Governance needs housing_fund address (alias won't work cross-invocation)
+  # Governance needs actual addresses (aliases not valid as --args values)
   log "Deploying governance..."
   $AZTEC_WALLET_BIN deploy \
     "${ROOT_DIR}/contracts/governance/target/governance-Governance.json" \
     --init constructor \
     --from accounts:test0 \
-    --args "${FUND_ADDR}" accounts:test0 \
+    --args "${FUND_ADDR}" "${ADMIN_ADDR}" \
     -a governance 2>&1 | tee "$TMPDIR/governance.log" >&2
   GOV_ADDR=$(grep -oP '(?i)contract\s+deployed\s+at\s+\K0x[0-9a-fA-F]+' "$TMPDIR/governance.log" | tail -1)
   [ -z "$GOV_ADDR" ] && die "governance deploy failed — no address in output"
