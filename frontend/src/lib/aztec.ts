@@ -14,5 +14,8 @@ export function getPXEUrl(): string {
 }
 
 export function isLiveMode(): boolean {
-  return process.env.AZTEC_LIVE === "true";
+  return (
+    process.env.AZTEC_LIVE === "true" ||
+    process.env.NEXT_PUBLIC_SIMULATION === "false"
+  );
 }

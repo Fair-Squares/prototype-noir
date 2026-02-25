@@ -1,6 +1,6 @@
 # Implementation Status
 
-*Generated: 2026-02-23*
+*Updated: 2026-02-25*
 
 ## ✅ Implemented
 
@@ -71,18 +71,27 @@
 10. **Wallet connect UX** — prototype uses local-network pre-funded accounts; real wallet flow requires account abstraction setup
 11. **Write routes are still simulation-backed** — deposit/withdraw/vote/register KYC are not yet wired to live contract mutations
 
-## 🚀 How to Run Locally
+## 🚀 How to Run
 
 ```bash
-# One command (network + frontend + compile + deploy bootstrap)
+# Full stack: Aztec network + compile + deploy + frontend (one command)
 docker compose --profile aztec up
+
+# Frontend only (simulation, no Aztec needed)
+docker compose --profile sim up
 ```
+
+The `--profile aztec` flow:
+1. Starts Anvil (L1) and Aztec node (PXE) containers
+2. Bootstrap container compiles all 5 contracts and deploys them
+3. Contract addresses are written to a shared Docker volume
+4. Frontend starts with addresses injected via `.env.local`
 
 ## Next Steps (after prototype)
 
 1. Fix any Aztec API compatibility issues found during compilation
-2. Generate TypeScript contract wrappers (`aztec generate-types`)
-3. Wire all frontend stubs to real contract calls
+2. Generate TypeScript contract wrappers (`aztec codegen`)
+3. Wire all frontend stubs to real contract calls via codegen wrappers
 4. Set up real zkPassport domain for production KYC
 5. Add real stablecoin (FSEUR) via Aztec L1 bridge
 6. Deploy to Aztec testnet (alpha-testnet)

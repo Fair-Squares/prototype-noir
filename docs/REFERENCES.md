@@ -10,7 +10,7 @@ Links to essential documentation for developing Fair Squares.
 - **Counter Contract Tutorial:** https://docs.aztec.network/developers/docs/tutorials/contract_tutorials/counter_contract
 - **Token Contract Tutorial:** https://docs.aztec.network/developers/docs/tutorials/contract_tutorials/token_contract
 - **Foundational Topics:** https://docs.aztec.network/developers/docs/foundational-topics
-- **Aztec.nr Framework:** https://github.com/AztecProtocol/aztec-nr (tag: v4.0.0-devnet.2-patch.0)
+- **Aztec.nr Framework:** https://github.com/AztecProtocol/aztec-nr (tag: v4.0.0-devnet.2-patch.1)
 - **Aztec Monorepo:** https://github.com/AztecProtocol/aztec-packages
 
 ### Aztec v4 Key Patterns
@@ -18,8 +18,8 @@ Links to essential documentation for developing Fair Squares.
 ```toml
 # Nargo.toml dependencies (use aztec-nr repo, NOT aztec-packages)
 [dependencies]
-aztec = { git = "https://github.com/AztecProtocol/aztec-nr/", tag = "v4.0.0-devnet.2-patch.0", directory = "aztec" }
-balance_set = { git = "https://github.com/AztecProtocol/aztec-nr/", tag = "v4.0.0-devnet.2-patch.0", directory = "balance-set" }
+aztec = { git = "https://github.com/AztecProtocol/aztec-nr/", tag = "v4.0.0-devnet.2-patch.1", directory = "aztec" }
+balance_set = { git = "https://github.com/AztecProtocol/aztec-nr/", tag = "v4.0.0-devnet.2-patch.1", directory = "balance-set" }
 ```
 
 ```rust
@@ -52,7 +52,7 @@ unconstrained fn view_fn() -> pub Type { ... }
 
 ```bash
 # Install Aztec toolchain
-VERSION=4.0.0-devnet.2-patch.0 bash -i <(curl -sL https://install.aztec.network/4.0.0-devnet.2-patch.0)
+VERSION=4.0.0-devnet.2-patch.1 bash -i <(curl -sL https://install.aztec.network/4.0.0-devnet.2-patch.1)
 
 # Start local network
 aztec start --local-network
@@ -128,11 +128,11 @@ onResult(({ verified, result }) => {
 
 | Component | Version |
 |-----------|---------|
-| Aztec Docker | `aztecprotocol/aztec:4.0.0-devnet.2-patch.0` |
-| Aztec CLI | `4.0.0-devnet.2-patch.0` |
-| aztec-nr (Nargo) | `v4.0.0-devnet.2-patch.0` |
-| @aztec/aztec.js | `4.0.0-devnet.2-patch.0` |
-| @aztec/accounts | `4.0.0-devnet.2-patch.0` |
-| @aztec/wallets | `4.0.0-devnet.2-patch.0` |
+| Aztec Docker | `aztecprotocol/aztec:4.0.0-devnet.2-patch.1` |
+| Aztec CLI | `4.0.0-devnet.2-patch.1` |
+| aztec-nr (Nargo) | `v4.0.0-devnet.2-patch.1` |
+| @aztec/aztec.js | `4.0.0-devnet.2-patch.1` |
+| @aztec/accounts | `4.0.0-devnet.2-patch.1` |
+| @aztec/wallets | `4.0.0-devnet.2-patch.1` |
 | zkPassport SDK | Latest (`@zkpassport/sdk`) |
 | Noir compiler | Bundled with Aztec CLI |
