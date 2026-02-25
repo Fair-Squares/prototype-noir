@@ -7,6 +7,8 @@ import path from "path";
 // With AZTEC_LIVE=false, these are never called; with AZTEC_LIVE=true the
 // API route try/catch handles any runtime failure gracefully.
 const AZTEC_SERVER_EXTERNALS_PREFIX = "@aztec/";
+// zkPassport SDK uses WebSockets + node:crypto — server only
+const ZKPASSPORT_EXTERNALS_PREFIX = "@zkpassport/";
 
 const nextConfig: NextConfig = {
   webpack: (config, { isServer }) => {
@@ -54,7 +56,10 @@ const nextConfig: NextConfig = {
         ...externalsArray,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (ctx: any, callback: any) => {
-          if (ctx.request?.startsWith(AZTEC_SERVER_EXTERNALS_PREFIX)) {
+          if (
+            ctx.request?.startsWith(AZTEC_SERVER_EXTERNALS_PREFIX) ||
+            ctx.request?.startsWith(ZKPASSPORT_EXTERNALS_PREFIX)
+          ) {
             return callback(null, `commonjs ${ctx.request}`);
           }
           callback();

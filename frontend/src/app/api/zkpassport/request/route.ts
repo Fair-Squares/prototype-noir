@@ -30,36 +30,41 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // ── Production: real zkPassport flow ─────────────────────────────────
-    // The @zkpassport/sdk is installed but only used in production.
-    // Import dynamically to avoid issues in simulation/dev environments.
+    // ── Production: real zkPassport flow (v0.12 API) ─────────────────────
+    // v0.12 uses a bridge/WebSocket model. The QR URL is returned immediately
+    // but verification result comes via onResult callback (not polling).
+    // For a proper production integration, use a persistent service.
     try {
       const { ZKPassport } = await import("@zkpassport/sdk");
       const domain = process.env.ZKPASSPORT_DOMAIN ?? "fair-squares.vercel.app";
       const zkp = new ZKPassport(domain);
 
+      // zkp.request() creates a bridge connection and returns a query builder
       const queryBuilder = await zkp.request({
         name: "Fair Squares",
         logo: `https://${domain}/brand/fs-light.png`,
         purpose: "Verify you are 18+ to participate in the housing fund",
         scope: "fair-squares-kyc",
+        devMode: false,
       });
 
+      // Add age constraint and get the QR URL
       const { url, requestId } = queryBuilder.gte("age", 18).done();
 
-      // TODO: store requestId → userAddress in a database for the callback
-      // For now, encode userAddress in requestId
+      // requestId is the bridge topic ID — use it to track verification
       const compositeId = `${requestId}::${userAddress}`;
 
+      // Note: real result comes via onResult callback, not polling.
+      // A production implementation would need a persistent WebSocket service.
       return NextResponse.json({ qrUrl: url, requestId: compositeId, devMode: false });
     } catch (sdkErr) {
-      console.warn("[zkpassport] SDK not available, falling back to dev mode:", sdkErr);
+      console.warn("[zkpassport] SDK error, falling back to dev mode:", sdkErr);
       const requestId = `dev_${userAddress.slice(2, 10)}_${Date.now()}`;
       return NextResponse.json({
         qrUrl: `dev://bypass?id=${requestId}&address=${userAddress}`,
         requestId,
         devMode: true,
-        message: "zkPassport SDK unavailable — using dev bypass",
+        message: "zkPassport unavailable — using dev bypass",
       });
     }
   } catch (error: unknown) {

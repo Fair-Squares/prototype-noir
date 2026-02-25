@@ -69,7 +69,23 @@ export async function GET(request: NextRequest) {
         peg: "1 EURs = €1",
         description: "Private token used to invest in the fund",
       },
-      eurBalance: 0, // private — requires browser wallet
+      eurBalance: await (async () => {
+        if (!address || !eurTokenAddr) return 0;
+        try {
+          const { getTestAccountWallet } = await import("@/lib/serverWallet");
+          const { Contract } = await import("@aztec/aztec.js/contracts");
+          const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
+          const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+          const w = await getTestAccountWallet(0);
+          const EurJson = (await import("@/artifacts/fund_token-FundToken.json")).default;
+          const eurC = await Contract.at(
+            AztecAddress.fromString(eurTokenAddr),
+            loadContractArtifact(EurJson as Parameters<typeof loadContractArtifact>[0]),
+            w
+          );
+          return Number(await eurC.methods.public_balance_of(AztecAddress.fromString(address)).simulate());
+        } catch { return 0; }
+      })(),
       fsftBalance: 0,
       address: address || null,
       source: "live",
