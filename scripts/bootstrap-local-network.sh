@@ -207,12 +207,12 @@ deploy_contracts() {
 # -- 4. Wire contracts together ------------------------------------------------
 
 wire_contracts() {
-  # Use actual addresses (aliases don't persist across aztec-wallet invocations)
+  # aztec-wallet send: no --artifact flag; wallet resolves ABI from deployed
+  # contract DB (populated during deploy via -a alias).
   log "Wiring HousingFund.set_contracts(kyc, token, vault, gov)..."
   $AZTEC_WALLET_BIN send set_contracts \
     --from accounts:test0 \
     --contract-address "${FUND_ADDR}" \
-    --artifact "${ROOT_DIR}/contracts/housing_fund/target/housing_fund-HousingFund.json" \
     --args "${KYC_ADDR}" "${TOKEN_ADDR}" "${VAULT_ADDR}" "${GOV_ADDR}" \
     2>&1 >&2 || log "WARN: set_contracts failed"
 
@@ -220,7 +220,6 @@ wire_contracts() {
   $AZTEC_WALLET_BIN send set_housing_fund \
     --from accounts:test0 \
     --contract-address "${VAULT_ADDR}" \
-    --artifact "${ROOT_DIR}/contracts/defi_vault/target/defi_vault-DeFiVault.json" \
     --args "${FUND_ADDR}" \
     2>&1 >&2 || log "WARN: set_housing_fund failed"
 
@@ -228,7 +227,6 @@ wire_contracts() {
   $AZTEC_WALLET_BIN send set_admin \
     --from accounts:test0 \
     --contract-address "${TOKEN_ADDR}" \
-    --artifact "${ROOT_DIR}/contracts/fund_token/target/fund_token-FundToken.json" \
     --args "${FUND_ADDR}" \
     2>&1 >&2 || log "WARN: set_admin failed"
 }
