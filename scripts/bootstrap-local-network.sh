@@ -92,6 +92,21 @@ compile_contracts() {
     log "Transpiling ${c} (AVM + VKs)..."
     $BB_BIN aztec_process -i "${artifact_dir}" 2>&1 | grep -E "Transpil|complete|Error" || die "AVM transpilation failed for ${c}"
 
+    # Step 3: Strip __aztec_nr_internals__ prefix from function names.
+    # The Aztec #[aztec] macro renames functions internally, but public_dispatch
+    # uses the EXTERNAL names (no prefix). The SDK also looks up functions by
+    # external name. This rename makes the artifact match what both expect.
+    for json_file in "${artifact_dir}"/*.json; do
+      python3 -c "
+import json, re, sys
+with open('${json_file}') as f: d = json.load(f)
+for fn in d.get('functions', []):
+    fn['name'] = re.sub(r'^__aztec_nr_internals__', '', fn['name'])
+with open('${json_file}', 'w') as f: json.dump(d, f)
+print('Renamed functions in ${json_file}')
+" 2>&1
+    done
+
     log "Compiled and transpiled ${c} successfully"
   done
   cd "${ROOT_DIR}"
@@ -139,7 +154,7 @@ deploy_contracts() {
     # Run deploy; tee to stderr so errors are visible in docker logs
     $AZTEC_WALLET_BIN deploy \
       "${ROOT_DIR}/contracts/${artifact}" \
-      --init __aztec_nr_internals__constructor \
+      --init constructor \
       --from accounts:test0 \
       "$@" \
       -a "${label}" 2>&1 | tee "$TMPDIR/${label}.log" >&2
@@ -175,7 +190,7 @@ deploy_contracts() {
   log "Deploying governance..."
   $AZTEC_WALLET_BIN deploy \
     "${ROOT_DIR}/contracts/governance/target/governance-Governance.json" \
-    --init __aztec_nr_internals__constructor \
+    --init constructor \
     --from accounts:test0 \
     --args "${FUND_ADDR}" accounts:test0 \
     -a governance 2>&1 | tee "$TMPDIR/governance.log" >&2
@@ -197,7 +212,7 @@ deploy_contracts() {
 wire_contracts() {
   # Use actual addresses (aliases don't persist across aztec-wallet invocations)
   log "Wiring HousingFund.set_contracts(kyc, token, vault, gov)..."
-  $AZTEC_WALLET_BIN send __aztec_nr_internals__set_contracts \
+  $AZTEC_WALLET_BIN send set_contracts \
     --from accounts:test0 \
     --contract-address "${FUND_ADDR}" \
     --artifact "${ROOT_DIR}/contracts/housing_fund/target/housing_fund-HousingFund.json" \
@@ -205,7 +220,7 @@ wire_contracts() {
     2>&1 >&2 || log "WARN: set_contracts failed"
 
   log "Wiring DeFiVault.set_housing_fund(housing_fund)..."
-  $AZTEC_WALLET_BIN send __aztec_nr_internals__set_housing_fund \
+  $AZTEC_WALLET_BIN send set_housing_fund \
     --from accounts:test0 \
     --contract-address "${VAULT_ADDR}" \
     --artifact "${ROOT_DIR}/contracts/defi_vault/target/defi_vault-DeFiVault.json" \
@@ -213,7 +228,7 @@ wire_contracts() {
     2>&1 >&2 || log "WARN: set_housing_fund failed"
 
   log "Wiring FundToken.set_admin(housing_fund)..."
-  $AZTEC_WALLET_BIN send __aztec_nr_internals__set_admin \
+  $AZTEC_WALLET_BIN send set_admin \
     --from accounts:test0 \
     --contract-address "${TOKEN_ADDR}" \
     --artifact "${ROOT_DIR}/contracts/fund_token/target/fund_token-FundToken.json" \
