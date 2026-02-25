@@ -121,7 +121,7 @@ services:
     volumes:
       - ./:/workspace
       - contract-env:/out
-    entrypoint: ["sh", "./scripts/bootstrap-local-network.sh"]
+    entrypoint: ["bash", "./scripts/bootstrap-local-network.sh"]
     restart: "no"
 
 volumes:

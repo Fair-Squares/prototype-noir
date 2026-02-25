@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Fair Squares -- Bootstrap: compile, deploy, and wire all Noir contracts.
 #
 # Runs inside the aztec-bootstrap Docker container with the same Aztec image
