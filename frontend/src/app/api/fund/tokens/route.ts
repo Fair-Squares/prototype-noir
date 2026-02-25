@@ -1,19 +1,49 @@
 import { NextRequest, NextResponse } from "next/server";
-import { callNodeRpc } from "@/lib/aztecClient";
+import { isLiveModeEnabled } from "@/lib/aztecLive";
+import { simGetFundStats, simGetPortfolio } from "@/lib/simulationStore";
 
-/**
- * Returns token metadata + on-chain public balances.
- * Private FSFT balances require the user's viewing key (browser wallet).
- */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const address = searchParams.get("address") ?? "";
 
+  // ── Simulation mode ──────────────────────────────────────────────────────
+  if (!isLiveModeEnabled()) {
+    const stats = simGetFundStats();
+    const portfolio = address ? simGetPortfolio(address) : null;
+
+    return NextResponse.json({
+      fundToken: {
+        address: process.env.NEXT_PUBLIC_FUND_TOKEN_ADDRESS ?? "sim",
+        symbol: "FSFT",
+        name: "Fair Squares Fund Token",
+        totalSupply: stats.fsftTotalSupply,
+        decimals: 0,
+        peg: "1 FSFT = 1 EUR",
+        description: "Minted when a property is acquired",
+      },
+      eurToken: {
+        address: process.env.NEXT_PUBLIC_EUR_TOKEN_ADDRESS ?? "sim",
+        symbol: "EURs",
+        name: "EUR Stablecoin",
+        decimals: 0,
+        peg: "1 EURs = €1",
+        description: "Private token used to invest in the fund",
+      },
+      eurBalance: portfolio?.eurBalance ?? 0,
+      fsftBalance: portfolio?.balance ?? 0,
+      address: address || null,
+      source: "simulation",
+    });
+  }
+
+  // ── Live mode ────────────────────────────────────────────────────────────
   try {
-    // Read total_supply from FundToken (slot 2)
+    const { callNodeRpc } = await import("@/lib/aztecClient");
+
     const tips = await callNodeRpc<{ proposed: { hash: string } }>("node_getL2Tips");
     const bh = tips.proposed.hash;
     const fundTokenAddr = process.env.NEXT_PUBLIC_FUND_TOKEN_ADDRESS ?? "";
+    const eurTokenAddr = process.env.NEXT_PUBLIC_EUR_TOKEN_ADDRESS ?? "";
 
     const totalSupplyRaw = await callNodeRpc<string>(
       "node_getPublicStorageAt",
@@ -29,23 +59,29 @@ export async function GET(request: NextRequest) {
         totalSupply,
         decimals: 0,
         peg: "1 FSFT = 1 EUR",
+        description: "Minted when a property is acquired",
       },
       eurToken: {
-        address: "native",
+        address: eurTokenAddr || "native",
         symbol: "EURs",
         name: "EUR Stablecoin",
         decimals: 0,
         peg: "1 EURs = €1",
+        description: "Private token used to invest in the fund",
       },
-      // Private balances require browser wallet (poseidon2 mapping slot + PXE decryption)
-      eurBalance: 0,
+      eurBalance: 0, // private — requires browser wallet
       fsftBalance: 0,
       address: address || null,
-      note: address ? "private-balances-require-browser-wallet" : null,
       source: "live",
     });
   } catch (error) {
     console.error("[fund/tokens]", error);
-    return NextResponse.json({ error: String(error) }, { status: 502 });
+    const stats = simGetFundStats();
+    return NextResponse.json({
+      fundToken: { symbol: "FSFT", totalSupply: stats.fsftTotalSupply },
+      eurToken: { symbol: "EURs" },
+      source: "simulation",
+      fallback: true,
+    });
   }
 }

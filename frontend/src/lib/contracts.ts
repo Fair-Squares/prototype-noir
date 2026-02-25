@@ -30,24 +30,26 @@ export async function fetchFundStats(): Promise<FundStats> {
 
 export async function depositFunds(
   address: string,
-  amount: number
+  amount: number,
+  accountIndex = 0
 ): Promise<{ success: boolean; message?: string; error?: string }> {
   const res = await fetch("/api/fund/deposit", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, amount }),
+    body: JSON.stringify({ address, amount, accountIndex }),
   });
   return res.json();
 }
 
 export async function withdrawFunds(
   address: string,
-  amount: number
+  amount: number,
+  accountIndex = 0
 ): Promise<{ success: boolean; message?: string; error?: string }> {
   const res = await fetch("/api/fund/withdraw", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, amount }),
+    body: JSON.stringify({ address, amount, accountIndex }),
   });
   return res.json();
 }
@@ -105,12 +107,53 @@ export async function fetchProposals(): Promise<Proposal[]> {
 export async function castVote(
   address: string,
   proposalId: number,
-  voteYes: boolean
+  voteYes: boolean,
+  accountIndex = 0
 ): Promise<{ success: boolean; message?: string; error?: string }> {
   const res = await fetch("/api/governance/vote", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, proposalId, voteYes }),
+    body: JSON.stringify({ address, proposalId, voteYes, accountIndex }),
+  });
+  return res.json();
+}
+
+export async function createProposal(
+  address: string,
+  title: string,
+  description: string,
+  amount: number,
+  accountIndex = 0
+): Promise<{ success: boolean; proposal?: Proposal; error?: string }> {
+  const res = await fetch("/api/governance/proposals", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "create", address, title, description, amount, accountIndex }),
+  });
+  return res.json();
+}
+
+export async function finalizeProposal(
+  proposalId: number,
+  accountIndex = 0
+): Promise<{ success: boolean; message?: string; error?: string }> {
+  const res = await fetch("/api/governance/proposals", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "finalize", proposalId, accountIndex }),
+  });
+  return res.json();
+}
+
+export async function executeProposal(
+  proposalId: number,
+  amount: number,
+  accountIndex = 0
+): Promise<{ success: boolean; message?: string; fsftMinted?: number; error?: string }> {
+  const res = await fetch("/api/governance/proposals", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "execute", proposalId, amount, accountIndex }),
   });
   return res.json();
 }

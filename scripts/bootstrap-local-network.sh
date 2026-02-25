@@ -15,6 +15,7 @@ OUT_DIR="${OUT_DIR:-/out}"
 AZTEC_NODE_URL="${AZTEC_NODE_URL:-http://aztec:8080}"
 
 CONTRACTS="kyc_verifier fund_token defi_vault housing_fund governance"
+# eur_token reuses the fund_token artifact — deployed as a second instance
 
 # -- Binary paths (Aztec image doesn't put these in PATH) ---------------------
 # aztec CLI: the main node entrypoint
@@ -144,8 +145,10 @@ deploy_contracts() {
 
   log "Importing test accounts..."
   $AZTEC_WALLET_BIN import-test-accounts 2>&1 | tee "$TMPDIR/import.log" >&2 || log "WARN: Could not import test accounts"
-  ADMIN_ADDR=$(grep -oP 'Address:\s+\K0x[0-9a-fA-F]+' "$TMPDIR/import.log" | head -1)
-  log "Admin address: ${ADMIN_ADDR:-unknown}"
+  ADMIN_ADDR=$(grep -oP 'Address:\s+\K0x[0-9a-fA-F]+' "$TMPDIR/import.log" | sed -n '1p')
+  TEST1_ADDR=$(grep -oP 'Address:\s+\K0x[0-9a-fA-F]+' "$TMPDIR/import.log" | sed -n '2p')
+  TEST2_ADDR=$(grep -oP 'Address:\s+\K0x[0-9a-fA-F]+' "$TMPDIR/import.log" | sed -n '3p')
+  log "Accounts: test0=${ADMIN_ADDR:-unknown} test1=${TEST1_ADDR:-unknown} test2=${TEST2_ADDR:-unknown}"
 
   # Deploy a contract; echoes full wallet output to stderr (visible in docker logs)
   # and returns the deployed address on stdout for capture via $().
@@ -194,14 +197,21 @@ deploy_contracts() {
     --args "${FUND_ADDR}" "${ADMIN_ADDR}")
   [ -z "$GOV_ADDR" ] && die "governance deploy failed — no address in output"
 
+  # -- Deploy EUR token (second instance of fund_token — represents EURs stablecoin) --
+  EUR_ADDR=$(_deploy "eur_token" \
+    "fund_token/target/fund_token-FundToken.json" \
+    --args accounts:test0)
+  [ -z "$EUR_ADDR" ] && die "eur_token deploy failed — no address in output"
+
   log "Deployed addresses:"
   log "  KYCVerifier:  ${KYC_ADDR}"
   log "  FundToken:    ${TOKEN_ADDR}"
   log "  DeFiVault:    ${VAULT_ADDR}"
   log "  HousingFund:  ${FUND_ADDR}"
   log "  Governance:   ${GOV_ADDR}"
+  log "  EurToken:     ${EUR_ADDR}"
 
-  export KYC_ADDR TOKEN_ADDR VAULT_ADDR FUND_ADDR GOV_ADDR ADMIN_ADDR
+  export KYC_ADDR TOKEN_ADDR VAULT_ADDR FUND_ADDR GOV_ADDR ADMIN_ADDR EUR_ADDR TEST1_ADDR TEST2_ADDR
 }
 
 # -- 4. Wire contracts together ------------------------------------------------
@@ -223,12 +233,55 @@ wire_contracts() {
     --args "${FUND_ADDR}" \
     2>&1 >&2 || log "WARN: set_housing_fund failed"
 
-  log "Wiring FundToken.set_admin(housing_fund)..."
-  $AZTEC_WALLET_BIN send set_admin \
+  # NOTE: We do NOT transfer FundToken (FSFT) admin to housing_fund.
+  # test0 stays as FSFT admin so the API can mint FSFT when a governance
+  # proposal is executed (housing_fund is wired but minting goes through test0).
+
+  # -- Mint EUR stablecoin to all test accounts (public balances) ---------------
+  log "Minting EUR to test accounts..."
+  # test0 gets 600 000 EUR (will deposit 500 000, keeps 100 000 for demo)
+  $AZTEC_WALLET_BIN send mint_public \
     --from accounts:test0 \
-    --contract-address "${TOKEN_ADDR}" \
-    --args "${FUND_ADDR}" \
-    2>&1 >&2 || log "WARN: set_admin failed"
+    --contract-address "${EUR_ADDR}" \
+    --args "${ADMIN_ADDR}" 600000 \
+    2>&1 >&2 || log "WARN: mint EUR test0 failed"
+
+  # test1 gets 50 000 EUR
+  if [ -n "${TEST1_ADDR:-}" ]; then
+    $AZTEC_WALLET_BIN send mint_public \
+      --from accounts:test0 \
+      --contract-address "${EUR_ADDR}" \
+      --args "${TEST1_ADDR}" 50000 \
+      2>&1 >&2 || log "WARN: mint EUR test1 failed"
+  fi
+
+  # test2 gets 50 000 EUR
+  if [ -n "${TEST2_ADDR:-}" ]; then
+    $AZTEC_WALLET_BIN send mint_public \
+      --from accounts:test0 \
+      --contract-address "${EUR_ADDR}" \
+      --args "${TEST2_ADDR}" 50000 \
+      2>&1 >&2 || log "WARN: mint EUR test2 failed"
+  fi
+
+  # -- Initial housing fund deposit from test0 (500 000 EUR) -------------------
+  # First transfer EUR to housing fund (test0 → housing_fund)
+  log "Transferring 500000 EUR from test0 to housing fund..."
+  $AZTEC_WALLET_BIN send transfer_public \
+    --from accounts:test0 \
+    --contract-address "${EUR_ADDR}" \
+    --args "${FUND_ADDR}" 500000 \
+    2>&1 >&2 || log "WARN: EUR transfer to housing fund failed"
+
+  # Then record the deposit in housing fund counter
+  log "Recording initial deposit in housing fund..."
+  $AZTEC_WALLET_BIN send deposit \
+    --from accounts:test0 \
+    --contract-address "${FUND_ADDR}" \
+    --args 500000 \
+    2>&1 >&2 || log "WARN: housing fund initial deposit failed"
+
+  log "Initial housing fund balance: 500 000 EUR (deposited by test0)"
 }
 
 # -- 5. Extract addresses and write env files ----------------------------------
@@ -238,11 +291,14 @@ save_addresses() {
 
   # Addresses are captured during deploy_contracts and exported
   admin_addr="${ADMIN_ADDR:-UNKNOWN}"
+  test1_addr="${TEST1_ADDR:-UNKNOWN}"
+  test2_addr="${TEST2_ADDR:-UNKNOWN}"
   kyc_addr="${KYC_ADDR:-DEPLOY_FAILED}"
   token_addr="${TOKEN_ADDR:-DEPLOY_FAILED}"
   vault_addr="${VAULT_ADDR:-DEPLOY_FAILED}"
   fund_addr="${FUND_ADDR:-DEPLOY_FAILED}"
   gov_addr="${GOV_ADDR:-DEPLOY_FAILED}"
+  eur_addr="${EUR_ADDR:-DEPLOY_FAILED}"
 
   env_content="# Auto-generated by bootstrap-local-network.sh
 # $(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -250,7 +306,9 @@ save_addresses() {
 NEXT_PUBLIC_AZTEC_PXE_URL=http://aztec:8080
 NEXT_PUBLIC_DEV_MODE=true
 NEXT_PUBLIC_SIMULATION=false
-AZTEC_LIVE=false
+# AZTEC_LIVE=true enables real contract calls (local Docker only)
+# Vercel deployments should set AZTEC_LIVE=false
+AZTEC_LIVE=true
 
 # Contract addresses
 NEXT_PUBLIC_KYC_VERIFIER_ADDRESS=${kyc_addr}
@@ -258,6 +316,12 @@ NEXT_PUBLIC_FUND_TOKEN_ADDRESS=${token_addr}
 NEXT_PUBLIC_DEFI_VAULT_ADDRESS=${vault_addr}
 NEXT_PUBLIC_HOUSING_FUND_ADDRESS=${fund_addr}
 NEXT_PUBLIC_GOVERNANCE_ADDRESS=${gov_addr}
+NEXT_PUBLIC_EUR_TOKEN_ADDRESS=${eur_addr}
+
+# Test account addresses (written by import-test-accounts)
+NEXT_PUBLIC_TEST0_ADDRESS=${admin_addr}
+NEXT_PUBLIC_TEST1_ADDRESS=${test1_addr}
+NEXT_PUBLIC_TEST2_ADDRESS=${test2_addr}
 NEXT_PUBLIC_ADMIN_ADDRESS=${admin_addr}
 "
 
@@ -274,11 +338,15 @@ NEXT_PUBLIC_ADMIN_ADDRESS=${admin_addr}
   log "============================================"
   log "Contract Addresses:"
   log "  KYCVerifier:  ${kyc_addr}"
-  log "  FundToken:    ${token_addr}"
+  log "  FundToken:    ${token_addr} (FSFT — admin: test0)"
+  log "  EurToken:     ${eur_addr} (EURs — admin: test0)"
   log "  DeFiVault:    ${vault_addr}"
-  log "  HousingFund:  ${fund_addr}"
+  log "  HousingFund:  ${fund_addr} (initial: 500 000 EUR)"
   log "  Governance:   ${gov_addr}"
-  log "  Admin:        ${admin_addr}"
+  log "Accounts:"
+  log "  test0 (admin): ${admin_addr} (600 000 EUR minted, 500 000 deposited)"
+  log "  test1:         ${test1_addr} (50 000 EUR)"
+  log "  test2:         ${test2_addr} (50 000 EUR)"
   log "============================================"
 }
 

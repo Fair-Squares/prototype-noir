@@ -17,6 +17,7 @@ import {
 export default function InvestPage() {
   const { activeAccount } = useWallet();
   const address = activeAccount?.address ?? null;
+  const accountIndex = activeAccount?.index ?? 0;
 
   const [isKYCVerified, setIsKYCVerified] = useState(false);
   const [stats, setStats] = useState<FundStatsType | null>(null);
@@ -45,7 +46,7 @@ export default function InvestPage() {
   const handleDeposit = async (amount: string) => {
     if (!address) return;
     setTxMessage(null);
-    const result = await depositFunds(address, parseFloat(amount));
+    const result = await depositFunds(address, parseFloat(amount), accountIndex);
     if (result.success) {
       setTxMessage({ type: "success", text: result.message ?? `Deposited €${Number(amount).toLocaleString()}` });
       await refreshAll();
@@ -57,7 +58,7 @@ export default function InvestPage() {
   const handleWithdraw = async (amount: string) => {
     if (!address) return;
     setTxMessage(null);
-    const result = await withdrawFunds(address, parseFloat(amount));
+    const result = await withdrawFunds(address, parseFloat(amount), accountIndex);
     if (result.success) {
       setTxMessage({ type: "success", text: result.message ?? `Withdrew €${Number(amount).toLocaleString()}` });
       await refreshAll();

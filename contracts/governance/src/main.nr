@@ -66,12 +66,9 @@ pub contract Governance {
     #[external("public")]
     fn create_proposal(description_hash: Field, amount: u64) -> pub u32 {
         let caller = self.msg_sender();
-        let council = self.storage.council.read();
-        let hf = self.storage.housing_fund.read();
-        assert(
-            council.eq(caller) | hf.eq(caller),
-            "only council or housing fund can propose",
-        );
+        // Prototype: any account can create proposals.
+        // Production: restrict to council, verified investors, or DAO members.
+        assert(!caller.is_zero(), "invalid caller");
 
         let proposal_id = self.storage.proposal_count.read();
         let pid = proposal_id as Field;
@@ -142,6 +139,28 @@ pub contract Governance {
         } else {
             self.storage.p_status.at(pid).write(STATUS_FAILED);
         }
+    }
+
+    // -- Execute a passed proposal (marks as EXECUTED, triggers FSFT mint) ----
+    // The actual FSFT minting is done by the admin (test0) via the API route
+    // after this tx confirms, since cross-contract public calls are not used
+    // in this prototype version.
+
+    #[external("public")]
+    fn execute_proposal(proposal_id: u32) {
+        let pid = proposal_id as Field;
+        let caller = self.msg_sender();
+        let council = self.storage.council.read();
+        let hf = self.storage.housing_fund.read();
+        assert(
+            council.eq(caller) | hf.eq(caller),
+            "only council or housing fund can execute",
+        );
+
+        let status = self.storage.p_status.at(pid).read();
+        assert(status == STATUS_PASSED, "proposal must be in PASSED state");
+
+        self.storage.p_status.at(pid).write(STATUS_EXECUTED);
     }
 
     // -- View functions ---------------------------------------------------

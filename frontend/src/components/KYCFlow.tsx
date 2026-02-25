@@ -30,16 +30,22 @@ export default function KYCFlow({ userAddress, isVerified, onVerified }: KYCFlow
 
       setQrUrl(data.qrUrl);
 
-      // Poll for result
+      // Dev mode: auto-complete immediately
+      if (data.devMode || data.qrUrl?.startsWith("dev://")) {
+        await registerKYC(userAddress, true);
+        onVerified();
+        return;
+      }
+
+      // Production: poll for zkPassport proof result
       const interval = setInterval(async () => {
         const statusRes = await fetch(`/api/zkpassport/status?requestId=${data.requestId}`);
         const statusData = await statusRes.json();
-        if (statusData.status === "verified") {
+        if (statusData.verified) {
           clearInterval(interval);
+          // Register KYC on-chain after proof is verified
+          await registerKYC(userAddress, false);
           onVerified();
-        } else if (statusData.status === "failed") {
-          clearInterval(interval);
-          setError("Verification failed. Please try again.");
         }
       }, 3000);
 
