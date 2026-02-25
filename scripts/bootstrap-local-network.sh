@@ -187,6 +187,7 @@ deploy_contracts() {
   [ -z "$FUND_ADDR" ] && die "housing_fund deploy failed — no address in output"
 
   # Governance needs actual addresses (aliases not valid as --args values)
+  log "DEBUG: FUND_ADDR='${FUND_ADDR}' ADMIN_ADDR='${ADMIN_ADDR}'"
   log "Deploying governance..."
   $AZTEC_WALLET_BIN deploy \
     "${ROOT_DIR}/contracts/governance/target/governance-Governance.json" \
