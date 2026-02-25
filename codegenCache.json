@@ -1,0 +1,22 @@
+{
+  "kyc_verifier-KYCVerifier.json": {
+    "contractName": "KYCVerifier",
+    "hash": "3f2801fd076d5716603c12962bb83f25d5a5643f4dc54218305949adeeb358ad"
+  },
+  "fund_token-FundToken.json": {
+    "contractName": "FundToken",
+    "hash": "f7604ea681316fd5f0de7ccf3afdc7d824e25abe20bb7b6f17253a1d0fcf004a"
+  },
+  "defi_vault-DeFiVault.json": {
+    "contractName": "DeFiVault",
+    "hash": "1dc2a0dc45d7515c309f7506bd2517a9b65785b16bd6b756270c097d4eafd325"
+  },
+  "housing_fund-HousingFund.json": {
+    "contractName": "HousingFund",
+    "hash": "8cf333f0367473b31b0948dfba0c7c7c98e5b1e3a192a517d2ce835eee56226e"
+  },
+  "governance-Governance.json": {
+    "contractName": "Governance",
+    "hash": "b65750048721c71e00fd6cd3e1762f5145a5a2439f1ad50e88bd0750c5638471"
+  }
+}
