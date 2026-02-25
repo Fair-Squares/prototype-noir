@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
-import { isLiveModeEnabled } from "@/lib/aztecLive";
+import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simGetFundStats } from "@/lib/simulationStore";
 
 export async function GET() {
-  if (!isLiveModeEnabled()) {
+  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
     return NextResponse.json(simGetFundStats());
+  }
+  if (!isLiveModeEnabled()) {
+    return NextResponse.json(
+      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
+      { status: 503 }
+    );
   }
 
   try {
@@ -12,7 +18,7 @@ export async function GET() {
     const stats = await getLiveFundStats();
     return NextResponse.json(stats);
   } catch (error) {
-    console.error("[fund/stats] live read failed, falling back to simulation:", error);
-    return NextResponse.json({ ...simGetFundStats(), fallback: true });
+    console.error("[fund/stats] live read failed:", error);
+    return NextResponse.json({ error: "Failed to read live fund stats" }, { status: 500 });
   }
 }

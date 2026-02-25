@@ -28,7 +28,7 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
     );
   }
 
-  const { balance, eurBalance, sharePercent, estimatedYield } = portfolio;
+  const { balance, eurBalance, sharePercent, estimatedYield, totalFundDeposits = 0 } = portfolio;
 
   return (
     <div className="space-y-4">
@@ -57,7 +57,7 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
             <span className="px-2 py-0.5 rounded-full bg-fs-teal/10 text-fs-teal-dark text-[10px] font-bold">FSFT</span>
           </div>
           <p className="text-3xl font-bold tabular-nums text-fs-teal-dark">{formatEUR(balance)}</p>
-          <p className="text-xs text-fs-teal-dark/60 mt-1.5">Earning ~3% annually</p>
+          <p className="text-xs text-fs-teal-dark/60 mt-1.5">FSFT appears after governance-approved asset execution</p>
           <div className="mt-3 pt-3 border-t border-fs-teal/10 flex items-center gap-1.5 text-xs text-fs-teal-dark/60">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
@@ -68,7 +68,11 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="rounded-xl bg-card p-4">
+          <p className="text-xs text-text-3 font-medium uppercase tracking-wide mb-1.5">Total in housing fund</p>
+          <p className="text-2xl font-bold">{formatEUR(totalFundDeposits)}</p>
+        </div>
         <div className="rounded-xl bg-card p-4">
           <p className="text-xs text-text-3 font-medium uppercase tracking-wide mb-1.5">Fund share</p>
           <p className="text-2xl font-bold">{sharePercent.toFixed(2)}%</p>

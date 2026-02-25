@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isLiveModeEnabled } from "@/lib/aztecLive";
+import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simCastVote } from "@/lib/simulationStore";
 
 export async function POST(request: NextRequest) {
@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Simulation mode ──────────────────────────────────────────────────────
-  if (!isLiveModeEnabled()) {
+  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
     const result = simCastVote(address, Number(proposalId), Boolean(voteYes));
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({
@@ -18,11 +18,18 @@ export async function POST(request: NextRequest) {
       message: `Vote on proposal #${proposalId} recorded (simulation)`,
     });
   }
+  if (!isLiveModeEnabled()) {
+    return NextResponse.json(
+      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
+      { status: 503 }
+    );
+  }
 
   // ── Live mode ────────────────────────────────────────────────────────────
   try {
-    const { getTestAccountWallet } = await import("@/lib/serverWallet");
-    const wallet = await getTestAccountWallet(accountIndex);
+    const { getTestAccount } = await import("@/lib/serverWallet");
+    const account = await getTestAccount(accountIndex);
+    const wallet = account.wallet;
 
     const govAddr = process.env.NEXT_PUBLIC_GOVERNANCE_ADDRESS ?? "";
     if (!govAddr) return NextResponse.json({ error: "NEXT_PUBLIC_GOVERNANCE_ADDRESS not set" }, { status: 500 });
@@ -36,8 +43,7 @@ export async function POST(request: NextRequest) {
 
     const receipt = await govContract.methods
       .cast_vote(Number(proposalId), Boolean(voteYes))
-      .send()
-      .wait();
+      .send({ from: AztecAddress.fromString(account.address) });
 
     return NextResponse.json({
       success: true,

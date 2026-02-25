@@ -23,6 +23,14 @@ export function isLiveModeEnabled(): boolean {
   return process.env.AZTEC_LIVE === "true";
 }
 
+/**
+ * Simulation mode is allowed only for Vercel deployments.
+ * Local/dev Docker should run with AZTEC_LIVE=true for full contract-state.
+ */
+export function isVercelSimulationMode(): boolean {
+  return !isLiveModeEnabled() && process.env.VERCEL === "1";
+}
+
 // ── Contract addresses from env ───────────────────────────────────────────────
 
 function addr(key: string): string {
@@ -73,9 +81,10 @@ async function readSlot(
  */
 async function readSlots(
   contractAddress: string,
-  slots: bigint[]
+  slots: bigint[],
+  blockHash?: string
 ): Promise<bigint[]> {
-  const bh = await getLatestBlockHash();
+  const bh = blockHash ?? (await getLatestBlockHash());
   return Promise.all(slots.map((s) => readSlot(contractAddress, s, bh)));
 }
 
@@ -102,12 +111,14 @@ export interface LiveFundStats {
 }
 
 export async function getLiveFundStats(): Promise<LiveFundStats> {
+  const bh = await getLatestBlockHash();
+
   // Parallel reads across 3 contracts
   const [hf, ft, kyc, vault] = await Promise.all([
-    readSlots(HOUSING_FUND(), [6n, 7n, 8n, 9n]),   // HousingFund
-    readSlots(FUND_TOKEN(),   [2n]),                 // FundToken
-    readSlots(KYC_VERIFIER(), [4n]),                 // KYCVerifier
-    readSlots(DEFI_VAULT(),   [5n]),                 // DeFiVault
+    readSlots(HOUSING_FUND(), [6n, 7n, 8n, 9n], bh), // HousingFund
+    readSlots(FUND_TOKEN(), [2n], bh), // FundToken
+    readSlots(KYC_VERIFIER(), [4n], bh), // KYCVerifier
+    readSlots(DEFI_VAULT(), [5n], bh), // DeFiVault
   ]);
 
   const totalDeposits  = fieldToEur(hf[0]);

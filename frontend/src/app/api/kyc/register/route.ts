@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isLiveModeEnabled } from "@/lib/aztecLive";
+import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simSetKYCVerified } from "@/lib/simulationStore";
 
 export async function POST(request: NextRequest) {
@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Simulation mode ──────────────────────────────────────────────────────
-  if (!isLiveModeEnabled()) {
+  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
     simSetKYCVerified(userAddress);
     return NextResponse.json({
       success: true,
@@ -20,15 +20,22 @@ export async function POST(request: NextRequest) {
       verified: true,
     });
   }
+  if (!isLiveModeEnabled()) {
+    return NextResponse.json(
+      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
+      { status: 503 }
+    );
+  }
 
   // ── Live mode: call KYCVerifier.verify(userAddress) as admin ─────────────
   try {
     const kycAddr = process.env.NEXT_PUBLIC_KYC_VERIFIER_ADDRESS ?? "";
     if (!kycAddr) return NextResponse.json({ error: "NEXT_PUBLIC_KYC_VERIFIER_ADDRESS not set" }, { status: 500 });
 
-    const { getTestAccountWallet } = await import("@/lib/serverWallet");
+    const { getTestAccount } = await import("@/lib/serverWallet");
     // Admin (test0) calls verify — only admin/verifiers can mark users as verified
-    const adminWallet = await getTestAccountWallet(0);
+    const admin = await getTestAccount(0);
+    const adminWallet = admin.wallet;
     void accountIndex; // accountIndex is the user's index, but admin signs the tx
 
     const { Contract } = await import("@aztec/aztec.js/contracts");
@@ -40,8 +47,7 @@ export async function POST(request: NextRequest) {
 
     const receipt = await kycContract.methods
       .register_kyc(AztecAddress.fromString(userAddress))
-      .send()
-      .wait();
+      .send({ from: AztecAddress.fromString(admin.address) });
 
     return NextResponse.json({
       success: true,

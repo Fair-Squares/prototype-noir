@@ -163,6 +163,7 @@ export async function executeProposal(
 export interface PortfolioData {
   balance: number;         // FSFT (= EUR in fund)
   eurBalance: number;      // EUR in wallet (available to deposit)
+  totalFundDeposits?: number;
   totalSupply: number;
   sharePercent: number;
   estimatedYield: number;
@@ -170,8 +171,10 @@ export interface PortfolioData {
   eurTokenSymbol?: string;
 }
 
-export async function fetchPortfolio(address: string): Promise<PortfolioData> {
-  const res = await fetch(`/api/portfolio?address=${encodeURIComponent(address)}`);
+export async function fetchPortfolio(address: string, accountIndex?: number): Promise<PortfolioData> {
+  const qs = new URLSearchParams({ address });
+  if (accountIndex !== undefined) qs.set("accountIndex", String(accountIndex));
+  const res = await fetch(`/api/portfolio?${qs.toString()}`);
   if (!res.ok) throw new Error("Failed to fetch portfolio");
   return res.json();
 }

@@ -64,10 +64,10 @@ export default function Dashboard() {
           </div>
           <div>
             <p className="text-sm font-semibold text-text-1">
-              Powered by EURs &amp; FSFT — EUR stablecoin in, fund tokens out
+              Powered by EURs &amp; FSFT
             </p>
             <p className="text-xs text-text-3 mt-0.5">
-              Deposit EURs → receive FSFT (1:1 peg). Withdraw anytime. Balances are private on Aztec.
+              EUR deposits are sent to the housing fund and tracked privately as deposit tickets. FSFT is minted only after governance-approved asset execution.
             </p>
           </div>
         </div>
@@ -120,7 +120,7 @@ export default function Dashboard() {
             {
               step: "1",
               title: "Investors deposit into the fund",
-              desc: "Anyone who passes identity verification can invest. No minimum amount. Your share is represented by fund tokens (FSFT).",
+              desc: "Anyone who passes identity verification can invest. No minimum amount. Deposits are tracked privately as tickets in the housing fund.",
             },
             {
               step: "2",

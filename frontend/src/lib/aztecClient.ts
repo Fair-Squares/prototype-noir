@@ -65,8 +65,8 @@ export async function getBlockNumber(): Promise<number> {
 //
 // These are kept for backward compatibility with aztecLive.ts.
 // They return an object that can call the Aztec node via JSON-RPC.
-// Contract .simulate() calls on this "wallet" will fail gracefully
-// (no ABI encoding without the SDK), so live mode falls back to simulation.
+// Contract .simulate() calls on this "wallet" are not supported
+// (no ABI encoding without the SDK).
 
 let cooldown = false;
 
@@ -96,8 +96,7 @@ export async function getNode() {
 
 /**
  * Returns a minimal shim that satisfies the wallet type used in aztecLive.ts.
- * Contract .simulate() calls on this shim will fail (no ABI encoding),
- * causing live mode to fall back to simulation.
+ * Contract .simulate() calls on this shim will fail (no ABI encoding).
  */
 function createNodeShim() {
   return {

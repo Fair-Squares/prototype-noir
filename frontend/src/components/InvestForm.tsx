@@ -6,49 +6,35 @@ import { formatEURDecimals } from "@/lib/contracts";
 interface InvestFormProps {
   isKYCVerified: boolean;
   isConnected: boolean;
-  eurBalance: number;     // EUR available in wallet to deposit
-  fsftBalance: number;    // FSFT (= EUR) already in fund
+  eurBalance: number; // EUR available in wallet to deposit
   onDeposit: (amount: string) => Promise<void>;
-  onWithdraw: (amount: string) => Promise<void>;
 }
 
 export default function InvestForm({
   isKYCVerified,
   isConnected,
   eurBalance,
-  fsftBalance,
   onDeposit,
-  onWithdraw,
 }: InvestFormProps) {
   const [amount, setAmount] = useState("");
-  const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const availableBalance = mode === "deposit" ? eurBalance : fsftBalance;
-  const maxAmount = availableBalance;
-
-  const quickAmounts = mode === "deposit"
-    ? [1_000, 5_000, 10_000, Math.floor(eurBalance * 0.5), eurBalance].filter(
-        (v, i, a) => v > 0 && a.indexOf(v) === i
-      )
-    : [1_000, 5_000, Math.floor(fsftBalance * 0.25), Math.floor(fsftBalance * 0.5), fsftBalance].filter(
-        (v, i, a) => v > 0 && a.indexOf(v) === i
-      );
+  const maxAmount = eurBalance;
+  const quickAmounts = [1_000, 5_000, 10_000, Math.floor(eurBalance * 0.5), eurBalance].filter(
+    (v, i, a) => v > 0 && a.indexOf(v) === i
+  );
 
   const handleSubmit = async () => {
     setError(null);
     setSuccess(null);
     setLoading(true);
     try {
-      if (mode === "deposit") {
-        await onDeposit(amount);
-        setSuccess(`Deposited ${formatEURDecimals(Number(amount))} → received ${Number(amount)} FSFT`);
-      } else {
-        await onWithdraw(amount);
-        setSuccess(`Withdrew ${Number(amount)} FSFT → received ${formatEURDecimals(Number(amount))}`);
-      }
+      await onDeposit(amount);
+      setSuccess(
+        `Deposited ${formatEURDecimals(Number(amount))}. Your private deposit ticket was updated. FSFT is minted only after governance-approved asset acquisition.`
+      );
       setAmount("");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Transaction failed");
@@ -66,7 +52,9 @@ export default function InvestForm({
           </svg>
         </div>
         <p className="font-semibold mb-1">Connect your wallet to invest</p>
-        <p className="text-sm text-text-3">Your share in the fund is tracked privately by FSFT tokens (1 FSFT = 1 EUR)</p>
+        <p className="text-sm text-text-3">
+          Deposits are tracked privately as tickets. FSFT is minted only after governance-approved asset investments.
+        </p>
       </div>
     );
   }
@@ -103,35 +91,16 @@ export default function InvestForm({
           <p className="text-xs text-text-3 mt-0.5">EURs stablecoin</p>
         </div>
         <div className="rounded-lg bg-fs-mint p-3 border border-transparent">
-          <p className="text-[11px] text-fs-teal-dark font-medium uppercase tracking-wide mb-1">In fund</p>
-          <p className="text-lg font-bold text-fs-teal-dark">{formatEURDecimals(fsftBalance)}</p>
-          <p className="text-xs text-fs-teal-dark/60 mt-0.5">FSFT fund tokens</p>
+          <p className="text-[11px] text-fs-teal-dark font-medium uppercase tracking-wide mb-1">Deposit model</p>
+          <p className="text-sm font-bold text-fs-teal-dark">Private deposit tickets</p>
+          <p className="text-xs text-fs-teal-dark/60 mt-0.5">FSFT is not minted on deposit</p>
         </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-0 border-b border-border">
-        {(["deposit", "withdraw"] as const).map((m) => (
-          <button
-            key={m}
-            onClick={() => { setMode(m); setAmount(""); setError(null); setSuccess(null); }}
-            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px capitalize transition-colors ${
-              mode === m
-                ? "border-fs-teal text-text-1"
-                : "border-transparent text-text-3 hover:text-text-2"
-            }`}
-          >
-            {m === "deposit" ? "Deposit EUR → FSFT" : "Withdraw FSFT → EUR"}
-          </button>
-        ))}
       </div>
 
       {/* Amount input */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label className="text-xs text-text-3 font-medium">
-            {mode === "deposit" ? "EUR amount" : "FSFT amount"}
-          </label>
+          <label className="text-xs text-text-3 font-medium">EUR amount</label>
           <button
             onClick={() => setAmount(String(maxAmount))}
             className="text-xs text-fs-teal hover:underline font-medium"
@@ -169,11 +138,8 @@ export default function InvestForm({
       {/* Exchange rate note */}
       {amount && Number(amount) > 0 && (
         <div className="rounded-lg bg-fs-mint/50 p-3 text-xs text-fs-teal-dark">
-          {mode === "deposit" ? (
-            <>You will receive <strong>{Number(amount).toLocaleString()} FSFT</strong> — representing {formatEURDecimals(Number(amount))} in the fund</>
-          ) : (
-            <>You will receive <strong>{formatEURDecimals(Number(amount))}</strong> — {Number(amount).toLocaleString()} FSFT will be burned</>
-          )}
+          You are depositing <strong>{formatEURDecimals(Number(amount))}</strong> into the housing fund.
+          Your deposit ticket is kept private on Aztec. FSFT will only be minted after governance approves and executes an asset acquisition.
         </div>
       )}
 
@@ -189,15 +155,11 @@ export default function InvestForm({
         disabled={loading || !amount || Number(amount) <= 0 || Number(amount) > maxAmount}
         className="w-full py-3 rounded-lg bg-fs-teal hover:bg-fs-teal-dark text-white font-semibold disabled:opacity-40 disabled:cursor-not-allowed text-sm transition-colors"
       >
-        {loading
-          ? "Processing…"
-          : mode === "deposit"
-          ? `Deposit ${amount ? formatEURDecimals(Number(amount)) : ""}`
-          : `Withdraw ${amount ? formatEURDecimals(Number(amount)) : ""}`}
+        {loading ? "Processing…" : `Deposit ${amount ? formatEURDecimals(Number(amount)) : ""} to Housing Fund`}
       </button>
 
       <p className="text-xs text-text-3 text-center">
-        1 FSFT = 1 EUR · {mode === "deposit" ? "Your balance is private on Aztec" : "Funds return to your EURs wallet"}
+        Deposits are private on Aztec. FSFT is minted only when governance-approved asset purchases are executed.
       </p>
     </div>
   );

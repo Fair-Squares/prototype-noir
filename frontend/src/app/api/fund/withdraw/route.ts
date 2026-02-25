@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isLiveModeEnabled } from "@/lib/aztecLive";
+import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simWithdraw } from "@/lib/simulationStore";
 
 export async function POST(request: NextRequest) {
@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Simulation mode ──────────────────────────────────────────────────────
-  if (!isLiveModeEnabled()) {
+  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
     const result = simWithdraw(address, amount);
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({
@@ -19,11 +19,18 @@ export async function POST(request: NextRequest) {
       txHash: `sim_withdraw_${Date.now()}`,
     });
   }
+  if (!isLiveModeEnabled()) {
+    return NextResponse.json(
+      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
+      { status: 503 }
+    );
+  }
 
   // ── Live mode ────────────────────────────────────────────────────────────
   try {
-    const { getTestAccountWallet } = await import("@/lib/serverWallet");
-    const wallet = await getTestAccountWallet(accountIndex);
+    const { getTestAccount } = await import("@/lib/serverWallet");
+    const account = await getTestAccount(accountIndex);
+    const wallet = account.wallet;
 
     const housingFundAddr = process.env.NEXT_PUBLIC_HOUSING_FUND_ADDRESS ?? "";
     if (!housingFundAddr) {
@@ -41,7 +48,9 @@ export async function POST(request: NextRequest) {
       wallet
     );
 
-    const receipt = await hfContract.methods.withdraw(BigInt(amount)).send().wait();
+    const receipt = await hfContract.methods
+      .withdraw(BigInt(amount))
+      .send({ from: AztecAddress.fromString(account.address) });
 
     return NextResponse.json({
       success: true,

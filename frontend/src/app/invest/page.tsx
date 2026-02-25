@@ -9,7 +9,6 @@ import {
   fetchKYCStatus,
   fetchPortfolio,
   depositFunds,
-  withdrawFunds,
   type FundStats as FundStatsType,
   type PortfolioData,
 } from "@/lib/contracts";
@@ -27,11 +26,11 @@ export default function InvestPage() {
   const refreshAll = useCallback(async () => {
     const [newStats, newPortfolio] = await Promise.all([
       fetchFundStats(),
-      address ? fetchPortfolio(address) : Promise.resolve(null),
+      address ? fetchPortfolio(address, accountIndex) : Promise.resolve(null),
     ]);
     setStats(newStats);
     if (newPortfolio) setPortfolio(newPortfolio);
-  }, [address]);
+  }, [address, accountIndex]);
 
   useEffect(() => { fetchFundStats().then(setStats); }, []);
 
@@ -39,9 +38,9 @@ export default function InvestPage() {
     if (!address) return;
     Promise.all([
       fetchKYCStatus(address).then(setIsKYCVerified),
-      fetchPortfolio(address).then(setPortfolio),
+      fetchPortfolio(address, accountIndex).then(setPortfolio),
     ]);
-  }, [address]);
+  }, [address, accountIndex]);
 
   const handleDeposit = async (amount: string) => {
     if (!address) return;
@@ -55,24 +54,12 @@ export default function InvestPage() {
     }
   };
 
-  const handleWithdraw = async (amount: string) => {
-    if (!address) return;
-    setTxMessage(null);
-    const result = await withdrawFunds(address, parseFloat(amount), accountIndex);
-    if (result.success) {
-      setTxMessage({ type: "success", text: result.message ?? `Withdrew €${Number(amount).toLocaleString()}` });
-      await refreshAll();
-    } else {
-      setTxMessage({ type: "error", text: result.error ?? "Transaction failed" });
-    }
-  };
-
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold mb-1">Invest</h1>
         <p className="text-text-2 text-sm">
-          Deposit EUR into the fund and receive FSFT tokens. 1 FSFT = 1 EUR.
+          Deposit EUR into the housing fund. Your deposit is tracked privately as a ticket on Aztec.
         </p>
       </div>
 
@@ -100,9 +87,7 @@ export default function InvestPage() {
           isKYCVerified={isKYCVerified}
           isConnected={!!address}
           eurBalance={portfolio?.eurBalance ?? 0}
-          fsftBalance={portfolio?.balance ?? 0}
           onDeposit={handleDeposit}
-          onWithdraw={handleWithdraw}
         />
 
         <div className="space-y-4">
@@ -111,7 +96,7 @@ export default function InvestPage() {
             <div className="space-y-3">
               {[
                 { symbol: "EURs", color: "bg-blue-100 text-blue-700", title: "EUR Stablecoin", desc: "Your spendable EUR. Backed 1:1, stored as a private Aztec note — nobody can see your balance." },
-                { symbol: "FSFT", color: "bg-fs-mint text-fs-teal-dark", title: "Fund Token", desc: "Proof of your share in the housing fund. 1 FSFT = 1 EUR invested. Redeemable at any time." },
+                { symbol: "FSFT", color: "bg-fs-mint text-fs-teal-dark", title: "Fund Share Token", desc: "Minted only after governance approves and executes an asset acquisition. Distribution to users follows separate rules." },
               ].map((t) => (
                 <div key={t.symbol} className="flex gap-3">
                   <div className={`rounded-md px-2 py-0.5 text-xs font-bold shrink-0 h-fit mt-0.5 ${t.color}`}>{t.symbol}</div>
@@ -125,11 +110,15 @@ export default function InvestPage() {
           </div>
 
           <div className="rounded-xl bg-card p-5">
-            <h3 className="font-semibold mb-3 text-sm">What happens to your EUR?</h3>
+            <h3 className="font-semibold mb-3 text-sm">What happens to your EUR deposit?</h3>
             <div className="space-y-2 text-xs text-text-2">
-              {[["40%", "Placed in DeFi vault", "Earns ~3% APY"], ["49%", "Reserved for housing", "Next property purchase"], ["11%", "Available liquidity", "Instant withdrawals"]].map(([pct, label, sub]) => (
+              {[
+                ["1", "Sent to the housing fund", "Your amount is recorded privately as a deposit ticket."],
+                ["2", "Governance decides on assets", "FSFT is not minted at deposit time."],
+                ["3", "FSFT minting happens later", "Only after a proposal passes and the asset purchase is executed."],
+              ].map(([step, label, sub]) => (
                 <div key={label} className="flex items-start gap-2">
-                  <span className="font-bold text-fs-teal shrink-0 w-8">{pct}</span>
+                  <span className="font-bold text-fs-teal shrink-0 w-8">{step}</span>
                   <div><span className="font-medium text-text-1">{label}</span><span className="text-text-3 ml-1">— {sub}</span></div>
                 </div>
               ))}

@@ -11,19 +11,18 @@
  *
  * Initialization:
  *   1. Creates an ephemeral in-process PXE connected to http://aztec:8080
- *   2. Derives test account key material from INITIAL_TEST_* constants
- *   3. Registers test0 (admin) + test1 + test2 accounts in the PXE
+ *   2. Registers local-network test accounts in the embedded wallet/PXE
  *
  * All subsequent calls reuse the cached wallet (module-level singleton).
  *
  * Usage in API routes:
  *   import { getServerWallet, getTestAccountWallet } from '@/lib/serverWallet';
- *   const wallet = await getTestAccountWallet(0); // test0 = admin
+ *   const { wallet, address } = await getTestAccount(0); // test0 = admin
  *   const contract = await HousingFundContract.at(addr, wallet);
- *   await contract.methods.deposit(amount).send().wait();
+ *   await contract.methods.deposit(amount).send({ from: AztecAddress.fromString(address) });
  */
 
-import type { Wallet } from "@aztec/aztec.js";
+import type { Wallet } from "@aztec/aztec.js/wallet";
 
 const AZTEC_NODE_URL = "http://aztec:8080";
 
@@ -32,12 +31,21 @@ const AZTEC_NODE_URL = "http://aztec:8080";
 interface AccountEntry {
   index: number;
   address: string;
-  wallet: Wallet;
+  wallet: Wallet; // shared embedded wallet; sender is selected via `from` on interactions
 }
 
 interface WalletSingleton {
   baseWallet: Wallet; // the embedded wallet (has PXE, account management)
   accounts: AccountEntry[];
+}
+
+interface WalletWithSchnorrAccounts extends Wallet {
+  createSchnorrAccount: (
+    secret: unknown,
+    salt: unknown,
+    signingKey?: unknown,
+    alias?: string
+  ) => Promise<{ address: { toString(): string } }>;
 }
 
 // ── Module-level cache ─────────────────────────────────────────────────────────
@@ -48,15 +56,8 @@ let initPromise: Promise<WalletSingleton> | null = null;
 
 async function initWallet(): Promise<WalletSingleton> {
   // Dynamic imports — server only, webpack externals prevent bundling
-  // @aztec/aztec.js has NO main export — always use specific subpaths:
-  //   AccountManager → @aztec/aztec.js/wallet
-  //   Contract       → @aztec/aztec.js/contracts
-  //   loadContractArtifact → @aztec/aztec.js/abi
-  //   AztecAddress   → @aztec/aztec.js/addresses
   const { EmbeddedWallet } = await import("@aztec/wallets/embedded");
   const { getInitialTestAccountsData } = await import("@aztec/accounts/testing");
-  const { AccountManager } = await import("@aztec/aztec.js/wallet");
-  const { SchnorrAccountContract } = await import("@aztec/accounts/schnorr");
 
   // 1. Create in-process PXE → Aztec node
   console.log("[serverWallet] Creating NodeEmbeddedWallet...");
@@ -65,28 +66,89 @@ async function initWallet(): Promise<WalletSingleton> {
   });
   console.log("[serverWallet] PXE ready.");
 
-  // 2. Get deterministic test account key material (no network needed)
-  console.log("[serverWallet] Loading test account data...");
-  const accountsData = await getInitialTestAccountsData();
-  console.log(`[serverWallet] Got ${accountsData.length} test accounts.`);
+  // 2. Register local-network test accounts in the wallet/PXE.
+  // AccountManager.register() was removed; use createSchnorrAccount instead.
+  console.log("[serverWallet] Loading deterministic test account data...");
+  const testAccounts = await getInitialTestAccountsData();
+  console.log(`[serverWallet] Got ${testAccounts.length} test accounts.`);
 
-  // 3. Register each account in the PXE and get per-account wallets
   const accounts: AccountEntry[] = [];
-  for (const [i, data] of accountsData.entries()) {
-    const accountContract = new SchnorrAccountContract(data.signingKey);
-    const mgr = await AccountManager.create(
-      baseWallet,
-      data.secret,
-      accountContract,
-      data.salt
+  const walletWithAccounts = baseWallet as WalletWithSchnorrAccounts;
+  for (const [i, account] of testAccounts.entries()) {
+    const created = await walletWithAccounts.createSchnorrAccount(
+      account.secret,
+      account.salt,
+      account.signingKey
     );
-
-    // register() adds the account to PXE so private notes can be decrypted
-    const acctWallet = await mgr.register();
-    const address = acctWallet.getAddress().toString();
-
-    accounts.push({ index: i, address, wallet: acctWallet });
+    const address = created.address.toString();
+    accounts.push({ index: i, address, wallet: baseWallet });
     console.log(`[serverWallet] Registered test${i}: ${address}`);
+  }
+
+  // 3. Register deployed app contracts in PXE so utility/public calls can run
+  // without "Unknown contract ... add it to PXE".
+  try {
+    const { createAztecNodeClient } = await import("@aztec/aztec.js/node");
+    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const node = createAztecNodeClient(AZTEC_NODE_URL);
+
+    const registerIfPresent = async (
+      label: string,
+      envAddress: string,
+      artifactJsonLoader: () => Promise<unknown>
+    ) => {
+      if (!envAddress) return;
+      try {
+        const address = AztecAddress.fromString(envAddress);
+        const instance = await node.getContract(address);
+        if (!instance) {
+          console.warn(`[serverWallet] ${label} not found on node: ${envAddress}`);
+          return;
+        }
+        const artifactJson = await artifactJsonLoader();
+        const artifact = loadContractArtifact(artifactJson as Parameters<typeof loadContractArtifact>[0]);
+        await baseWallet.registerContract(instance, artifact);
+        console.log(`[serverWallet] Registered ${label} in PXE: ${envAddress}`);
+      } catch (err) {
+        console.warn(`[serverWallet] Failed to register ${label} in PXE:`, err);
+      }
+    };
+
+    await Promise.all([
+      registerIfPresent(
+        "governance",
+        process.env.NEXT_PUBLIC_GOVERNANCE_ADDRESS ?? "",
+        async () => (await import("@/artifacts/governance-Governance.json")).default
+      ),
+      registerIfPresent(
+        "housing_fund",
+        process.env.NEXT_PUBLIC_HOUSING_FUND_ADDRESS ?? "",
+        async () => (await import("@/artifacts/housing_fund-HousingFund.json")).default
+      ),
+      registerIfPresent(
+        "fund_token",
+        process.env.NEXT_PUBLIC_FUND_TOKEN_ADDRESS ?? "",
+        async () => (await import("@/artifacts/fund_token-FundToken.json")).default
+      ),
+      registerIfPresent(
+        "eur_token",
+        process.env.NEXT_PUBLIC_EUR_TOKEN_ADDRESS ?? "",
+        async () => (await import("@/artifacts/fund_token-FundToken.json")).default
+      ),
+      registerIfPresent(
+        "kyc_verifier",
+        process.env.NEXT_PUBLIC_KYC_VERIFIER_ADDRESS ?? "",
+        async () => (await import("@/artifacts/kyc_verifier-KYCVerifier.json")).default
+      ),
+      registerIfPresent(
+        "defi_vault",
+        process.env.NEXT_PUBLIC_DEFI_VAULT_ADDRESS ?? "",
+        async () => (await import("@/artifacts/defi_vault-DeFiVault.json")).default
+      ),
+    ]);
+  } catch (err) {
+    console.warn("[serverWallet] Contract registration bootstrap failed:", err);
   }
 
   return { baseWallet, accounts };
@@ -114,12 +176,19 @@ export async function getServerWallet(): Promise<WalletSingleton> {
  * accountIndex: 0 = test0 (admin), 1 = test1, 2 = test2
  */
 export async function getTestAccountWallet(accountIndex = 0): Promise<Wallet> {
+  const entry = await getTestAccount(accountIndex);
+  return entry.wallet;
+}
+
+export async function getTestAccount(
+  accountIndex = 0
+): Promise<{ index: number; address: string; isAdmin: boolean; wallet: Wallet }> {
   const { accounts } = await getServerWallet();
   const entry = accounts.find((a) => a.index === accountIndex);
   if (!entry) {
     throw new Error(`Test account ${accountIndex} not found. Available: ${accounts.map((a) => a.index).join(", ")}`);
   }
-  return entry.wallet;
+  return { index: entry.index, address: entry.address, isAdmin: entry.index === 0, wallet: entry.wallet };
 }
 
 /**

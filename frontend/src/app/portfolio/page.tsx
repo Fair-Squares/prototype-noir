@@ -8,6 +8,7 @@ import { fetchPortfolio, formatEUR, type PortfolioData } from "@/lib/contracts";
 export default function PortfolioPage() {
   const { activeAccount } = useWallet();
   const address = activeAccount?.address ?? null;
+  const accountIndex = activeAccount?.index ?? 0;
 
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -16,7 +17,7 @@ export default function PortfolioPage() {
   const loadPortfolio = async (addr: string) => {
     setLoading(true);
     try {
-      setPortfolio(await fetchPortfolio(addr));
+      setPortfolio(await fetchPortfolio(addr, accountIndex));
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
@@ -24,7 +25,7 @@ export default function PortfolioPage() {
   useEffect(() => {
     if (address) loadPortfolio(address);
     else setPortfolio(null);
-  }, [address]);
+  }, [address, accountIndex]);
 
   const handleTopUp = async () => {
     if (!address) return;

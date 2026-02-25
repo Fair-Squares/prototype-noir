@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isLiveModeEnabled } from "@/lib/aztecLive";
+import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simGetKYCStatus } from "@/lib/simulationStore";
 
 export async function GET(request: NextRequest) {
@@ -11,8 +11,14 @@ export async function GET(request: NextRequest) {
   }
 
   // ── Simulation mode ──────────────────────────────────────────────────────
-  if (!isLiveModeEnabled()) {
+  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
     return NextResponse.json({ verified: simGetKYCStatus(address), source: "simulation" });
+  }
+  if (!isLiveModeEnabled()) {
+    return NextResponse.json(
+      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
+      { status: 503 }
+    );
   }
 
   // ── Live mode: call is_verified() utility function on KYCVerifier ────────
@@ -21,8 +27,9 @@ export async function GET(request: NextRequest) {
     if (!kycAddr) return NextResponse.json({ verified: false, source: "live" });
 
     // Use admin wallet to query (utility functions are read-only, no signing needed)
-    const { getTestAccountWallet } = await import("@/lib/serverWallet");
-    const wallet = await getTestAccountWallet(0);
+    const { getTestAccount } = await import("@/lib/serverWallet");
+    const admin = await getTestAccount(0);
+    const wallet = admin.wallet;
 
     const { Contract } = await import("@aztec/aztec.js/contracts");
     const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
@@ -34,11 +41,11 @@ export async function GET(request: NextRequest) {
     // is_verified is #[external("utility")] unconstrained — call via simulate()
     const verified = await kycContract.methods
       .is_verified(AztecAddress.fromString(address))
-      .simulate();
+      .simulate({ from: AztecAddress.fromString(admin.address) });
 
     return NextResponse.json({ verified: Boolean(verified), source: "live" });
   } catch (error) {
-    console.warn("[kyc/status] live read failed, falling back to simulation:", error);
-    return NextResponse.json({ verified: simGetKYCStatus(address), source: "simulation", fallback: true });
+    console.error("[kyc/status] live read failed:", error);
+    return NextResponse.json({ error: "Failed to read live KYC status" }, { status: 500 });
   }
 }

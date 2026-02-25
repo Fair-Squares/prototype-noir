@@ -148,6 +148,7 @@ export function simGetPortfolio(address: string) {
     balance: acct.fsftBalance,
     eurBalance: acct.eurBalance,
     depositedAmount: acct.depositedAmount,
+    totalFundDeposits: fund.totalDeposits,
     totalSupply: fund.fsftTotalSupply,
     sharePercent: Math.round(sharePercent * 100) / 100,
     estimatedYield: Math.round(acct.depositedAmount * 0.03),
