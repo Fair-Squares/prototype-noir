@@ -31,14 +31,15 @@ export async function POST(request: NextRequest) {
     const adminWallet = await getTestAccountWallet(0);
     void accountIndex; // accountIndex is the user's index, but admin signs the tx
 
-    const { Contract, loadContractArtifact } = await import("@aztec/aztec.js");
-    const { AztecAddress } = await import("@aztec/stdlib");
+    const { Contract } = await import("@aztec/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
     const KycArtifactJson = (await import("@/artifacts/kyc_verifier-KYCVerifier.json")).default;
     const kycArtifact = loadContractArtifact(KycArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, adminWallet);
 
     const receipt = await kycContract.methods
-      .verify(AztecAddress.fromString(userAddress))
+      .register_kyc(AztecAddress.fromString(userAddress))
       .send()
       .wait();
 

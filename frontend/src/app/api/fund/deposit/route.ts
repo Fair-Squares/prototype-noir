@@ -32,37 +32,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "NEXT_PUBLIC_HOUSING_FUND_ADDRESS not set" }, { status: 500 });
     }
 
-    // Step 1: Burn EUR from caller's private balance (if EUR token is deployed)
+    // @aztec/aztec.js has no main export — use specific subpaths
+    const { Contract } = await import("@aztec/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+
+    // Step 1: Transfer EUR from caller to housing fund (if EUR token deployed)
     if (eurTokenAddr) {
       try {
-        const { HousingFund: _hf, FundToken } = await import("@aztec/aztec.js");
-        void _hf; // suppress unused warning
-        const { AztecAddress } = await import("@aztec/stdlib");
-        const { loadContractArtifact } = await import("@aztec/aztec.js");
         const EurArtifactJson = (await import("@/artifacts/fund_token-FundToken.json")).default;
         const eurArtifact = loadContractArtifact(EurArtifactJson as Parameters<typeof loadContractArtifact>[0]);
-        void FundToken;
-        const eurContract = await (await import("@aztec/aztec.js")).Contract.at(
-          AztecAddress.fromString(eurTokenAddr),
-          eurArtifact,
-          wallet
-        );
-        // burn EUR (transfer to zero / use public_to_private in reverse — just use transfer to admin as burn stand-in)
-        // For prototype: call transfer_public to housing fund addr (simulating EUR movement)
-        await eurContract.methods.transfer_public(
-          AztecAddress.fromString(housingFundAddr),
-          BigInt(amount)
-        ).send().wait();
+        const eurContract = await Contract.at(AztecAddress.fromString(eurTokenAddr), eurArtifact, wallet);
+        await eurContract.methods
+          .transfer_public(AztecAddress.fromString(housingFundAddr), BigInt(amount))
+          .send().wait();
       } catch (eurErr) {
-        console.warn("[deposit] EUR burn failed (continuing with deposit counter only):", eurErr);
+        console.warn("[deposit] EUR transfer failed (continuing with counter-only deposit):", eurErr);
       }
     }
 
     // Step 2: Increment housing fund deposit counter
-    const { Contract, loadContractArtifact: lca } = await import("@aztec/aztec.js");
-    const { AztecAddress } = await import("@aztec/stdlib");
     const HfArtifactJson = (await import("@/artifacts/housing_fund-HousingFund.json")).default;
-    const hfArtifact = lca(HfArtifactJson as Parameters<typeof lca>[0]);
+    const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const hfContract = await Contract.at(
       AztecAddress.fromString(housingFundAddr),
       hfArtifact,

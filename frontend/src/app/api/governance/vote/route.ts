@@ -27,8 +27,9 @@ export async function POST(request: NextRequest) {
     const govAddr = process.env.NEXT_PUBLIC_GOVERNANCE_ADDRESS ?? "";
     if (!govAddr) return NextResponse.json({ error: "NEXT_PUBLIC_GOVERNANCE_ADDRESS not set" }, { status: 500 });
 
-    const { Contract, loadContractArtifact } = await import("@aztec/aztec.js");
-    const { AztecAddress } = await import("@aztec/stdlib");
+    const { Contract } = await import("@aztec/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
     const GovArtifactJson = (await import("@/artifacts/governance-Governance.json")).default;
     const govArtifact = loadContractArtifact(GovArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const govContract = await Contract.at(AztecAddress.fromString(govAddr), govArtifact, wallet);

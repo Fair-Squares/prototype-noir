@@ -30,8 +30,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "NEXT_PUBLIC_HOUSING_FUND_ADDRESS not set" }, { status: 500 });
     }
 
-    const { Contract, loadContractArtifact } = await import("@aztec/aztec.js");
-    const { AztecAddress } = await import("@aztec/stdlib");
+    const { Contract } = await import("@aztec/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
     const HfArtifactJson = (await import("@/artifacts/housing_fund-HousingFund.json")).default;
     const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const hfContract = await Contract.at(

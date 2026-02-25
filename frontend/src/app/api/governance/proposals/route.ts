@@ -72,8 +72,9 @@ export async function POST(request: NextRequest) {
     const govAddr = process.env.NEXT_PUBLIC_GOVERNANCE_ADDRESS ?? "";
     if (!govAddr) return NextResponse.json({ error: "NEXT_PUBLIC_GOVERNANCE_ADDRESS not set" }, { status: 500 });
 
-    const { Contract, loadContractArtifact } = await import("@aztec/aztec.js");
-    const { AztecAddress } = await import("@aztec/stdlib");
+    const { Contract } = await import("@aztec/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
     const GovArtifactJson = (await import("@/artifacts/governance-Governance.json")).default;
     const govArtifact = loadContractArtifact(GovArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const govContract = await Contract.at(AztecAddress.fromString(govAddr), govArtifact, wallet);
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
       if (!title || !amount) {
         return NextResponse.json({ error: "title and amount required" }, { status: 400 });
       }
-      // Hash the title as a Field value (simple: use title bytes as bigint)
+      // Encode title as a Field (pad to 32 bytes)
       const descHashBytes = Buffer.from(title.slice(0, 31), "utf-8");
       const descHash = BigInt("0x" + descHashBytes.toString("hex").padStart(64, "0"));
       const receipt = await govContract.methods
@@ -111,14 +112,13 @@ export async function POST(request: NextRequest) {
         .send()
         .wait();
 
-      // Step 2: mint FSFT via fund_token (test0 is still admin)
+      // Step 2: mint FSFT via fund_token — test0 is still admin (set_admin(housing_fund) removed from bootstrap)
       const fundTokenAddr = process.env.NEXT_PUBLIC_FUND_TOKEN_ADDRESS ?? "";
       const housingFundAddr = process.env.NEXT_PUBLIC_HOUSING_FUND_ADDRESS ?? "";
       if (fundTokenAddr && housingFundAddr) {
         try {
           const FtArtifactJson = (await import("@/artifacts/fund_token-FundToken.json")).default;
           const ftArtifact = loadContractArtifact(FtArtifactJson as Parameters<typeof loadContractArtifact>[0]);
-          // Use test0 (admin) wallet to mint FSFT
           const adminWallet = await getTestAccountWallet(0);
           const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, adminWallet);
           await ftContract.methods

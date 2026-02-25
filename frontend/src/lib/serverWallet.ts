@@ -48,9 +48,14 @@ let initPromise: Promise<WalletSingleton> | null = null;
 
 async function initWallet(): Promise<WalletSingleton> {
   // Dynamic imports — server only, webpack externals prevent bundling
+  // @aztec/aztec.js has NO main export — always use specific subpaths:
+  //   AccountManager → @aztec/aztec.js/wallet
+  //   Contract       → @aztec/aztec.js/contracts
+  //   loadContractArtifact → @aztec/aztec.js/abi
+  //   AztecAddress   → @aztec/aztec.js/addresses
   const { EmbeddedWallet } = await import("@aztec/wallets/embedded");
   const { getInitialTestAccountsData } = await import("@aztec/accounts/testing");
-  const { AccountManager } = await import("@aztec/aztec.js");
+  const { AccountManager } = await import("@aztec/aztec.js/wallet");
   const { SchnorrAccountContract } = await import("@aztec/accounts/schnorr");
 
   // 1. Create in-process PXE → Aztec node
