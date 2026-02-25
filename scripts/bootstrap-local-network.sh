@@ -147,23 +147,23 @@ deploy_contracts() {
   ADMIN_ADDR=$(grep -oP 'Address:\s+\K0x[0-9a-fA-F]+' "$TMPDIR/import.log" | head -1)
   log "Admin address: ${ADMIN_ADDR:-unknown}"
 
+  # Deploy a contract; echoes full wallet output to stderr (visible in docker logs)
+  # and returns the deployed address on stdout for capture via $().
   _deploy() {
     local label=$1 artifact=$2
     shift 2
     log "Deploying ${label}..."
-    # Run deploy; tee to stderr so errors are visible in docker logs
+    # tee /dev/stderr: streams all wallet output to stderr for visibility
+    # grep then captures just the address line on stdout for $() capture
     $AZTEC_WALLET_BIN deploy \
       "${ROOT_DIR}/contracts/${artifact}" \
       --init constructor \
       --from accounts:test0 \
       "$@" \
-      -a "${label}" 2>&1 | tee "$TMPDIR/${label}.log" >&2
-    local rc=${PIPESTATUS[0]}
-    if [ $rc -ne 0 ]; then
-      die "${label} deploy failed"
-    fi
-    # Extract deployed address
-    grep -oP '(?i)contract\s+deployed\s+at\s+\K0x[0-9a-fA-F]+' "$TMPDIR/${label}.log" | tail -1
+      -a "${label}" 2>&1 \
+      | tee /dev/stderr \
+      | grep -oP '(?i)contract\s+deployed\s+at\s+\K0x[0-9a-fA-F]+' \
+      | tail -1
   }
 
   KYC_ADDR=$(_deploy "kyc_verifier" \
@@ -186,16 +186,12 @@ deploy_contracts() {
     --args accounts:test0)
   [ -z "$FUND_ADDR" ] && die "housing_fund deploy failed — no address in output"
 
-  # Governance needs actual addresses (aliases not valid as --args values)
   log "DEBUG: FUND_ADDR='${FUND_ADDR}' ADMIN_ADDR='${ADMIN_ADDR}'"
-  log "Deploying governance..."
-  $AZTEC_WALLET_BIN deploy \
-    "${ROOT_DIR}/contracts/governance/target/governance-Governance.json" \
-    --init constructor \
-    --from accounts:test0 \
-    --args "${FUND_ADDR}" "${ADMIN_ADDR}" \
-    -a governance 2>&1 | tee "$TMPDIR/governance.log" >&2
-  GOV_ADDR=$(grep -oP '(?i)contract\s+deployed\s+at\s+\K0x[0-9a-fA-F]+' "$TMPDIR/governance.log" | tail -1)
+
+  # Governance: both args are actual addresses (aliases not valid in --args)
+  GOV_ADDR=$(_deploy "governance" \
+    "governance/target/governance-Governance.json" \
+    --args "${FUND_ADDR}" "${ADMIN_ADDR}")
   [ -z "$GOV_ADDR" ] && die "governance deploy failed — no address in output"
 
   log "Deployed addresses:"
