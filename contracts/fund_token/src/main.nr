@@ -13,7 +13,7 @@ use aztec::macros::aztec;
 pub contract FundToken {
     use aztec::{
         macros::{
-            functions::{external, initializer, only_self, view},
+            functions::{external, initializer, only_self},
             storage::storage,
         },
         messages::message_delivery::MessageDelivery,
@@ -186,21 +186,18 @@ pub contract FundToken {
 
     // -- View Functions ---------------------------------------------------
 
-    #[external("public")]
-    #[view]
-    fn total_supply() -> pub u64 {
+    #[external("utility")]
+    unconstrained fn total_supply() -> pub u64 {
         self.storage.total_supply.read()
     }
 
-    #[external("public")]
-    #[view]
-    fn public_balance_of(owner: AztecAddress) -> pub u64 {
+    #[external("utility")]
+    unconstrained fn public_balance_of(owner: AztecAddress) -> pub u64 {
         self.storage.public_balances.at(owner).read()
     }
 
-    #[external("public")]
-    #[view]
-    fn get_admin() -> pub AztecAddress {
+    #[external("utility")]
+    unconstrained fn get_admin() -> pub AztecAddress {
         self.storage.admin.read()
     }
 
