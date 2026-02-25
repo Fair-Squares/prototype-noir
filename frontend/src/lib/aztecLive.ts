@@ -13,10 +13,11 @@ import { getWallet, getPxeUrl } from "./aztecClient";
 import type { AztecAddress } from "@aztec/aztec.js/addresses";
 
 export function isLiveModeEnabled(): boolean {
-  return (
-    process.env.AZTEC_LIVE === "true" ||
-    process.env.NEXT_PUBLIC_SIMULATION === "false"
-  );
+  // IMPORTANT: Use only non-NEXT_PUBLIC_ variables here.
+  // NEXT_PUBLIC_* values are baked into the bundle at build time by webpack,
+  // so runtime .env.local changes don't affect them in server code.
+  // AZTEC_LIVE is a true runtime server-only env var.
+  return process.env.AZTEC_LIVE === "true";
 }
 
 // -- Contract addresses from env (set by bootstrap) ---------------------------
