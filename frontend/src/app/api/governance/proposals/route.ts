@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getProposals, createProposal } from "@/lib/simulation";
+import { isLiveModeEnabled, getLiveProposals } from "@/lib/aztecLive";
 
 export async function GET() {
+  if (isLiveModeEnabled()) {
+    try {
+      const proposals = await getLiveProposals();
+      return NextResponse.json({ proposals, source: "aztec" });
+    } catch (error) {
+      console.error("[governance/proposals] live mode failed, falling back to simulation", error);
+    }
+  }
+
   const proposals = getProposals();
-  return NextResponse.json({ proposals });
+  return NextResponse.json({ proposals, source: "simulation" });
 }
 
 export async function POST(request: NextRequest) {
