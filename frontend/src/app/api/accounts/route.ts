@@ -19,7 +19,7 @@ export interface TestAccount {
   isAdmin: boolean;
 }
 
-// Fast path: reads account addresses from env vars (written by bootstrap)
+// Fallback path: reads account addresses from env vars (written by bootstrap)
 function getAccountsFromEnv(): TestAccount[] {
   const addrs = [
     process.env.NEXT_PUBLIC_TEST0_ADDRESS ?? process.env.NEXT_PUBLIC_ADMIN_ADDRESS ?? "",
@@ -49,27 +49,6 @@ function getAccountsFromEnv(): TestAccount[] {
   return accounts;
 }
 
-// Cached computed accounts from the server wallet
-let computedAccounts: TestAccount[] | null = null;
-
-// Background init — computes all test addresses from key derivation
-async function warmServerWallet() {
-  if (computedAccounts !== null) return;
-  try {
-    const { getTestAccountAddresses } = await import("@/lib/serverWallet");
-    const addrs = await getTestAccountAddresses();
-    computedAccounts = addrs.map((a) => ({
-      index: a.index,
-      alias: a.index === 0 ? "test0 (admin)" : `test${a.index}`,
-      address: a.address,
-      isAdmin: a.isAdmin,
-    }));
-    console.log("[api/accounts] Server wallet ready, account addresses cached.");
-  } catch (e) {
-    console.warn("[api/accounts] Server wallet init failed (non-fatal):", e);
-  }
-}
-
 export async function GET() {
   // ── Simulation mode ────────────────────────────────────────────────────
   if (!isLiveModeEnabled() && isVercelSimulationMode()) {
@@ -82,9 +61,20 @@ export async function GET() {
     );
   }
 
-  // ── Live mode: env-based fast path + background wallet init ───────────
-  warmServerWallet().catch(() => {});
-
-  const accounts = computedAccounts ?? getAccountsFromEnv();
-  return NextResponse.json({ accounts, initialized: computedAccounts !== null, source: "live" });
+  // ── Live mode: always derive from serverWallet for address correctness ─
+  try {
+    const { getTestAccountAddresses } = await import("@/lib/serverWallet");
+    const addrs = await getTestAccountAddresses();
+    const accounts = addrs.map((a) => ({
+      index: a.index,
+      alias: a.index === 0 ? "test0 (admin)" : `test${a.index}`,
+      address: a.address,
+      isAdmin: a.isAdmin,
+    }));
+    return NextResponse.json({ accounts, initialized: true, source: "live" });
+  } catch (e) {
+    console.warn("[api/accounts] serverWallet failed, using env fallback:", e);
+    const accounts = getAccountsFromEnv();
+    return NextResponse.json({ accounts, initialized: false, source: "live" });
+  }
 }

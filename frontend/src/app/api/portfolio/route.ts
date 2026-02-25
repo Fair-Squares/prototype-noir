@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
     const { Contract } = await import("@aztec/aztec.js/contracts");
     const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     const selected = await getTestAccount(accountIndex);
     const wallet = selected.wallet;
@@ -60,30 +61,34 @@ export async function GET(request: NextRequest) {
     let tokenPriceBps = 0;
 
     if (eurTokenAddr) {
-      const EurJson = (await import("@/artifacts/fund_token-FundToken.json")).default;
+      const EurJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
       const eurArtifact = loadContractArtifact(EurJson as Parameters<typeof loadContractArtifact>[0]);
       const eurContract = await Contract.at(AztecAddress.fromString(eurTokenAddr), eurArtifact, wallet);
+      let privateEur = 0;
+      let publicEur = 0;
       if (isOwnAccount) {
         try {
-          eurBalance = Number(await eurContract.methods.private_balance_of(ownerAddr).simulate({ from: selectedAddr }));
-        } catch {
-          eurBalance = Number(await eurContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr }));
-        }
+          privateEur = Number(await eurContract.methods.private_balance_of(ownerAddr).simulate({ from: selectedAddr }));
+        } catch {}
+        publicEur = Number(await eurContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr }));
+        eurBalance = privateEur + publicEur;
       } else {
         eurBalance = Number(await eurContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr }));
       }
     }
 
     if (fundTokenAddr) {
-      const FtJson = (await import("@/artifacts/fund_token-FundToken.json")).default;
+      const FtJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
       const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);
       const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, wallet);
+      let privateFsft = 0;
+      let publicFsft = 0;
       if (isOwnAccount) {
         try {
-          fsftBalance = Number(await ftContract.methods.private_balance_of(ownerAddr).simulate({ from: selectedAddr }));
-        } catch {
-          fsftBalance = Number(await ftContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr }));
-        }
+          privateFsft = Number(await ftContract.methods.private_balance_of(ownerAddr).simulate({ from: selectedAddr }));
+        } catch {}
+        publicFsft = Number(await ftContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr }));
+        fsftBalance = privateFsft + publicFsft;
       } else {
         fsftBalance = Number(await ftContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr }));
       }
@@ -91,7 +96,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (housingFundAddr) {
-      const HfJson = (await import("@/artifacts/housing_fund-HousingFund.json")).default;
+      const HfJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
       const hfArtifact = loadContractArtifact(HfJson as Parameters<typeof loadContractArtifact>[0]);
       const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, wallet);
 

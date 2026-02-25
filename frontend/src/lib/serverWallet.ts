@@ -58,6 +58,7 @@ async function initWallet(): Promise<WalletSingleton> {
   // Dynamic imports — server only, webpack externals prevent bundling
   const { EmbeddedWallet } = await import("@aztec/wallets/embedded");
   const { getInitialTestAccountsData } = await import("@aztec/accounts/testing");
+  const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
   // 1. Create in-process PXE → Aztec node
   console.log("[serverWallet] Creating NodeEmbeddedWallet...");
@@ -119,32 +120,32 @@ async function initWallet(): Promise<WalletSingleton> {
       registerIfPresent(
         "governance",
         process.env.NEXT_PUBLIC_GOVERNANCE_ADDRESS ?? "",
-        async () => (await import("@/artifacts/governance-Governance.json")).default
+        async () => loadGeneratedArtifactJson("governance-Governance.json")
       ),
       registerIfPresent(
         "housing_fund",
         process.env.NEXT_PUBLIC_HOUSING_FUND_ADDRESS ?? "",
-        async () => (await import("@/artifacts/housing_fund-HousingFund.json")).default
+        async () => loadGeneratedArtifactJson("housing_fund-HousingFund.json")
       ),
       registerIfPresent(
         "fund_token",
         process.env.NEXT_PUBLIC_FUND_TOKEN_ADDRESS ?? "",
-        async () => (await import("@/artifacts/fund_token-FundToken.json")).default
+        async () => loadGeneratedArtifactJson("fund_token-FundToken.json")
       ),
       registerIfPresent(
         "eur_token",
         process.env.NEXT_PUBLIC_EUR_TOKEN_ADDRESS ?? "",
-        async () => (await import("@/artifacts/fund_token-FundToken.json")).default
+        async () => loadGeneratedArtifactJson("fund_token-FundToken.json")
       ),
       registerIfPresent(
         "kyc_verifier",
         process.env.NEXT_PUBLIC_KYC_VERIFIER_ADDRESS ?? "",
-        async () => (await import("@/artifacts/kyc_verifier-KYCVerifier.json")).default
+        async () => loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json")
       ),
       registerIfPresent(
         "defi_vault",
         process.env.NEXT_PUBLIC_DEFI_VAULT_ADDRESS ?? "",
-        async () => (await import("@/artifacts/defi_vault-DeFiVault.json")).default
+        async () => loadGeneratedArtifactJson("defi_vault-DeFiVault.json")
       ),
     ]);
   } catch (err) {

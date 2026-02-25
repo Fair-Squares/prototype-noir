@@ -48,7 +48,7 @@ export default function PortfolioPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold mb-1">My Account</h1>
+        <h1 className="text-2xl font-brand-black mb-1">My Account</h1>
         <p className="text-text-2 text-sm">Your EUR wallet, on-chain deposit ticket, and FSFT distribution/valuation state.</p>
       </div>
 
@@ -81,7 +81,7 @@ export default function PortfolioPage() {
             </div>
           )}
 
-          <div className="rounded-xl bg-card p-6">
+          <div className="rounded-xl bg-card p-6 border border-border">
             <h2 className="font-semibold text-text-1 mb-4">Transactions</h2>
             <div className="text-sm text-text-3 text-center py-6">
               <p>Your deposit and withdrawal history will appear here.</p>

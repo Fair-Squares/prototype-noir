@@ -41,7 +41,8 @@ export async function POST(request: NextRequest) {
     const { Contract } = await import("@aztec/aztec.js/contracts");
     const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
-    const KycArtifactJson = (await import("@/artifacts/kyc_verifier-KYCVerifier.json")).default;
+    const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
+    const KycArtifactJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
     const kycArtifact = loadContractArtifact(KycArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, adminWallet);
 

@@ -43,8 +43,10 @@ export default function ProposalCard({
   const canFinalize = isActive && isExpired && !!onFinalize && !!userAddress;
   const canExecute = isPassed && !!onExecute && !!userAddress;
 
+  const step = isExecuted ? 3 : isPassed ? 2 : isActive ? 1 : 2;
+
   return (
-    <div className={`rounded-xl bg-card p-5 ${isExecuted ? "ring-1 ring-purple-200" : ""}`}>
+    <div className={`rounded-xl bg-card p-5 border border-border ${isExecuted ? "ring-1 ring-purple-200" : ""}`}>
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 mr-3">
           <h3 className="font-semibold">{proposal.title || `Proposal #${proposal.id}`}</h3>
@@ -68,7 +70,19 @@ export default function ProposalCard({
         </span>
       </div>
 
-      {/* Vote tally */}
+      <div className="mb-4">
+        <div className="flex items-center gap-2">
+          <div className={`h-1.5 rounded-full flex-1 ${step >= 1 ? "bg-fs-teal" : "bg-border"}`} />
+          <div className={`h-1.5 rounded-full flex-1 ${step >= 2 ? "bg-blue-500" : "bg-border"}`} />
+          <div className={`h-1.5 rounded-full flex-1 ${step >= 3 ? "bg-purple-500" : "bg-border"}`} />
+        </div>
+        <div className="flex justify-between text-[10px] text-text-3 mt-1">
+          <span>Active</span>
+          <span>Finalized</span>
+          <span>Executed</span>
+        </div>
+      </div>
+
       <div className="mb-3">
         <div className="flex justify-between text-xs font-medium mb-1.5">
           <span className="text-fs-teal">Yes: {proposal.yesVotes}</span>
@@ -87,7 +101,6 @@ export default function ProposalCard({
         )}
       </div>
 
-      {/* Deadline */}
       <p className="text-xs text-text-3 mb-4">
         {hasBlockTiming && isActive && !isExpired
           ? `Voting closes at block ${deadlineBlock} (${blocksLeft} blocks left)`
@@ -102,14 +115,12 @@ export default function ProposalCard({
           : `Closed ${unixDeadline.toLocaleString("en-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`}
       </p>
 
-      {/* FSFT minted badge */}
       {isExecuted && (
         <div className="mb-4 rounded-lg bg-purple-50 border border-purple-100 px-3 py-2 text-xs text-purple-700 font-medium">
           Asset acquired and FSFT distributed to investor wallets
         </div>
       )}
 
-      {/* Action buttons */}
       {isActive && !isExpired && onVote && userAddress && (
         <div className="flex gap-2">
           <button

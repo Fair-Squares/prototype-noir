@@ -57,12 +57,13 @@ export async function GET() {
     const { Contract } = await import("@aztec/aztec.js/contracts");
     const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     const admin = await getTestAccount(0);
     const wallet = admin.wallet;
     const adminAddr = AztecAddress.fromString(admin.address);
 
-    const GovArtifactJson = (await import("@/artifacts/governance-Governance.json")).default;
+    const GovArtifactJson = await loadGeneratedArtifactJson("governance-Governance.json");
     const govArtifact = loadContractArtifact(GovArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const govContract = await Contract.at(AztecAddress.fromString(govAddr), govArtifact, wallet);
 
@@ -158,6 +159,7 @@ export async function POST(request: NextRequest) {
     const { Contract } = await import("@aztec/aztec.js/contracts");
     const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     const govAddr = process.env.NEXT_PUBLIC_GOVERNANCE_ADDRESS ?? "";
     const fundTokenAddr = process.env.NEXT_PUBLIC_FUND_TOKEN_ADDRESS ?? "";
@@ -168,9 +170,9 @@ export async function POST(request: NextRequest) {
     const actor = await getTestAccount(accountIndex);
     const admin = await getTestAccount(0);
 
-    const GovArtifactJson = (await import("@/artifacts/governance-Governance.json")).default;
-    const HfArtifactJson = (await import("@/artifacts/housing_fund-HousingFund.json")).default;
-    const FtArtifactJson = (await import("@/artifacts/fund_token-FundToken.json")).default;
+    const GovArtifactJson = await loadGeneratedArtifactJson("governance-Governance.json");
+    const HfArtifactJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
+    const FtArtifactJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
 
     const govArtifact = loadContractArtifact(GovArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
@@ -219,15 +221,22 @@ export async function POST(request: NextRequest) {
       }
 
       // 1) Execute proposal state transition in governance.
-      const executeReceipt = await govContract.methods
+      // Contract authorizes only council (test0) or housing fund.
+      const govAdminContract = await Contract.at(AztecAddress.fromString(govAddr), govArtifact, admin.wallet);
+      const executeReceipt = await govAdminContract.methods
         .execute_proposal(Number(proposalId))
-        .send({ from: AztecAddress.fromString(actor.address) });
+        .send({ from: AztecAddress.fromString(admin.address) });
 
       // 2) Reserve amount in HousingFund accounting.
       const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, admin.wallet);
-      await hfContract.methods
-        .reserve_for_property(BigInt(proposalAmount))
-        .send({ from: AztecAddress.fromString(admin.address) });
+      try {
+        await hfContract.methods
+          .reserve_for_property(BigInt(proposalAmount))
+          .send({ from: AztecAddress.fromString(admin.address) });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return NextResponse.json({ error: `reserve_for_property failed: ${msg}` }, { status: 500 });
+      }
 
       // 3) Read investor tickets and mint FSFT pro-rata to users.
       const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, admin.wallet);
@@ -280,16 +289,26 @@ export async function POST(request: NextRequest) {
       let distributedTo = 0;
       for (const mint of mints) {
         if (mint.amount <= 0) continue;
-        await ftContract.methods
-          .mint_public(AztecAddress.fromString(mint.addr), BigInt(mint.amount))
-          .send({ from: AztecAddress.fromString(admin.address) });
+        try {
+          await ftContract.methods
+            .mint_public(AztecAddress.fromString(mint.addr), BigInt(mint.amount))
+            .send({ from: AztecAddress.fromString(admin.address) });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          return NextResponse.json({ error: `mint_public failed for ${mint.addr}: ${msg}` }, { status: 500 });
+        }
         distributedTo += 1;
       }
 
       // 4) Persist valuation snapshot on-chain (sale price, minted amount, token price bps).
-      await hfContract.methods
-        .record_asset_sale(BigInt(proposalAmount), BigInt(distributed))
-        .send({ from: AztecAddress.fromString(admin.address) });
+      try {
+        await hfContract.methods
+          .record_asset_sale(BigInt(proposalAmount), BigInt(distributed))
+          .send({ from: AztecAddress.fromString(admin.address) });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return NextResponse.json({ error: `record_asset_sale failed: ${msg}` }, { status: 500 });
+      }
 
       return NextResponse.json({
         success: true,

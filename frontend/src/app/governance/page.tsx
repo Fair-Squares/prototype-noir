@@ -93,9 +93,9 @@ export default function GovernancePage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-start justify-between">
+      <div className="rounded-2xl bg-card border border-border p-6 flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold mb-1">Proposals</h1>
+          <h1 className="text-2xl font-brand-black mb-1">Proposals</h1>
           <p className="text-text-2 text-sm">Vote on property acquisitions. Voting windows are enforced on-chain by block deadlines. Executed proposals distribute FSFT to investor wallets.</p>
         </div>
         {address && (
@@ -176,6 +176,7 @@ export default function GovernancePage() {
       )}
 
       {/* Proposals list */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-5 items-start">
       {proposals.length === 0 ? (
         <div className="rounded-xl bg-card p-14 text-center">
           <p className="font-semibold text-text-1 text-lg mb-2">No proposals yet</p>
@@ -201,6 +202,16 @@ export default function GovernancePage() {
           ))}
         </div>
       )}
+      <aside className="rounded-xl bg-card border border-border p-4 lg:sticky lg:top-24">
+        <p className="text-xs text-text-3 uppercase tracking-wide font-medium mb-2">Governance snapshot</p>
+        <div className="space-y-2 text-sm">
+          <div className="flex items-center justify-between"><span className="text-text-3">Total proposals</span><span className="font-semibold">{proposals.length}</span></div>
+          <div className="flex items-center justify-between"><span className="text-text-3">Active</span><span className="font-semibold">{proposals.filter((p) => p.status === 0).length}</span></div>
+          <div className="flex items-center justify-between"><span className="text-text-3">Passed</span><span className="font-semibold">{proposals.filter((p) => p.status === 1).length}</span></div>
+          <div className="flex items-center justify-between"><span className="text-text-3">Executed</span><span className="font-semibold">{proposals.filter((p) => p.status === 3).length}</span></div>
+        </div>
+      </aside>
+      </div>
     </div>
   );
 }

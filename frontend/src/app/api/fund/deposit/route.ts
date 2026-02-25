@@ -43,23 +43,20 @@ export async function POST(request: NextRequest) {
     const { Contract } = await import("@aztec/aztec.js/contracts");
     const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     // Step 1: Transfer EUR from caller to housing fund (if EUR token deployed)
     if (eurTokenAddr) {
-      try {
-        const EurArtifactJson = (await import("@/artifacts/fund_token-FundToken.json")).default;
-        const eurArtifact = loadContractArtifact(EurArtifactJson as Parameters<typeof loadContractArtifact>[0]);
-        const eurContract = await Contract.at(AztecAddress.fromString(eurTokenAddr), eurArtifact, wallet);
-        await eurContract.methods
-          .transfer_public(AztecAddress.fromString(housingFundAddr), BigInt(amount))
-          .send({ from: AztecAddress.fromString(account.address) });
-      } catch (eurErr) {
-        console.warn("[deposit] EUR transfer failed (continuing with counter-only deposit):", eurErr);
-      }
+      const EurArtifactJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
+      const eurArtifact = loadContractArtifact(EurArtifactJson as Parameters<typeof loadContractArtifact>[0]);
+      const eurContract = await Contract.at(AztecAddress.fromString(eurTokenAddr), eurArtifact, wallet);
+      await eurContract.methods
+        .transfer_public(AztecAddress.fromString(housingFundAddr), BigInt(amount))
+        .send({ from: AztecAddress.fromString(account.address) });
     }
 
     // Step 2: Increment housing fund deposit counter
-    const HfArtifactJson = (await import("@/artifacts/housing_fund-HousingFund.json")).default;
+    const HfArtifactJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
     const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const hfContract = await Contract.at(
       AztecAddress.fromString(housingFundAddr),

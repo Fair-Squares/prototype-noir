@@ -22,25 +22,28 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="bg-bg text-text-1 min-h-screen antialiased">
         <WalletProvider>
-          <header className="bg-white sticky top-0 z-50 border-b border-border">
-            <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-14">
-              <Link href="/" className="flex items-center gap-2.5">
+          <header className="bg-white/95 backdrop-blur sticky top-0 z-50 border-b border-border">
+            <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-16">
+              <Link href="/" className="flex items-center gap-3">
                 <Image
                   src="/brand/fs-dark-light-bg.png"
                   alt="Fair Squares"
-                  width={32}
-                  height={32}
-                  className="rounded-sm"
+                  width={36}
+                  height={36}
+                  className="rounded-md"
                 />
-                <span className="font-bold text-[15px]">Fair Squares</span>
+                <div>
+                  <span className="font-brand-black text-[15px] leading-none">Fair Squares</span>
+                  <p className="text-[10px] text-text-3 leading-none mt-1">Housing Fund</p>
+                </div>
               </Link>
 
-              <nav className="flex items-center gap-1">
+              <nav className="hidden md:flex items-center gap-1 bg-bg border border-border rounded-full p-1">
                 {NAV_ITEMS.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className="px-3 py-1.5 rounded-md text-[13px] text-text-2 hover:text-text-1 hover:bg-bg font-medium"
+                    className="px-3.5 py-1.5 rounded-full text-[12px] text-text-2 hover:text-text-1 hover:bg-white font-medium"
                   >
                     {item.label}
                   </Link>
@@ -52,7 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </div>
           </header>
 
-          <main className="max-w-7xl mx-auto px-6 py-8">{children}</main>
+          <main className="max-w-7xl mx-auto px-6 py-10">{children}</main>
 
           <footer className="border-t border-border mt-20 py-6 text-center text-[13px] text-text-3">
             Fair Squares &middot; Community-funded affordable housing

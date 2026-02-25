@@ -40,7 +40,8 @@ export async function POST(request: NextRequest) {
     const { Contract } = await import("@aztec/aztec.js/contracts");
     const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
-    const HfArtifactJson = (await import("@/artifacts/housing_fund-HousingFund.json")).default;
+    const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
+    const HfArtifactJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
     const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const hfContract = await Contract.at(
       AztecAddress.fromString(housingFundAddr),

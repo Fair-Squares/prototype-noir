@@ -37,12 +37,13 @@ export async function GET() {
     const { Contract } = await import("@aztec/aztec.js/contracts");
     const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     const admin = await getTestAccount(0);
     const from = AztecAddress.fromString(admin.address);
 
-    const HfJson = (await import("@/artifacts/housing_fund-HousingFund.json")).default;
-    const FtJson = (await import("@/artifacts/fund_token-FundToken.json")).default;
+    const HfJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
+    const FtJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
 
     const hfArtifact = loadContractArtifact(HfJson as Parameters<typeof loadContractArtifact>[0]);
     const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);

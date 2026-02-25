@@ -45,6 +45,7 @@ export async function GET(request: NextRequest) {
   // ── Live mode ────────────────────────────────────────────────────────────
   try {
     const { callNodeRpc } = await import("@/lib/aztecClient");
+    const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     const tips = await callNodeRpc<{ proposed: { hash: string } }>("node_getL2Tips");
     const bh = tips.proposed.hash;
@@ -84,7 +85,7 @@ export async function GET(request: NextRequest) {
           const { AztecAddress } = await import("@aztec/aztec.js/addresses");
           const admin = await getTestAccount(0);
           const w = admin.wallet;
-          const EurJson = (await import("@/artifacts/fund_token-FundToken.json")).default;
+          const EurJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
           const eurC = await Contract.at(
             AztecAddress.fromString(eurTokenAddr),
             loadContractArtifact(EurJson as Parameters<typeof loadContractArtifact>[0]),
@@ -106,7 +107,7 @@ export async function GET(request: NextRequest) {
           const { AztecAddress } = await import("@aztec/aztec.js/addresses");
           const admin = await getTestAccount(0);
           const w = admin.wallet;
-          const FtJson = (await import("@/artifacts/fund_token-FundToken.json")).default;
+          const FtJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
           const ftC = await Contract.at(
             AztecAddress.fromString(fundTokenAddr),
             loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]),
@@ -165,22 +166,24 @@ export async function POST(request: NextRequest) {
     const { Contract } = await import("@aztec/aztec.js/contracts");
     const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     // test0/admin is the EUR token admin in bootstrap script.
     const admin = await getTestAccount(0);
     void accountIndex; // target account is identified by `address`; admin signs mint.
 
-    const EurJson = (await import("@/artifacts/fund_token-FundToken.json")).default;
+    const EurJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
     const eurArtifact = loadContractArtifact(EurJson as Parameters<typeof loadContractArtifact>[0]);
     const eurContract = await Contract.at(AztecAddress.fromString(eurTokenAddr), eurArtifact, admin.wallet);
 
     const receipt = await eurContract.methods
       .mint_public(AztecAddress.fromString(address), BigInt(Number(amount)))
       .send({ from: AztecAddress.fromString(admin.address) });
+    console.info(`[fund/tokens POST] Minted ${Number(amount)} EURs to ${address} from admin ${admin.address}`);
 
     return NextResponse.json({
       success: true,
-      message: `Topped up ${Number(amount).toLocaleString()} EURs`,
+      message: `Topped up ${Number(amount).toLocaleString()} EURs to ${address}`,
       txHash: receipt.txHash?.toString() ?? "unknown",
       source: "live",
     });

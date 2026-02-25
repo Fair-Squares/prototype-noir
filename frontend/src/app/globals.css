@@ -15,6 +15,9 @@
 }
 
 @theme {
+  --font-brand-black: "NexaBlack", "Avenir Next", "Segoe UI", sans-serif;
+  --font-brand-heavy: "NexaHeavy", "Avenir Next", "Segoe UI", sans-serif;
+
   --color-fs-magenta: #C41667;
   --color-fs-magenta-light: #D93D85;
   --color-fs-teal: #4CBDB0;
@@ -36,9 +39,20 @@
 body {
   background: var(--color-bg);
   color: var(--color-text-1);
+  font-family: var(--font-brand-heavy);
+  letter-spacing: 0.01em;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
 button, a, input, [role="button"] {
   transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
+}
+
+h1, h2, h3, .font-brand-black {
+  font-family: var(--font-brand-black);
+  letter-spacing: 0.015em;
+}
+
+.font-brand-heavy {
+  font-family: var(--font-brand-heavy);
 }

@@ -37,7 +37,8 @@ export async function POST(request: NextRequest) {
     const { Contract } = await import("@aztec/aztec.js/contracts");
     const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
-    const GovArtifactJson = (await import("@/artifacts/governance-Governance.json")).default;
+    const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
+    const GovArtifactJson = await loadGeneratedArtifactJson("governance-Governance.json");
     const govArtifact = loadContractArtifact(GovArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const govContract = await Contract.at(AztecAddress.fromString(govAddr), govArtifact, wallet);
 

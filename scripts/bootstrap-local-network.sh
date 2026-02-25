@@ -240,6 +240,7 @@ wire_contracts() {
 
   # -- Mint EUR stablecoin to all test accounts (public balances) ---------------
   log "Minting EUR to test accounts..."
+  log "  mint test0 -> ${ADMIN_ADDR} amount=600000"
   # test0 gets 600 000 EUR (will deposit 500 000, keeps 100 000 for demo)
   $AZTEC_WALLET_BIN send mint_public \
     --from accounts:test0 \
@@ -249,6 +250,7 @@ wire_contracts() {
 
   # test1 gets 50 000 EUR
   if [ -n "${TEST1_ADDR:-}" ]; then
+    log "  mint test1 -> ${TEST1_ADDR} amount=50000"
     $AZTEC_WALLET_BIN send mint_public \
       --from accounts:test0 \
       --contract-address "${EUR_ADDR}" \
@@ -258,6 +260,7 @@ wire_contracts() {
 
   # test2 gets 50 000 EUR
   if [ -n "${TEST2_ADDR:-}" ]; then
+    log "  mint test2 -> ${TEST2_ADDR} amount=50000"
     $AZTEC_WALLET_BIN send mint_public \
       --from accounts:test0 \
       --contract-address "${EUR_ADDR}" \
