@@ -1,16 +1,17 @@
 @import "tailwindcss";
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700;800&family=Noto+Sans+Mono:wght@400;500;600;700;800&display=swap");
 
 @font-face {
   font-family: "NexaBlack";
   src: url("/brand/NexaBlack.otf") format("opentype");
-  font-weight: 900;
+  font-weight: 400;
   font-display: swap;
 }
 
 @font-face {
   font-family: "NexaHeavy";
   src: url("/brand/NexaHeavy.otf") format("opentype");
-  font-weight: 800;
+  font-weight: 700;
   font-display: swap;
 }
 
@@ -39,8 +40,9 @@
 body {
   background: var(--color-bg);
   color: var(--color-text-1);
-  font-family: var(--font-brand-heavy);
-  letter-spacing: 0.01em;
+  font-family: "Noto Sans", "Segoe UI", sans-serif;
+  letter-spacing: 0.003em;
+  line-height: 1.45;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
@@ -49,10 +51,25 @@ button, a, input, [role="button"] {
 }
 
 h1, h2, h3, .font-brand-black {
-  font-family: var(--font-brand-black);
-  letter-spacing: 0.015em;
+  font-family: "Noto Sans Mono", monospace;
+  letter-spacing: 0.006em;
+  line-height: 1.1;
 }
 
 .font-brand-heavy {
-  font-family: var(--font-brand-heavy);
+  font-family: var(--font-brand-black);
+}
+
+.fs-shell-bg {
+  background:
+    radial-gradient(circle at 15% 5%, rgba(76, 189, 176, 0.08), transparent 32%),
+    radial-gradient(circle at 90% 10%, rgba(196, 22, 103, 0.08), transparent 30%),
+    linear-gradient(180deg, #f5f6f8 0%, #f7f8fa 60%, #f5f6f8 100%);
+}
+
+.fs-grid-overlay {
+  background-image:
+    linear-gradient(to right, rgba(42, 45, 52, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(42, 45, 52, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
 }

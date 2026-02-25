@@ -20,44 +20,42 @@ const NAV_ITEMS = [
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-bg text-text-1 min-h-screen antialiased">
+      <body className="fs-shell-bg text-text-1 min-h-screen antialiased">
         <WalletProvider>
-          <header className="bg-white/95 backdrop-blur sticky top-0 z-50 border-b border-border">
-            <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-16">
-              <Link href="/" className="flex items-center gap-3">
+          <header className="sticky top-0 z-50 border-b border-border/80 bg-white/90 backdrop-blur-md">
+            <div className="max-w-7xl mx-auto px-6 min-h-[80px] flex items-center gap-5">
+              <Link href="/" className="flex items-center gap-3 shrink-0">
                 <Image
                   src="/brand/fs-dark-light-bg.png"
                   alt="Fair Squares"
-                  width={36}
-                  height={36}
+                  width={42}
+                  height={42}
                   className="rounded-md"
                 />
-                <div>
-                  <span className="font-brand-black text-[15px] leading-none">Fair Squares</span>
-                  <p className="text-[10px] text-text-3 leading-none mt-1">Housing Fund</p>
-                </div>
+                <span className="font-brand-black text-[22px] leading-none">Fair Squares</span>
               </Link>
 
-              <nav className="hidden md:flex items-center gap-1 bg-bg border border-border rounded-full p-1">
+              <nav className="hidden md:flex items-center gap-1 bg-bg/80 border border-border rounded-xl px-1.5 py-1 ml-auto">
                 {NAV_ITEMS.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className="px-3.5 py-1.5 rounded-full text-[12px] text-text-2 hover:text-text-1 hover:bg-white font-medium"
+                    className="px-4 py-2 rounded-lg text-[15px] text-text-2 hover:text-text-1 hover:bg-white font-medium"
                   >
                     {item.label}
                   </Link>
                 ))}
               </nav>
 
-              {/* Single wallet button — state persists across all page navigations */}
-              <HeaderWalletButton />
+              <div className="ml-auto md:ml-3">
+                <HeaderWalletButton />
+              </div>
             </div>
           </header>
 
           <main className="max-w-7xl mx-auto px-6 py-10">{children}</main>
 
-          <footer className="border-t border-border mt-20 py-6 text-center text-[13px] text-text-3">
+          <footer className="border-t border-border/80 mt-20 py-6 text-center text-[13px] text-text-3 bg-white/50">
             Fair Squares &middot; Community-funded affordable housing
           </footer>
         </WalletProvider>

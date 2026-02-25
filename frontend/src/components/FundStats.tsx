@@ -32,34 +32,38 @@ export default function FundStats(props: FundStatsProps) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-border bg-card p-2">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+      <div className="rounded-2xl bg-card border border-border overflow-hidden">
+        <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-y lg:divide-y-0 divide-border">
           {STAT_CARDS.map((card) => (
-            <div key={card.key} className="rounded-xl bg-bg p-4 border border-border/60">
-              <span className="text-[11px] text-text-3 font-medium uppercase tracking-wide">{card.label}</span>
-              <p className="text-2xl font-brand-black mt-2">{formatEUR(props[card.key])}</p>
+            <div key={card.key} className="p-5 bg-card">
+              <p className="text-[12px] text-text-3 font-medium uppercase tracking-wide">{card.label}</p>
+              <p className="text-2xl mt-2 leading-none">{formatEUR(props[card.key])}</p>
             </div>
           ))}
         </div>
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-4">
-        <div className="flex items-center gap-6 text-[13px] text-text-3 flex-wrap mb-3">
-          <span><strong className="text-text-1">{props.investorCount}</strong> investors</span>
-          <span><strong className="text-fs-teal">{formatEUR(props.totalYield)}</strong> {eurs} yield paid</span>
-          <span><strong className="text-text-1">~3%</strong> target annual return</span>
-          <span className="ml-auto text-[11px] px-2 py-0.5 rounded-full bg-fs-mint text-fs-teal-dark font-medium">
-            1 {fsft} = 1 {eurs} = €1
-          </span>
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-1 text-[11px] text-text-3">
-            <span>Capital utilization</span>
-            <span>{utilization}%</span>
+        <div className="grid md:grid-cols-[1fr_180px] gap-4 items-end">
+          <div className="space-y-2">
+            <div className="flex items-center gap-6 text-[14px] text-text-3 flex-wrap">
+              <span><strong className="text-text-1">{props.investorCount}</strong> investors</span>
+              <span><strong className="text-fs-teal">{formatEUR(props.totalYield)}</strong> {eurs} yield paid</span>
+              <span><strong className="text-text-1">~3%</strong> target annual return</span>
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1 text-[12px] text-text-3">
+                <span>Capital utilization</span>
+                <span>{utilization}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-bg border border-border/70 overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-fs-teal to-fs-magenta" style={{ width: `${utilization}%` }} />
+              </div>
+            </div>
           </div>
-          <div className="h-2 rounded-full bg-bg border border-border/70 overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-fs-teal to-fs-magenta" style={{ width: `${utilization}%` }} />
+
+          <div className="rounded-xl bg-fs-mint text-fs-teal-dark text-[12px] font-medium px-3 py-2 text-center">
+            1 {fsft} = 1 {eurs} = €1
           </div>
         </div>
       </div>

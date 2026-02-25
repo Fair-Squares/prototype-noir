@@ -11,7 +11,7 @@ export default function HeaderWalletButton() {
   // ── Loading ───────────────────────────────────────────────────────────────
   if (status === "loading") {
     return (
-      <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-fs-anthracite/60 text-white text-[13px] font-semibold cursor-wait">
+      <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-fs-anthracite/60 text-white text-[14px] font-semibold cursor-wait">
         <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -29,7 +29,7 @@ export default function HeaderWalletButton() {
         <div className="relative">
           <button
             onClick={() => setShowDropdown((v) => !v)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-fs-anthracite text-white text-[13px] font-semibold hover:bg-fs-anthracite/90 transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-fs-anthracite text-white text-[14px] font-semibold hover:bg-fs-anthracite/90 transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
@@ -45,7 +45,7 @@ export default function HeaderWalletButton() {
               <div className="fixed inset-0 z-40" onClick={() => setShowDropdown(false)} />
               <div className="absolute right-0 mt-1.5 w-64 rounded-xl bg-white border border-border shadow-lg z-50 overflow-hidden">
                 <div className="px-4 py-2.5 border-b border-border">
-                  <p className="text-[11px] text-text-3 font-medium uppercase tracking-wide">
+                  <p className="text-[12px] text-text-3 font-medium uppercase tracking-wide">
                     Devnet test accounts
                   </p>
                 </div>
@@ -56,14 +56,14 @@ export default function HeaderWalletButton() {
                     className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-bg transition-colors border-b border-border last:border-0"
                   >
                     <div className="w-8 h-8 rounded-full bg-fs-mint flex items-center justify-center shrink-0">
-                      <span className="text-fs-teal-dark text-[11px] font-bold">{acc.alias[0].toUpperCase()}</span>
+                      <span className="text-fs-teal-dark text-[12px] font-bold">{acc.alias[0].toUpperCase()}</span>
                     </div>
                     <div className="min-w-0">
                       <p className="text-[13px] font-semibold text-text-1">
                         {acc.alias}
-                        {acc.isAdmin && <span className="ml-1.5 text-[10px] font-bold text-fs-teal bg-fs-mint px-1.5 py-0.5 rounded-full">admin</span>}
+                        {acc.isAdmin && <span className="ml-1.5 text-[11px] font-bold text-fs-teal bg-fs-mint px-1.5 py-0.5 rounded-full">admin</span>}
                       </p>
-                      <p className="text-[11px] text-text-3 font-mono truncate">{acc.address.slice(0, 16)}…{acc.address.slice(-6)}</p>
+                      <p className="text-[12px] text-text-3 font-mono truncate">{acc.address.slice(0, 16)}…{acc.address.slice(-6)}</p>
                     </div>
                   </button>
                 ))}
@@ -78,7 +78,7 @@ export default function HeaderWalletButton() {
     return (
       <button
         onClick={() => connect(0)}
-        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-fs-anthracite text-white text-[13px] font-semibold hover:bg-fs-anthracite/90 transition-colors"
+        className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-fs-anthracite text-white text-[14px] font-semibold hover:bg-fs-anthracite/90 transition-colors"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
@@ -95,7 +95,7 @@ export default function HeaderWalletButton() {
     <div className="relative">
       <button
         onClick={() => setShowDropdown((v) => !v)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-fs-mint border border-fs-teal/20 text-fs-teal-dark text-[13px] font-semibold hover:bg-fs-teal/10 transition-colors"
+        className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-fs-mint border border-fs-teal/20 text-fs-teal-dark text-[14px] font-semibold hover:bg-fs-teal/10 transition-colors"
       >
         <span className="w-2 h-2 rounded-full bg-fs-teal inline-block" />
         {alias}
@@ -113,14 +113,14 @@ export default function HeaderWalletButton() {
           <div className="absolute right-0 mt-1.5 w-64 rounded-xl bg-white border border-border shadow-lg z-50 overflow-hidden">
             {/* Active address */}
             <div className="px-4 py-3 border-b border-border">
-              <p className="text-[10px] text-text-3 font-medium uppercase tracking-wide mb-1">Active address</p>
-              <p className="text-xs font-mono text-text-2 break-all">{address}</p>
+              <p className="text-[12px] text-text-3 font-medium uppercase tracking-wide mb-1">Active address</p>
+              <p className="text-[13px] font-mono text-text-2 break-all">{address}</p>
             </div>
 
             {/* Switch account */}
             {accounts.length > 1 && (
               <div className="px-4 py-2 border-b border-border">
-                <p className="text-[10px] text-text-3 font-medium uppercase tracking-wide mb-1.5">Switch account</p>
+                <p className="text-[12px] text-text-3 font-medium uppercase tracking-wide mb-1.5">Switch account</p>
                 <div className="space-y-1">
                   {accounts.map((acc) => (
                     <button

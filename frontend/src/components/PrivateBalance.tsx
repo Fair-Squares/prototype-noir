@@ -11,19 +11,19 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="h-32 rounded-xl bg-card animate-pulse" />
-          <div className="h-32 rounded-xl bg-card animate-pulse" />
-          <div className="h-32 rounded-xl bg-card animate-pulse" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="h-36 rounded-xl bg-card animate-pulse" />
+          <div className="h-36 rounded-xl bg-card animate-pulse" />
+          <div className="h-36 rounded-xl bg-card animate-pulse" />
         </div>
-        <div className="h-28 rounded-xl bg-card animate-pulse" />
+        <div className="h-32 rounded-xl bg-card animate-pulse" />
       </div>
     );
   }
 
   if (!portfolio) {
     return (
-      <div className="rounded-xl bg-card p-10 text-center text-text-3 text-sm">
+      <div className="rounded-xl bg-card p-10 text-center text-text-3 text-sm border border-border">
         Could not load portfolio data
       </div>
     );
@@ -46,70 +46,66 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-xl bg-card p-6 border border-border">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs text-text-3 font-medium uppercase tracking-wide">EURs Wallet</span>
-            <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[10px] font-bold">EURs</span>
+      <section className="rounded-2xl border border-border bg-card overflow-hidden">
+        <div className="grid lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-border">
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs text-text-3 font-medium uppercase tracking-wide">EURs Wallet</span>
+              <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[10px] font-bold">EURs</span>
+            </div>
+            <p className="text-3xl leading-none tabular-nums">{formatEUR(eurBalance)}</p>
+            <p className="text-xs text-text-3 mt-2">Available to deposit</p>
+            <p className="text-xs text-text-3 mt-3 pt-3 border-t border-border">Private note on Aztec</p>
           </div>
-          <p className="text-3xl font-brand-black tabular-nums">{formatEUR(eurBalance)}</p>
-          <p className="text-xs text-text-3 mt-1.5">Available to deposit</p>
-          <div className="mt-3 pt-3 border-t border-border flex items-center gap-1.5 text-xs text-text-3">
-            Private note on Aztec
+
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs text-text-3 font-medium uppercase tracking-wide">Deposit Ticket</span>
+              <span className="px-2 py-0.5 rounded-full bg-fs-mint text-fs-teal-dark text-[10px] font-bold">Fund</span>
+            </div>
+            <p className="text-3xl leading-none tabular-nums">{formatEUR(depositedAmount)}</p>
+            <p className="text-xs text-text-3 mt-2">Private ticket balance in housing fund</p>
+            <p className="text-xs text-text-3 mt-3 pt-3 border-t border-border">Private note on Aztec</p>
+          </div>
+
+          <div className="p-6 bg-fs-mint/45">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs text-fs-teal-dark font-medium uppercase tracking-wide">In Fund</span>
+              <span className="px-2 py-0.5 rounded-full bg-fs-teal/10 text-fs-teal-dark text-[10px] font-bold">FSFT</span>
+            </div>
+            <p className="text-3xl leading-none tabular-nums text-fs-teal-dark">{formatEUR(fsftMarketValue)}</p>
+            <p className="text-xs text-fs-teal-dark/70 mt-2">{balance.toLocaleString()} FSFT distributed after executed proposals</p>
+            <p className="text-xs text-fs-teal-dark/70 mt-3 pt-3 border-t border-fs-teal/15">Private balance on Aztec</p>
           </div>
         </div>
+      </section>
 
-        <div className="rounded-xl bg-card p-6 border border-border">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs text-text-3 font-medium uppercase tracking-wide">Deposit Ticket</span>
-            <span className="px-2 py-0.5 rounded-full bg-fs-mint text-fs-teal-dark text-[10px] font-bold">Fund</span>
-          </div>
-          <p className="text-3xl font-brand-black tabular-nums">{formatEUR(depositedAmount)}</p>
-          <p className="text-xs text-text-3 mt-1.5">Private ticket balance in housing fund</p>
-          <div className="mt-3 pt-3 border-t border-border flex items-center gap-1.5 text-xs text-text-3">
-            Private note on Aztec
-          </div>
-        </div>
-
-        <div className="rounded-xl bg-fs-mint p-6 border border-fs-teal/20">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs text-fs-teal-dark font-medium uppercase tracking-wide">In Fund</span>
-            <span className="px-2 py-0.5 rounded-full bg-fs-teal/10 text-fs-teal-dark text-[10px] font-bold">FSFT</span>
-          </div>
-          <p className="text-3xl font-brand-black tabular-nums text-fs-teal-dark">{formatEUR(fsftMarketValue)}</p>
-          <p className="text-xs text-fs-teal-dark/60 mt-1.5">{balance.toLocaleString()} FSFT distributed after executed proposals</p>
-          <div className="mt-3 pt-3 border-t border-fs-teal/10 flex items-center gap-1.5 text-xs text-fs-teal-dark/60">
-            Private balance on Aztec
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-xl bg-card p-4 border border-border">
+      <section className="rounded-2xl border border-border bg-card p-4">
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <div>
             <p className="text-xs text-text-3 font-medium uppercase tracking-wide mb-1">Total in housing fund</p>
-            <p className="text-xl font-brand-black">{formatEUR(totalFundDeposits)}</p>
+            <p className="text-xl leading-none">{formatEUR(totalFundDeposits)}</p>
           </div>
           <div>
             <p className="text-xs text-text-3 font-medium uppercase tracking-wide mb-1">Allocated to assets</p>
-            <p className="text-xl font-brand-black">{formatEUR(totalAllocated)}</p>
+            <p className="text-xl leading-none">{formatEUR(totalAllocated)}</p>
           </div>
           <div>
             <p className="text-xs text-text-3 font-medium uppercase tracking-wide mb-1">Available</p>
-            <p className="text-xl font-brand-black">{formatEUR(available)}</p>
+            <p className="text-xl leading-none">{formatEUR(available)}</p>
           </div>
           <div>
             <p className="text-xs text-text-3 font-medium uppercase tracking-wide mb-1">Fund share (FSFT)</p>
-            <p className="text-xl font-brand-black">{sharePercent.toFixed(2)}%</p>
+            <p className="text-xl leading-none">{sharePercent.toFixed(2)}%</p>
           </div>
           <div>
             <p className="text-xs text-text-3 font-medium uppercase tracking-wide mb-1">FSFT price</p>
-            <p className="text-xl font-brand-black text-fs-teal">€{tokenPriceEur.toFixed(4)}</p>
+            <p className="text-xl leading-none text-fs-teal">€{tokenPriceEur.toFixed(4)}</p>
           </div>
         </div>
-      </div>
+      </section>
 
-      <details className="rounded-xl bg-card p-4 border border-border group">
+      <details className="rounded-2xl border border-border bg-card p-4 group">
         <summary className="cursor-pointer list-none flex items-center justify-between">
           <span className="text-sm font-semibold">Valuation snapshot</span>
           <span className="text-xs text-text-3 group-open:hidden">Show details</span>

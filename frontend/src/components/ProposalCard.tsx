@@ -46,23 +46,16 @@ export default function ProposalCard({
   const step = isExecuted ? 3 : isPassed ? 2 : isActive ? 1 : 2;
 
   return (
-    <div className={`rounded-xl bg-card p-5 border border-border ${isExecuted ? "ring-1 ring-purple-200" : ""}`}>
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex-1 mr-3">
-          <h3 className="font-semibold">{proposal.title || `Proposal #${proposal.id}`}</h3>
+    <div className={`rounded-xl bg-card border border-border p-5 ${isExecuted ? "ring-1 ring-purple-200" : ""}`}>
+      <div className="flex items-start justify-between mb-4 gap-3">
+        <div className="min-w-0">
+          <h3 className="font-semibold truncate">{proposal.title || `Proposal #${proposal.id}`}</h3>
           {proposal.description && (
             <p className="text-sm text-text-2 mt-1 line-clamp-2">{proposal.description}</p>
           )}
-          <p className="text-sm text-text-3 mt-1">
-            Budget:{" "}
-            <span className="text-text-1 font-medium">{formatEUR(proposal.amount)}</span>
-            <span className="ml-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full align-middle">
-              EURs
-            </span>
-          </p>
         </div>
         <span
-          className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+          className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
             statusColor[proposal.status] ?? "text-text-3 bg-bg"
           }`}
         >
@@ -70,13 +63,23 @@ export default function ProposalCard({
         </span>
       </div>
 
+      <div className="rounded-lg bg-bg border border-border p-3 mb-4">
+        <p className="text-sm text-text-3">
+          Budget:{" "}
+          <span className="text-text-1 font-medium">{formatEUR(proposal.amount)}</span>
+          <span className="ml-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full align-middle">
+            EURs
+          </span>
+        </p>
+      </div>
+
       <div className="mb-4">
-        <div className="flex items-center gap-2">
-          <div className={`h-1.5 rounded-full flex-1 ${step >= 1 ? "bg-fs-teal" : "bg-border"}`} />
-          <div className={`h-1.5 rounded-full flex-1 ${step >= 2 ? "bg-blue-500" : "bg-border"}`} />
-          <div className={`h-1.5 rounded-full flex-1 ${step >= 3 ? "bg-purple-500" : "bg-border"}`} />
+        <div className="grid grid-cols-3 gap-2 mb-1">
+          <div className={`h-1.5 rounded-full ${step >= 1 ? "bg-fs-teal" : "bg-border"}`} />
+          <div className={`h-1.5 rounded-full ${step >= 2 ? "bg-blue-500" : "bg-border"}`} />
+          <div className={`h-1.5 rounded-full ${step >= 3 ? "bg-purple-500" : "bg-border"}`} />
         </div>
-        <div className="flex justify-between text-[10px] text-text-3 mt-1">
+        <div className="flex justify-between text-[10px] text-text-3">
           <span>Active</span>
           <span>Finalized</span>
           <span>Executed</span>
@@ -88,7 +91,7 @@ export default function ProposalCard({
           <span className="text-fs-teal">Yes: {proposal.yesVotes}</span>
           <span className="text-fs-magenta">No: {proposal.noVotes}</span>
         </div>
-        <div className="h-1.5 bg-bg rounded-full overflow-hidden">
+        <div className="h-1.5 bg-bg rounded-full overflow-hidden border border-border/60">
           {totalVotes > 0 && (
             <div
               className="h-full bg-fs-teal rounded-full transition-all"

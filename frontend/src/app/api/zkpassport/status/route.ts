@@ -33,13 +33,28 @@ export async function GET(request: NextRequest) {
     const domain = process.env.ZKPASSPORT_DOMAIN ?? "fair-squares.vercel.app";
     const zkp = new ZKPassport(domain);
 
-    // Poll for result
-    const result = await zkp.getResult(zkId);
+    // v0.12+ uses bridge callbacks; polling helpers may be absent.
+    // Use feature detection so builds don't fail across SDK versions.
+    const zkpAny = zkp as unknown as {
+      getResult?: (id: string) => Promise<unknown>;
+      getRequestStatus?: (id: string) => Promise<unknown>;
+    };
+
+    let result: unknown = null;
+    if (typeof zkpAny.getResult === "function") {
+      result = await zkpAny.getResult(zkId);
+    } else if (typeof zkpAny.getRequestStatus === "function") {
+      result = await zkpAny.getRequestStatus(zkId);
+    } else {
+      // No polling API exposed by current SDK build.
+      return NextResponse.json({ verified: false, pending: true });
+    }
+
     if (!result) {
       return NextResponse.json({ verified: false, pending: true });
     }
 
-    const verified = result.ageCheck?.passed === true;
+    const verified = (result as { ageCheck?: { passed?: boolean } }).ageCheck?.passed === true;
     return NextResponse.json({ verified, devMode: false, result });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);

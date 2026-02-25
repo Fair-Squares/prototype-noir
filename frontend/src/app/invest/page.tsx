@@ -56,8 +56,8 @@ export default function InvestPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold mb-1">Invest</h1>
+      <div className="rounded-2xl bg-card border border-border p-6">
+        <h1 className="text-2xl mb-1">Invest</h1>
         <p className="text-text-2 text-sm">
           Deposit EUR into the housing fund. Your deposit is tracked privately as a ticket on Aztec.
         </p>
@@ -82,16 +82,18 @@ export default function InvestPage() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-[1fr_400px] gap-6">
-        <InvestForm
-          isKYCVerified={isKYCVerified}
-          isConnected={!!address}
-          eurBalance={portfolio?.eurBalance ?? 0}
-          onDeposit={handleDeposit}
-        />
+      <div className="grid xl:grid-cols-[1.05fr_0.95fr] gap-6">
+        <div className="rounded-2xl bg-card border border-border p-5">
+          <InvestForm
+            isKYCVerified={isKYCVerified}
+            isConnected={!!address}
+            eurBalance={portfolio?.eurBalance ?? 0}
+            onDeposit={handleDeposit}
+          />
+        </div>
 
         <div className="space-y-4">
-          <div className="rounded-xl bg-card p-5">
+          <div className="rounded-2xl bg-card border border-border p-5">
             <h3 className="font-semibold mb-3 text-sm">Token model</h3>
             <div className="space-y-3">
               {[
@@ -109,7 +111,7 @@ export default function InvestPage() {
             </div>
           </div>
 
-          <div className="rounded-xl bg-card p-5">
+          <div className="rounded-2xl bg-card border border-border p-5">
             <h3 className="font-semibold mb-3 text-sm">What happens to your EUR deposit?</h3>
             <div className="space-y-2 text-xs text-text-2">
               {[
