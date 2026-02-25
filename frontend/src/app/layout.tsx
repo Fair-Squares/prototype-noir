@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import "./globals.css";
+// Note: WalletConnect uses 'use client' hooks — we use it via client-side rendering.
+// The header button is currently a placeholder; replace with dynamic import for SSR safety.
 
 export const metadata: Metadata = {
   title: "Fair Squares - Affordable Housing Fund",

@@ -249,8 +249,8 @@ save_addresses() {
 
 NEXT_PUBLIC_AZTEC_PXE_URL=http://aztec:8080
 NEXT_PUBLIC_DEV_MODE=true
-NEXT_PUBLIC_SIMULATION=false
-AZTEC_LIVE=true
+NEXT_PUBLIC_SIMULATION=true
+AZTEC_LIVE=false
 
 # Contract addresses
 NEXT_PUBLIC_KYC_VERIFIER_ADDRESS=${kyc_addr}

@@ -118,15 +118,35 @@ export async function castVote(
 // ── Portfolio ─────────────────────────────────────────────────────────────────
 
 export interface PortfolioData {
-  balance: number;
+  balance: number;         // FSFT (= EUR in fund)
+  eurBalance: number;      // EUR in wallet (available to deposit)
   totalSupply: number;
   sharePercent: number;
   estimatedYield: number;
+  fundTokenSymbol?: string;
+  eurTokenSymbol?: string;
 }
 
 export async function fetchPortfolio(address: string): Promise<PortfolioData> {
   const res = await fetch(`/api/portfolio?address=${encodeURIComponent(address)}`);
   if (!res.ok) throw new Error("Failed to fetch portfolio");
+  return res.json();
+}
+
+// ── EUR / Token Balances ──────────────────────────────────────────────────────
+
+export interface TokenInfo {
+  fundToken: { symbol: string; name: string; description: string; totalSupply: number };
+  eurToken: { symbol: string; name: string; description: string; network: string };
+  eurBalance?: number;
+}
+
+export async function fetchTokenInfo(address?: string): Promise<TokenInfo> {
+  const url = address
+    ? `/api/fund/tokens?address=${encodeURIComponent(address)}`
+    : "/api/fund/tokens";
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to fetch token info");
   return res.json();
 }
 
