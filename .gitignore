@@ -34,3 +34,4 @@ pnpm-debug.log*
 # Aztec / Noir artifacts
 contracts/*/target/
 artifacts/
+frontend/src/artifacts/

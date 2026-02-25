@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { registerKYC } from "@/lib/simulation";
+import { isLiveModeEnabled, registerLiveKyc } from "@/lib/aztecLive";
 
-/**
- * POST /api/kyc/register
- *
- * Registers an address as KYC-verified.
- * In simulation mode: updates in-memory store.
- * In live mode: calls KYCVerifier.register_kyc() on Aztec.
- */
 export async function POST(request: NextRequest) {
   try {
     const { userAddress, devMode } = await request.json();
@@ -20,12 +14,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "dev mode is not enabled" }, { status: 403 });
     }
 
+    if (isLiveModeEnabled()) {
+      try {
+        await registerLiveKyc(userAddress);
+        return NextResponse.json({ success: true, userAddress, source: "aztec" });
+      } catch (error) {
+        console.error("[kyc/register] live mode failed, falling back to simulation", error);
+      }
+    }
+
     const result = registerKYC(userAddress);
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
-    return NextResponse.json({ success: true, userAddress });
+    return NextResponse.json({ success: true, userAddress, source: "simulation" });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

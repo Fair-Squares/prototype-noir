@@ -67,6 +67,33 @@ compile_contracts() {
   cd "${ROOT_DIR}"
 }
 
+# -- 2b. Generate TypeScript contract wrappers ---------------------------------
+
+generate_typescript() {
+  artifacts_dir="${ROOT_DIR}/frontend/src/artifacts"
+  mkdir -p "${artifacts_dir}"
+
+  for c in $CONTRACTS; do
+    target_dir="${ROOT_DIR}/contracts/${c}/target"
+    log "Generating TypeScript for ${c}..."
+    if command -v aztec > /dev/null 2>&1; then
+      aztec codegen "${target_dir}" --outdir "${artifacts_dir}" 2>&1 || {
+        log "WARN: codegen failed for ${c}, frontend will use simulation fallback"
+      }
+    else
+      log "WARN: aztec CLI not found, skipping codegen for ${c}"
+    fi
+  done
+
+  # Copy raw JSON artifacts too (for loadContractArtifact fallback)
+  for c in $CONTRACTS; do
+    target_dir="${ROOT_DIR}/contracts/${c}/target"
+    cp "${target_dir}"/*.json "${artifacts_dir}/" 2>/dev/null || true
+  done
+
+  log "TypeScript artifacts generated in ${artifacts_dir}"
+}
+
 # -- 3. Deploy contracts -------------------------------------------------------
 
 deploy_contracts() {
@@ -204,6 +231,7 @@ main() {
 
   wait_for_pxe
   compile_contracts
+  generate_typescript
   deploy_contracts
   wire_contracts
   save_addresses
