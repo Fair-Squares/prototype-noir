@@ -1,18 +1,12 @@
 import type { NextConfig } from "next";
 import path from "path";
 
-// Aztec SDK packages that must not be bundled into the Next.js server build.
-// These use NAPI binaries, worker_threads, and WASM that crash the Next.js
-// server worker process when webpack tries to initialize them at bundle time.
-// Marking as externals means Node.js require()s them at call-time instead,
-// where any failure is caught by the try/catch in API routes.
-const AZTEC_SERVER_EXTERNALS = [
-  "@aztec/bb.js",
-  "@aztec/noir-noirc_abi",
-  "@aztec/wallets",
-  "@aztec/pxe",
-  "@aztec/wallet-sdk",
-];
+// ALL @aztec/* packages must be excluded from the server bundle.
+// They use NAPI binaries, worker_threads, and WASM that crash the Next.js
+// server worker process. The server uses plain-fetch JSON-RPC instead.
+// With AZTEC_LIVE=false, these are never called; with AZTEC_LIVE=true the
+// API route try/catch handles any runtime failure gracefully.
+const AZTEC_SERVER_EXTERNALS_PREFIX = "@aztec/";
 
 const nextConfig: NextConfig = {
   webpack: (config, { isServer }) => {
@@ -60,13 +54,8 @@ const nextConfig: NextConfig = {
         ...externalsArray,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (ctx: any, callback: any) => {
-          const { request } = ctx;
-          if (
-            AZTEC_SERVER_EXTERNALS.some(
-              (pkg) => request === pkg || request.startsWith(`${pkg}/`)
-            )
-          ) {
-            return callback(null, `commonjs ${request}`);
+          if (ctx.request?.startsWith(AZTEC_SERVER_EXTERNALS_PREFIX)) {
+            return callback(null, `commonjs ${ctx.request}`);
           }
           callback();
         },
