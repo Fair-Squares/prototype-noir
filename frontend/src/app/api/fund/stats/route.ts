@@ -60,13 +60,20 @@ export async function GET() {
     const investorCount = Number(await hfContract.methods.get_investor_count().simulate({ from }));
     const isPaused = Boolean(await hfContract.methods.is_paused().simulate({ from }));
     const totalSupply = Number(await ftContract.methods.total_supply().simulate({ from }));
+    const totalDeposits = toNumberSafe(stats[0]);
+    const totalInDefi = toNumberSafe(stats[1]);
+    const totalAllocated = toNumberSafe(stats[2]);
+    const available = toNumberSafe(stats[3]);
+    const totalYield = 0;
+    const navEur = Math.max(0, totalDeposits + totalYield);
+    const navPerFsftEur = totalSupply > 0 ? Math.round((navEur / totalSupply) * 10000) / 10000 : 0;
 
     return NextResponse.json({
-      totalDeposits: toNumberSafe(stats[0]),
-      totalInDefi: toNumberSafe(stats[1]),
-      totalAllocated: toNumberSafe(stats[2]),
-      available: toNumberSafe(stats[3]),
-      totalYield: 0,
+      totalDeposits,
+      totalInDefi,
+      totalAllocated,
+      available,
+      totalYield,
       isPaused,
       investorCount,
       totalSupply,
@@ -74,6 +81,8 @@ export async function GET() {
       lastFsftMinted: toNumberSafe(valuation[1]),
       tokenPriceBps: toNumberSafe(valuation[2]),
       valuationBlock: toNumberSafe(valuation[3]),
+      navEur,
+      navPerFsftEur,
       source: "live",
     });
   } catch (error) {

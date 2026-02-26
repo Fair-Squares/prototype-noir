@@ -3,17 +3,22 @@
 import { useEffect, useState } from "react";
 import KYCFlow from "@/components/KYCFlow";
 import { useWallet } from "@/contexts/WalletContext";
-import { fetchKYCStatus } from "@/lib/contracts";
+import { fetchKYCProfile, type KYCProfile } from "@/lib/contracts";
 
 export default function KYCPage() {
   const { activeAccount } = useWallet();
   const address = activeAccount?.address ?? null;
 
-  const [isVerified, setIsVerified] = useState(false);
+  const [profile, setProfile] = useState<KYCProfile>({ verified: false, isInvestor: false, roles: [] });
 
   useEffect(() => {
-    if (address) fetchKYCStatus(address).then(setIsVerified);
-    else setIsVerified(false);
+    if (address) {
+      fetchKYCProfile(address)
+        .then(setProfile)
+        .catch(() => setProfile({ verified: false, isInvestor: false, roles: [] }));
+    } else {
+      setProfile({ verified: false, isInvestor: false, roles: [] });
+    }
   }, [address]);
 
   return (
@@ -30,7 +35,12 @@ export default function KYCPage() {
           <p className="text-sm text-text-3">Use the button in the top-right to connect.</p>
         </div>
       ) : (
-        <KYCFlow userAddress={address} isVerified={isVerified} onVerified={() => setIsVerified(true)} />
+        <KYCFlow
+          userAddress={address}
+          isVerified={profile.verified}
+          isInvestor={profile.isInvestor}
+          onVerified={() => setProfile({ verified: true, isInvestor: true, roles: ["investor"] })}
+        />
       )}
     </div>
   );

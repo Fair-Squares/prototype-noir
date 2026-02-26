@@ -30,21 +30,39 @@ export async function POST(request: NextRequest) {
     const { getTestAccount } = await import("@/lib/serverWallet");
     const account = await getTestAccount(accountIndex);
     const wallet = account.wallet;
+    if (address.toLowerCase() !== account.address.toLowerCase()) {
+      return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
+    }
 
     const govAddr = process.env.NEXT_PUBLIC_GOVERNANCE_ADDRESS ?? "";
+    const kycAddr = process.env.NEXT_PUBLIC_KYC_VERIFIER_ADDRESS ?? "";
     if (!govAddr) return NextResponse.json({ error: "NEXT_PUBLIC_GOVERNANCE_ADDRESS not set" }, { status: 500 });
+    if (!kycAddr) return NextResponse.json({ error: "NEXT_PUBLIC_KYC_VERIFIER_ADDRESS not set" }, { status: 500 });
 
     const { Contract } = await import("@aztec/aztec.js/contracts");
     const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
+    const accountAddress = AztecAddress.fromString(account.address);
+    const userAddress = AztecAddress.fromString(address);
+
+    const KycArtifactJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
+    const kycArtifact = loadContractArtifact(KycArtifactJson as Parameters<typeof loadContractArtifact>[0]);
+    const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet);
+    const isInvestor = await kycContract.methods
+      .is_investor(userAddress)
+      .simulate({ from: accountAddress });
+    if (!Boolean(isInvestor)) {
+      return NextResponse.json({ error: "Investor role required to vote" }, { status: 403 });
+    }
+
     const GovArtifactJson = await loadGeneratedArtifactJson("governance-Governance.json");
     const govArtifact = loadContractArtifact(GovArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const govContract = await Contract.at(AztecAddress.fromString(govAddr), govArtifact, wallet);
 
     const receipt = await govContract.methods
       .cast_vote(Number(proposalId), Boolean(voteYes))
-      .send({ from: AztecAddress.fromString(account.address) });
+      .send({ from: accountAddress });
 
     return NextResponse.json({
       success: true,

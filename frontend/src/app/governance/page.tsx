@@ -5,11 +5,14 @@ import ProposalCard from "@/components/ProposalCard";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   fetchProposals,
+  fetchKYCProfile,
   castVote,
   createProposal,
   finalizeProposal,
   executeProposal,
+  claimProposalDistribution,
   type Proposal,
+  type KYCProfile,
 } from "@/lib/contracts";
 
 export default function GovernancePage() {
@@ -21,6 +24,8 @@ export default function GovernancePage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(null);
+  const [kycProfile, setKycProfile] = useState<KYCProfile | null>(null);
+  const isInvestor = Boolean(kycProfile?.isInvestor);
 
   // Create proposal form state
   const [showCreate, setShowCreate] = useState(false);
@@ -28,14 +33,24 @@ export default function GovernancePage() {
   const [form, setForm] = useState({ title: "", description: "", amount: "" });
 
   const refresh = async () => {
-    const nextProposals = await fetchProposals();
+    const nextProposals = await fetchProposals(address ?? undefined, accountIndex);
     setProposals(nextProposals);
     setSelectedProposal((current) => {
       if (!current) return null;
       return nextProposals.find((p) => p.id === current.id) ?? null;
     });
   };
-  useEffect(() => { refresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { refresh(); }, [address, accountIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!address) {
+      setKycProfile(null);
+      return;
+    }
+    fetchKYCProfile(address)
+      .then(setKycProfile)
+      .catch(() => setKycProfile({ verified: false, isInvestor: false, roles: [] }));
+  }, [address]);
 
   useEffect(() => {
     if (!selectedProposal) return;
@@ -53,6 +68,7 @@ export default function GovernancePage() {
 
   const handleVote = async (proposalId: number, voteYes: boolean) => {
     if (!address) { notify("error", "Connect your wallet first."); return; }
+    if (!isInvestor) { notify("error", "Investor role required to vote."); return; }
     setLoading(true);
     try {
       const result = await castVote(address, proposalId, voteYes, accountIndex);
@@ -77,15 +93,33 @@ export default function GovernancePage() {
     try {
       const result = await executeProposal(proposalId, amount, accountIndex);
       if (result.success) {
-        notify("success", result.message ?? `Asset acquired — ${result.fsftMinted?.toLocaleString()} FSFT minted!`);
+        notify("success", result.message ?? "Proposal executed and distribution opened.");
         await refresh();
       } else notify("error", result.error ?? "Execute failed");
     } finally { setLoading(false); }
   };
 
+  const handleClaim = async (proposalId: number) => {
+    if (!address) { notify("error", "Connect your wallet first."); return; }
+    setLoading(true);
+    try {
+      const result = await claimProposalDistribution(proposalId, address, accountIndex);
+      if (result.success) {
+        const claimed = result.claimedAmount ?? 0;
+        notify("success", claimed > 0 ? `Claimed ${claimed.toLocaleString()} FSFT.` : (result.message ?? "Distribution claimed."));
+        await refresh();
+      } else {
+        notify("error", result.error ?? "Claim failed");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!address) { notify("error", "Connect your wallet first."); return; }
+    if (!isInvestor) { notify("error", "Investor role required to create proposals."); return; }
     if (!form.title || !form.amount) { notify("error", "Title and amount required."); return; }
 
     setCreating(true);
@@ -113,9 +147,9 @@ export default function GovernancePage() {
       <div className="rounded-2xl bg-card border border-border p-6 flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-brand-black mb-1">Proposals</h1>
-          <p className="text-text-2 text-sm">Vote on property acquisitions. Voting windows are enforced on-chain by block deadlines. Executed proposals distribute FSFT to investor wallets.</p>
+          <p className="text-text-2 text-sm">Vote on property acquisitions. Quorum is enforced on-chain, execution is permissionless, and executed proposals open investor claim distributions.</p>
         </div>
-        {address && (
+        {address && isInvestor && (
           <button
             onClick={() => setShowCreate(!showCreate)}
             className="px-4 py-2 rounded-lg bg-fs-magenta text-white text-sm font-medium hover:bg-fs-magenta/90 transition-colors"
@@ -124,6 +158,12 @@ export default function GovernancePage() {
           </button>
         )}
       </div>
+
+      {address && !isInvestor && (
+        <div className="rounded-lg border border-border bg-bg p-3 text-sm text-text-2">
+          Investor role not found for this account. You can still review/finalize/execute/claim, but creating and voting require investor status.
+        </div>
+      )}
 
       {/* Create proposal form */}
       {showCreate && (
@@ -261,8 +301,10 @@ export default function GovernancePage() {
               onVote={handleVote}
               onFinalize={handleFinalize}
               onExecute={handleExecute}
+              onClaim={handleClaim}
               isVoting={loading}
               userAddress={address}
+              isInvestor={isInvestor}
             />
 
             <div className="rounded-lg bg-bg border border-border p-3 mt-4">

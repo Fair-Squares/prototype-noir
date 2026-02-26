@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import PrivateBalance from "@/components/PrivateBalance";
 import { useWallet } from "@/contexts/WalletContext";
-import { fetchPortfolio, formatEUR, type PortfolioData } from "@/lib/contracts";
+import { fetchKYCProfile, fetchPortfolio, formatEUR, type KYCProfile, type PortfolioData } from "@/lib/contracts";
 
 export default function PortfolioPage() {
   const { activeAccount } = useWallet();
@@ -11,6 +11,7 @@ export default function PortfolioPage() {
   const accountIndex = activeAccount?.index ?? 0;
 
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
+  const [kycProfile, setKycProfile] = useState<KYCProfile>({ verified: false, isInvestor: false, roles: [] });
   const [loading, setLoading] = useState(false);
   const [topUpMsg, setTopUpMsg] = useState<string | null>(null);
   const isDevOrSimulation =
@@ -26,8 +27,15 @@ export default function PortfolioPage() {
   };
 
   useEffect(() => {
-    if (address) loadPortfolio(address);
-    else setPortfolio(null);
+    if (address) {
+      loadPortfolio(address);
+      fetchKYCProfile(address)
+        .then(setKycProfile)
+        .catch(() => setKycProfile({ verified: false, isInvestor: false, roles: [] }));
+    } else {
+      setPortfolio(null);
+      setKycProfile({ verified: false, isInvestor: false, roles: [] });
+    }
   }, [address, accountIndex]);
 
   const handleTopUp = async () => {
@@ -53,6 +61,16 @@ export default function PortfolioPage() {
       <div className="rounded-2xl bg-card border border-border p-6">
         <h1 className="text-2xl mb-1">My Account</h1>
         <p className="text-text-2 text-sm">Your EUR wallet, on-chain deposit ticket, and FSFT distribution/valuation state.</p>
+        {address && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {activeAccount?.isAdmin && (
+              <span className="rounded-full bg-fs-mint px-2.5 py-1 text-xs font-semibold text-fs-teal-dark">Admin</span>
+            )}
+            {kycProfile.isInvestor && (
+              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">Investor</span>
+            )}
+          </div>
+        )}
       </div>
 
       {!address ? (

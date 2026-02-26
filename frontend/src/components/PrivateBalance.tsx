@@ -38,8 +38,10 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
     totalFundDeposits = 0,
     totalAllocated = 0,
     available = 0,
-    tokenPriceEur = 1,
-    fsftMarketValue = balance,
+    tokenPriceEur = 0,
+    navPerFsftEur = 0,
+    navEur = 0,
+    fsftMarketValue = 0,
     lastAssetSalePrice = 0,
     lastFsftMinted = 0,
   } = portfolio;
@@ -74,7 +76,7 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
               <span className="px-2 py-0.5 rounded-full bg-fs-teal/10 text-fs-teal-dark text-[10px] font-bold">FSFT</span>
             </div>
             <p className="text-3xl leading-none tabular-nums text-fs-teal-dark">{formatEUR(fsftMarketValue)}</p>
-            <p className="text-xs text-fs-teal-dark/70 mt-2">{balance.toLocaleString()} FSFT distributed after executed proposals</p>
+            <p className="text-xs text-fs-teal-dark/70 mt-2">{balance.toLocaleString()} FSFT held • valued at NAV per FSFT</p>
             <p className="text-xs text-fs-teal-dark/70 mt-3 pt-3 border-t border-fs-teal/15">Private balance on Aztec</p>
           </div>
         </div>
@@ -104,8 +106,8 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
             <p className="text-xl leading-none">{sharePercent.toFixed(2)}%</p>
           </div>
           <div>
-            <p className="text-xs text-text-3 font-medium uppercase tracking-wide mb-1">FSFT price</p>
-            <p className="text-xl leading-none text-fs-teal">€{tokenPriceEur.toFixed(4)}</p>
+            <p className="text-xs text-text-3 font-medium uppercase tracking-wide mb-1">NAV per FSFT</p>
+            <p className="text-xl leading-none text-fs-teal">€{navPerFsftEur.toFixed(4)}</p>
           </div>
         </div>
 
@@ -119,9 +121,12 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
             <p className="font-semibold">{lastFsftMinted.toLocaleString()} FSFT</p>
           </div>
           <div>
-            <p className="text-text-3 text-xs uppercase tracking-wide mb-1">Est. annual yield</p>
-            <p className="font-semibold text-fs-teal">{formatEURDecimals(estimatedYield)}</p>
+            <p className="text-text-3 text-xs uppercase tracking-wide mb-1">Issue price reference</p>
+            <p className="font-semibold text-fs-teal">{tokenPriceEur > 0 ? `€${tokenPriceEur.toFixed(4)}` : "n/a"}</p>
           </div>
+        </div>
+        <div className="mt-4 rounded-lg border border-border bg-bg px-3 py-2 text-xs text-text-2">
+          FSFT is a fund share token. Issue price may start near €1 at acquisition settlement; ongoing value is indicative NAV per FSFT (current NAV: {formatEUR(navEur)}).
         </div>
 
         {balance === 0 && (

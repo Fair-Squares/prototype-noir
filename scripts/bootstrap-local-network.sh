@@ -14,6 +14,7 @@ ROOT_DIR="/workspace"
 OUT_DIR="${OUT_DIR:-/out}"
 AZTEC_NODE_URL="${AZTEC_NODE_URL:-http://aztec:8080}"
 GOVERNANCE_VOTING_WINDOW_BLOCKS="${GOVERNANCE_VOTING_WINDOW_BLOCKS:-10}"
+GOVERNANCE_MIN_QUORUM_VOTES="${GOVERNANCE_MIN_QUORUM_VOTES:-2}"
 
 CONTRACTS="kyc_verifier fund_token defi_vault housing_fund governance"
 # eur_token reuses the fund_token artifact — deployed as a second instance
@@ -192,10 +193,10 @@ deploy_contracts() {
 
   log "DEBUG: FUND_ADDR='${FUND_ADDR}' ADMIN_ADDR='${ADMIN_ADDR}'"
 
-  # Governance: both args are actual addresses (aliases not valid in --args)
+  # Governance: all args are actual addresses/values (aliases not valid in --args)
   GOV_ADDR=$(_deploy "governance" \
     "governance/target/governance-Governance.json" \
-    --args "${FUND_ADDR}" "${ADMIN_ADDR}" "${GOVERNANCE_VOTING_WINDOW_BLOCKS}")
+    --args "${FUND_ADDR}" "${KYC_ADDR}" "${GOVERNANCE_VOTING_WINDOW_BLOCKS}" "${GOVERNANCE_MIN_QUORUM_VOTES}")
   [ -z "$GOV_ADDR" ] && die "governance deploy failed — no address in output"
 
   # -- Deploy EUR token (second instance of fund_token — represents EURs stablecoin) --
@@ -234,9 +235,14 @@ wire_contracts() {
     --args "${FUND_ADDR}" \
     2>&1 >&2 || log "WARN: set_housing_fund failed"
 
-  # NOTE: We do NOT transfer FundToken (FSFT) admin to housing_fund.
-  # test0 stays as FSFT admin so the API can mint FSFT when a governance
-  # proposal is executed (housing_fund is wired but minting goes through test0).
+  # Transfer FSFT admin to HousingFund so claim_distribution can mint
+  # permissionlessly via contract logic.
+  log "Transferring FSFT admin to housing fund..."
+  $AZTEC_WALLET_BIN send set_admin \
+    --from accounts:test0 \
+    --contract-address "${TOKEN_ADDR}" \
+    --args "${FUND_ADDR}" \
+    2>&1 >&2 || log "WARN: FundToken.set_admin(housing_fund) failed"
 
   # -- Mint EUR stablecoin to all test accounts (public balances) ---------------
   log "Minting EUR to test accounts..."
@@ -314,6 +320,7 @@ NEXT_PUBLIC_SIMULATION=false
 # Vercel deployments should set AZTEC_LIVE=false
 AZTEC_LIVE=true
 GOVERNANCE_VOTING_WINDOW_BLOCKS=${GOVERNANCE_VOTING_WINDOW_BLOCKS}
+GOVERNANCE_MIN_QUORUM_VOTES=${GOVERNANCE_MIN_QUORUM_VOTES}
 
 # Contract addresses
 NEXT_PUBLIC_KYC_VERIFIER_ADDRESS=${kyc_addr}
@@ -343,7 +350,7 @@ NEXT_PUBLIC_ADMIN_ADDRESS=${admin_addr}
   log "============================================"
   log "Contract Addresses:"
   log "  KYCVerifier:  ${kyc_addr}"
-  log "  FundToken:    ${token_addr} (FSFT — admin: test0)"
+  log "  FundToken:    ${token_addr} (FSFT — admin: housing_fund)"
   log "  EurToken:     ${eur_addr} (EURs — admin: test0)"
   log "  DeFiVault:    ${vault_addr}"
   log "  HousingFund:  ${fund_addr} (initial: 500 000 EUR)"

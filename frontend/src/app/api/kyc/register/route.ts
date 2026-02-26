@@ -15,9 +15,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: devMode
-        ? "KYC verified instantly (dev mode)"
-        : "KYC verified (simulation)",
+        ? "KYC verified instantly (dev mode). Investor role granted."
+        : "KYC verified (simulation). Investor role granted.",
       verified: true,
+      isInvestor: true,
+      roles: ["investor"],
     });
   }
   if (!isLiveModeEnabled()) {
@@ -52,9 +54,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: devMode ? "KYC verified instantly (dev mode)" : "KYC verified on-chain",
+      message: devMode ? "KYC verified instantly (dev mode). Investor role granted." : "KYC verified on-chain. Investor role granted.",
       txHash: receipt.txHash?.toString() ?? "unknown",
       verified: true,
+      isInvestor: true,
+      roles: ["investor"],
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);

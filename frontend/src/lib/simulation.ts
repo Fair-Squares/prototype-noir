@@ -4,7 +4,7 @@
  * Simulates all contract behavior when running without the Aztec sandbox.
  * Maintains state across API route calls using globalThis persistence.
  *
- * EUR is the fund's unit of account. 1 FSFT ≡ 1 EUR.
+ * EUR is the fund's unit of account. FSFT represents fund-share units.
  * Balances are stored as integer euro-cents internally for precision.
  * The UI layer converts back to EUR floats.
  */
@@ -297,7 +297,7 @@ export function getFundStats() {
     isPaused: state.isPaused,
     // +47 represents background simulation of other investors
     investorCount: state.kycVerified.size + 47,
-    totalSupply: state.totalDeposits,  // 1 FSFT = 1 EUR
+    totalSupply: state.totalDeposits,  // legacy simulation assumption
     fundTokenSymbol: state.fundTokenSymbol,
     eurTokenSymbol: state.eurTokenSymbol,
   };
@@ -402,7 +402,7 @@ export function getTokenInfo() {
     fundToken: {
       symbol: "FSFT",
       name: "Fair Squares Fund Token",
-      description: "1 FSFT = 1 EUR invested in the housing fund. Redeemable at any time.",
+      description: "Fund share token with indicative value derived from NAV per FSFT.",
       totalSupply: getState().totalDeposits,
     },
     eurToken: {

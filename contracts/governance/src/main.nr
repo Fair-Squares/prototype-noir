@@ -11,9 +11,10 @@ use aztec::macros::aztec;
 ///   3. After deadline, anyone calls finalize_proposal() -- public
 #[aztec]
 pub contract Governance {
+    use kyc_verifier::KYCVerifier;
     use aztec::{
         macros::{
-            functions::{external, initializer},
+            functions::{external, initializer, view},
             storage::storage,
         },
         protocol::{
@@ -33,8 +34,9 @@ pub contract Governance {
     struct Storage<Context> {
         // Linked contract addresses
         housing_fund: PublicMutable<AztecAddress, Context>,
-        council: PublicMutable<AztecAddress, Context>,
+        kyc_verifier: PublicMutable<AztecAddress, Context>,
         voting_window_blocks: PublicMutable<u32, Context>,
+        min_quorum_votes: PublicMutable<u32, Context>,
 
         // Proposal counter
         proposal_count: PublicMutable<u32, Context>,
@@ -56,13 +58,20 @@ pub contract Governance {
 
     #[initializer]
     #[external("public")]
-    fn constructor(housing_fund: AztecAddress, council: AztecAddress, voting_window_blocks: u32) {
+    fn constructor(
+        housing_fund: AztecAddress,
+        kyc_verifier: AztecAddress,
+        voting_window_blocks: u32,
+        min_quorum_votes: u32,
+    ) {
         assert(!housing_fund.is_zero(), "invalid housing_fund");
-        assert(!council.is_zero(), "invalid council");
+        assert(!kyc_verifier.is_zero(), "invalid kyc_verifier");
         assert(voting_window_blocks > 0, "invalid voting window");
+        assert(min_quorum_votes > 0, "invalid quorum");
         self.storage.housing_fund.write(housing_fund);
-        self.storage.council.write(council);
+        self.storage.kyc_verifier.write(kyc_verifier);
         self.storage.voting_window_blocks.write(voting_window_blocks);
+        self.storage.min_quorum_votes.write(min_quorum_votes);
         self.storage.proposal_count.write(0);
     }
 
@@ -71,9 +80,10 @@ pub contract Governance {
     #[external("public")]
     fn create_proposal(description_hash: Field, amount: u64) -> pub u32 {
         let caller = self.msg_sender();
-        // Prototype: any account can create proposals.
-        // Production: restrict to council, verified investors, or DAO members.
         assert(!caller.is_zero(), "invalid caller");
+        let kyc_contract = KYCVerifier::at(self.storage.kyc_verifier.read());
+        let is_investor = self.view(kyc_contract.is_investor(caller));
+        assert(is_investor, "investor role required");
 
         let proposal_id = self.storage.proposal_count.read();
         let pid = proposal_id as Field;
@@ -101,6 +111,9 @@ pub contract Governance {
     fn cast_vote(proposal_id: u32, vote_yes: bool) {
         let pid = proposal_id as Field;
         let voter = self.msg_sender();
+        let kyc_contract = KYCVerifier::at(self.storage.kyc_verifier.read());
+        let is_investor = self.view(kyc_contract.is_investor(voter));
+        assert(is_investor, "investor role required");
 
         // Check proposal is active
         assert(
@@ -140,9 +153,9 @@ pub contract Governance {
 
         let yes_votes = self.storage.p_yes_votes.at(pid).read();
         let no_votes = self.storage.p_no_votes.at(pid).read();
+        let quorum = self.storage.min_quorum_votes.read();
 
-        // Require at least 1 vote to finalize
-        assert(yes_votes + no_votes > 0, "no votes cast yet");
+        assert(yes_votes + no_votes >= quorum, "quorum not reached");
 
         if yes_votes > no_votes {
             self.storage.p_status.at(pid).write(STATUS_PASSED);
@@ -152,20 +165,11 @@ pub contract Governance {
     }
 
     // -- Execute a passed proposal (marks as EXECUTED, triggers FSFT mint) ----
-    // The actual FSFT minting is done by the admin (test0) via the API route
-    // after this tx confirms, since cross-contract public calls are not used
-    // in this prototype version.
+    // FSFT distribution is opened separately in HousingFund via open_distribution().
 
     #[external("public")]
     fn execute_proposal(proposal_id: u32) {
         let pid = proposal_id as Field;
-        let caller = self.msg_sender();
-        let council = self.storage.council.read();
-        let hf = self.storage.housing_fund.read();
-        assert(
-            council.eq(caller) | hf.eq(caller),
-            "only council or housing fund can execute",
-        );
 
         let status = self.storage.p_status.at(pid).read();
         assert(status == STATUS_PASSED, "proposal must be in PASSED state");
@@ -200,8 +204,27 @@ pub contract Governance {
         self.storage.p_status.at(pid).read()
     }
 
+    #[external("public")]
+    #[view]
+    fn get_proposal_status_public(proposal_id: u32) -> pub u8 {
+        let pid = proposal_id as Field;
+        self.storage.p_status.at(pid).read()
+    }
+
+    #[external("public")]
+    #[view]
+    fn get_proposal_amount_public(proposal_id: u32) -> pub u64 {
+        let pid = proposal_id as Field;
+        self.storage.p_amount.at(pid).read()
+    }
+
     #[external("utility")]
     unconstrained fn get_voting_window_blocks() -> pub u32 {
         self.storage.voting_window_blocks.read()
+    }
+
+    #[external("utility")]
+    unconstrained fn get_min_quorum_votes() -> pub u32 {
+        self.storage.min_quorum_votes.read()
     }
 }

@@ -12,12 +12,18 @@ use aztec::macros::aztec;
 /// Future: private deposit/withdraw with KYC checks and FSFT minting.
 #[aztec]
 pub contract HousingFund {
+    use fund_token::FundToken;
+    use governance::Governance;
+    use kyc_verifier::KYCVerifier;
     use aztec::{
         macros::{
             functions::{external, initializer},
             storage::storage,
         },
-        protocol::address::AztecAddress,
+        protocol::{
+            address::AztecAddress,
+            traits::ToField,
+        },
         state_vars::{Map, PublicMutable},
     };
 
@@ -44,6 +50,12 @@ pub contract HousingFund {
         // EUR per FSFT in basis points (10000 = 1.0000 EUR/FSFT)
         last_token_price_bps: PublicMutable<u64, Context>,
         last_valuation_block: PublicMutable<u32, Context>,
+        // Proposal distribution snapshots
+        d_open: Map<Field, PublicMutable<bool, Context>, Context>,
+        d_amount: Map<Field, PublicMutable<u64, Context>, Context>,
+        d_total_deposits_snapshot: Map<Field, PublicMutable<u64, Context>, Context>,
+        d_claimed_total: Map<Field, PublicMutable<u64, Context>, Context>,
+        d_has_claimed: Map<Field, PublicMutable<bool, Context>, Context>,
         // Emergency pause
         is_paused: PublicMutable<bool, Context>,
     }
@@ -87,6 +99,9 @@ pub contract HousingFund {
         assert(!self.storage.is_paused.read(), "fund is paused");
         assert(amount > 0, "amount must be positive");
         let caller = self.msg_sender();
+        let kyc_contract = KYCVerifier::at(self.storage.kyc_verifier.read());
+        let is_investor = self.view(kyc_contract.is_investor(caller));
+        assert(is_investor, "investor role required");
 
         let previous_ticket = self.storage.deposit_tickets.at(caller).read();
         if previous_ticket == 0 {
@@ -170,6 +185,72 @@ pub contract HousingFund {
         self.storage.total_allocated.write(allocated + amount);
     }
 
+    // -- Permissionless settlement + investor claims ------------------------
+
+    #[external("public")]
+    fn open_distribution(proposal_id: u32) {
+        let pid = proposal_id as Field;
+        assert(!self.storage.d_open.at(pid).read(), "distribution already opened");
+
+        let gov = Governance::at(self.storage.governance.read());
+        let status = self.view(gov.get_proposal_status_public(proposal_id));
+        assert(status == 3, "proposal is not executed");
+
+        let proposal_amount = self.view(gov.get_proposal_amount_public(proposal_id));
+        assert(proposal_amount > 0, "invalid proposal amount");
+
+        let deposits = self.storage.total_deposits.read();
+        let in_defi = self.storage.total_in_defi.read();
+        let allocated = self.storage.total_allocated.read();
+        let available = deposits - in_defi - allocated;
+        assert(proposal_amount <= available, "insufficient available balance");
+
+        self.storage.total_allocated.write(allocated + proposal_amount);
+        self.storage.d_open.at(pid).write(true);
+        self.storage.d_amount.at(pid).write(proposal_amount);
+        self.storage.d_total_deposits_snapshot.at(pid).write(deposits);
+        self.storage.d_claimed_total.at(pid).write(0);
+
+        // Issue-time pricing snapshot: used as reference, not hard peg.
+        self.storage.last_asset_sale_price.write(proposal_amount);
+        self.storage.last_fsft_minted.write(proposal_amount);
+        self.storage.last_token_price_bps.write(10000);
+        self.storage.last_valuation_block.write(self.context.block_number());
+    }
+
+    #[external("public")]
+    fn claim_distribution(proposal_id: u32) {
+        let pid = proposal_id as Field;
+        assert(self.storage.d_open.at(pid).read(), "distribution is not open");
+
+        let caller = self.msg_sender();
+        let claim_key = caller.to_field() + pid;
+        assert(!self.storage.d_has_claimed.at(claim_key).read(), "already claimed");
+
+        let snapshot_total = self.storage.d_total_deposits_snapshot.at(pid).read();
+        assert(snapshot_total > 0, "invalid distribution snapshot");
+
+        let ticket = self.storage.deposit_tickets.at(caller).read();
+        assert(ticket > 0, "no deposit ticket");
+
+        let distribution_amount = self.storage.d_amount.at(pid).read();
+        let raw_claim = (distribution_amount * ticket) / snapshot_total;
+        assert(raw_claim > 0, "claim amount is zero");
+
+        let claimed_total = self.storage.d_claimed_total.at(pid).read();
+        assert(claimed_total < distribution_amount, "distribution exhausted");
+
+        let remaining = distribution_amount - claimed_total;
+        let claim_amount = if raw_claim > remaining { remaining } else { raw_claim };
+        assert(claim_amount > 0, "nothing left to claim");
+
+        let fund_token = FundToken::at(self.storage.fund_token.read());
+        self.call(fund_token.mint_public(caller, claim_amount));
+
+        self.storage.d_claimed_total.at(pid).write(claimed_total + claim_amount);
+        self.storage.d_has_claimed.at(claim_key).write(true);
+    }
+
     // -- Governance/accounting: valuation snapshot ------------------------
     // Called after an executed proposal and FSFT distribution.
     #[external("public")]
@@ -240,6 +321,44 @@ pub contract HousingFund {
             self.storage.last_fsft_minted.read(),
             self.storage.last_token_price_bps.read(),
             self.storage.last_valuation_block.read(),
+        )
+    }
+
+    #[external("utility")]
+    unconstrained fn get_claimable_amount(proposal_id: u32, user: AztecAddress) -> pub u64 {
+        let pid = proposal_id as Field;
+        let claim_key = user.to_field() + pid;
+        let is_open = self.storage.d_open.at(pid).read();
+        let has_claimed = self.storage.d_has_claimed.at(claim_key).read();
+        let snapshot_total = self.storage.d_total_deposits_snapshot.at(pid).read();
+        let ticket = self.storage.deposit_tickets.at(user).read();
+        let distribution_amount = self.storage.d_amount.at(pid).read();
+        let claimed_total = self.storage.d_claimed_total.at(pid).read();
+
+        if !is_open | has_claimed | (snapshot_total == 0) | (ticket == 0) | (claimed_total >= distribution_amount) {
+            0
+        } else {
+            let raw_claim = (distribution_amount * ticket) / snapshot_total;
+            let remaining = distribution_amount - claimed_total;
+            if raw_claim > remaining { remaining } else { raw_claim }
+        }
+    }
+
+    #[external("utility")]
+    unconstrained fn has_claimed(proposal_id: u32, user: AztecAddress) -> pub bool {
+        let pid = proposal_id as Field;
+        let claim_key = user.to_field() + pid;
+        self.storage.d_has_claimed.at(claim_key).read()
+    }
+
+    #[external("utility")]
+    unconstrained fn get_distribution_status(proposal_id: u32) -> pub (bool, u64, u64, u64) {
+        let pid = proposal_id as Field;
+        (
+            self.storage.d_open.at(pid).read(),
+            self.storage.d_amount.at(pid).read(),
+            self.storage.d_total_deposits_snapshot.at(pid).read(),
+            self.storage.d_claimed_total.at(pid).read(),
         )
     }
 

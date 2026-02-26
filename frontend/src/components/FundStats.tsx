@@ -12,6 +12,9 @@ interface FundStatsProps {
   isPaused: boolean;
   investorCount: number;
   totalSupply: number;
+  tokenPriceBps?: number;
+  navEur?: number;
+  navPerFsftEur?: number;
   fundTokenSymbol?: string;
   eurTokenSymbol?: string;
 }
@@ -42,6 +45,9 @@ const STAT_CARDS = [
 export default function FundStats(props: FundStatsProps) {
   const fsft = props.fundTokenSymbol ?? "FSFT";
   const eurs = props.eurTokenSymbol ?? "EURs";
+  const navEur = props.navEur ?? Math.max(0, props.totalDeposits + props.totalYield);
+  const navPerFsftEur = props.navPerFsftEur ?? (props.totalSupply > 0 ? navEur / props.totalSupply : 0);
+  const issueRefEur = props.tokenPriceBps && props.tokenPriceBps > 0 ? props.tokenPriceBps / 10000 : null;
 
   const utilization = props.totalDeposits > 0
     ? Math.min(100, Math.round(((props.totalInDefi + props.totalAllocated) / props.totalDeposits) * 100))
@@ -88,8 +94,12 @@ export default function FundStats(props: FundStatsProps) {
             </div>
           </div>
 
-          <div className="rounded-xl bg-fs-mint text-fs-teal-dark text-[12px] font-medium px-3 py-2 text-center">
-            1 {fsft} = 1 {eurs} = €1
+          <div className="rounded-xl bg-fs-mint text-fs-teal-dark px-3 py-2.5">
+            <p className="text-[11px] uppercase tracking-wide font-semibold">NAV / {fsft}</p>
+            <p className="text-base font-semibold mt-0.5">€{navPerFsftEur.toFixed(4)}</p>
+            <p className="text-[11px] mt-1">
+              NAV: {formatEUR(navEur)} {issueRefEur !== null ? `• Issue ref: €${issueRefEur.toFixed(4)}` : ""}
+            </p>
           </div>
         </div>
       </div>

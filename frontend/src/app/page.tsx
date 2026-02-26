@@ -103,7 +103,7 @@ export default function Dashboard() {
             {
               step: "2",
               title: "The community picks properties to buy",
-              desc: "A housing council proposes properties. Token holders vote on each acquisition. Majority decides.",
+              desc: "Verified investors propose and vote on acquisitions. Quorum and outcomes are enforced on-chain.",
             },
             {
               step: "3",

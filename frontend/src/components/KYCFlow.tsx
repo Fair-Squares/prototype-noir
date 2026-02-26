@@ -10,10 +10,11 @@ const DEV_MODE =
 interface KYCFlowProps {
   userAddress: string;
   isVerified: boolean;
+  isInvestor?: boolean;
   onVerified: () => void;
 }
 
-export default function KYCFlow({ userAddress, isVerified, onVerified }: KYCFlowProps) {
+export default function KYCFlow({ userAddress, isVerified, isInvestor, onVerified }: KYCFlowProps) {
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +83,10 @@ export default function KYCFlow({ userAddress, isVerified, onVerified }: KYCFlow
         <div className="text-4xl mb-3">✅</div>
         <h3 className="text-emerald-700 font-semibold text-xl mb-2">KYC Verified</h3>
         <p className="text-gray-600 mt-2">
-          Your identity has been verified. You can now deposit into the housing fund.
+          Your identity has been verified and the investor role is active for this wallet.
+        </p>
+        <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+          Role: {isInvestor ? "Investor" : "Verified"}
         </p>
         <a
           href="/invest"

@@ -31,12 +31,19 @@ export async function POST(request: NextRequest) {
     const { getTestAccount } = await import("@/lib/serverWallet");
     const account = await getTestAccount(accountIndex);
     const wallet = account.wallet;
+    if (address.toLowerCase() !== account.address.toLowerCase()) {
+      return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
+    }
 
     const housingFundAddr = process.env.NEXT_PUBLIC_HOUSING_FUND_ADDRESS ?? "";
     const eurTokenAddr = process.env.NEXT_PUBLIC_EUR_TOKEN_ADDRESS ?? "";
+    const kycAddr = process.env.NEXT_PUBLIC_KYC_VERIFIER_ADDRESS ?? "";
 
     if (!housingFundAddr) {
       return NextResponse.json({ error: "NEXT_PUBLIC_HOUSING_FUND_ADDRESS not set" }, { status: 500 });
+    }
+    if (!kycAddr) {
+      return NextResponse.json({ error: "NEXT_PUBLIC_KYC_VERIFIER_ADDRESS not set" }, { status: 500 });
     }
 
     // @aztec/aztec.js has no main export — use specific subpaths
@@ -44,6 +51,19 @@ export async function POST(request: NextRequest) {
     const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
+    const accountAddress = AztecAddress.fromString(account.address);
+    const userAddress = AztecAddress.fromString(address);
+
+    // Mirror contract guard with a clear API-level error for UX.
+    const KycArtifactJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
+    const kycArtifact = loadContractArtifact(KycArtifactJson as Parameters<typeof loadContractArtifact>[0]);
+    const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet);
+    const isInvestor = await kycContract.methods
+      .is_investor(userAddress)
+      .simulate({ from: accountAddress });
+    if (!Boolean(isInvestor)) {
+      return NextResponse.json({ error: "Investor role required before deposit" }, { status: 403 });
+    }
 
     // Step 1: Transfer EUR from caller to housing fund (if EUR token deployed)
     if (eurTokenAddr) {
@@ -52,7 +72,7 @@ export async function POST(request: NextRequest) {
       const eurContract = await Contract.at(AztecAddress.fromString(eurTokenAddr), eurArtifact, wallet);
       await eurContract.methods
         .transfer_public(AztecAddress.fromString(housingFundAddr), BigInt(amount))
-        .send({ from: AztecAddress.fromString(account.address) });
+        .send({ from: accountAddress });
     }
 
     // Step 2: Increment housing fund deposit counter
@@ -66,7 +86,7 @@ export async function POST(request: NextRequest) {
 
     const receipt = await hfContract.methods
       .deposit(BigInt(amount))
-      .send({ from: AztecAddress.fromString(account.address) });
+      .send({ from: accountAddress });
 
     return NextResponse.json({
       success: true,

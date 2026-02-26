@@ -36,6 +36,7 @@ interface SimAccountState {
   eurBalance: number;   // private EUR wallet balance
   fsftBalance: number;  // private FSFT balance (fund shares)
   kycVerified: boolean;
+  investorRole: boolean;
   depositedAmount: number; // total deposited to housing fund
 }
 
@@ -52,6 +53,12 @@ export interface SimProposal {
   createdAt: number;
   proposer: string;
   votedBy: string[]; // addresses that have voted
+  quorumRequired: number;
+  distributionOpened: boolean;
+  distributionAmount: number;
+  distributionSnapshotDeposits: number;
+  distributionClaimed: number;
+  claimedBy: string[];
 }
 
 interface SimState {
@@ -67,6 +74,12 @@ function votingWindowSeconds(): number {
   return Math.max(60, Math.floor(mins * 60));
 }
 
+function quorumVotes(): number {
+  const q = Number(process.env.GOVERNANCE_MIN_QUORUM_VOTES ?? "2");
+  if (!Number.isFinite(q) || q <= 0) return 2;
+  return Math.floor(q);
+}
+
 // ── Singleton ─────────────────────────────────────────────────────────────────
 
 function createInitialState(): SimState {
@@ -77,6 +90,7 @@ function createInitialState(): SimState {
     eurBalance: 100_000,
     fsftBalance: 0,
     kycVerified: true, // admin is always KYC'd
+    investorRole: true,
     depositedAmount: 500_000,
   };
   // test1: 50 000 EUR, not yet deposited
@@ -84,6 +98,7 @@ function createInitialState(): SimState {
     eurBalance: 50_000,
     fsftBalance: 0,
     kycVerified: false,
+    investorRole: false,
     depositedAmount: 0,
   };
   // test2: 50 000 EUR, not yet deposited
@@ -91,6 +106,7 @@ function createInitialState(): SimState {
     eurBalance: 50_000,
     fsftBalance: 0,
     kycVerified: false,
+    investorRole: false,
     depositedAmount: 0,
   };
 
@@ -124,7 +140,13 @@ function getState(): SimState {
 function getOrCreateAccount(address: string): SimAccountState {
   const s = getState();
   if (!s.accounts[address]) {
-    s.accounts[address] = { eurBalance: 50_000, fsftBalance: 0, kycVerified: false, depositedAmount: 0 };
+    s.accounts[address] = {
+      eurBalance: 50_000,
+      fsftBalance: 0,
+      kycVerified: false,
+      investorRole: false,
+      depositedAmount: 0,
+    };
   }
   return s.accounts[address];
 }
@@ -133,6 +155,9 @@ function getOrCreateAccount(address: string): SimAccountState {
 
 export function simGetFundStats() {
   const { fund } = getState();
+  const navEur = Math.max(0, fund.totalDeposits + fund.totalYield);
+  const navPerFsftEur =
+    fund.fsftTotalSupply > 0 ? Math.round((navEur / fund.fsftTotalSupply) * 10000) / 10000 : 0;
   return {
     totalDeposits: fund.totalDeposits,
     totalInDefi: fund.totalInDefi,
@@ -146,6 +171,8 @@ export function simGetFundStats() {
     isPaused: fund.isPaused,
     investorCount: fund.investorCount,
     totalYield: fund.totalYield,
+    navEur,
+    navPerFsftEur,
     source: "simulation" as const,
   };
 }
@@ -159,6 +186,9 @@ export function simGetPortfolio(address: string) {
     fund.fsftTotalSupply > 0
       ? (acct.fsftBalance / fund.fsftTotalSupply) * 100
       : 0;
+  const navEur = Math.max(0, fund.totalDeposits + fund.totalYield);
+  const navPerFsftEur =
+    fund.fsftTotalSupply > 0 ? Math.round((navEur / fund.fsftTotalSupply) * 10000) / 10000 : 0;
   const tokenPriceEur = fund.tokenPriceBps / 10000;
   return {
     balance: acct.fsftBalance,
@@ -173,7 +203,9 @@ export function simGetPortfolio(address: string) {
     estimatedYield: Math.round(acct.depositedAmount * 0.03),
     tokenPriceBps: fund.tokenPriceBps,
     tokenPriceEur,
-    fsftMarketValue: Math.round(acct.fsftBalance * tokenPriceEur * 100) / 100,
+    navPerFsftEur,
+    navEur,
+    fsftMarketValue: Math.round(acct.fsftBalance * navPerFsftEur * 100) / 100,
     lastAssetSalePrice: fund.lastAssetSalePrice,
     lastFsftMinted: fund.lastFsftMinted,
     source: "simulation" as const,
@@ -189,7 +221,7 @@ export function simDeposit(address: string, amount: number): { success: boolean;
   if (s.fund.isPaused) return { success: false, error: "Fund is paused" };
   if (amount <= 0) return { success: false, error: "Amount must be positive" };
   if (acct.eurBalance < amount) return { success: false, error: "Insufficient EUR balance" };
-  if (!acct.kycVerified) return { success: false, error: "KYC verification required" };
+  if (!acct.investorRole) return { success: false, error: "Investor role required" };
 
   acct.eurBalance -= amount;
   acct.depositedAmount += amount;
@@ -231,13 +263,35 @@ export function simGetKYCStatus(address: string): boolean {
   return getOrCreateAccount(address).kycVerified;
 }
 
+export function simGetKYCProfile(address: string): {
+  verified: boolean;
+  isInvestor: boolean;
+  roles: string[];
+} {
+  const acct = getOrCreateAccount(address);
+  const roles: string[] = [];
+  if (acct.investorRole) roles.push("investor");
+  return {
+    verified: acct.kycVerified,
+    isInvestor: acct.investorRole,
+    roles,
+  };
+}
+
 export function simSetKYCVerified(address: string): void {
   const acct = getOrCreateAccount(address);
   acct.kycVerified = true;
+  acct.investorRole = true;
   // Grant EUR if they have none (new user joining via KYC)
   if (acct.eurBalance === 0 && acct.depositedAmount === 0) {
     acct.eurBalance = 50_000;
   }
+}
+
+export function simRevokeKYC(address: string): void {
+  const acct = getOrCreateAccount(address);
+  acct.kycVerified = false;
+  acct.investorRole = false;
 }
 
 // ── Governance ────────────────────────────────────────────────────────────────
@@ -251,8 +305,13 @@ export function simCreateProposal(
   title: string,
   description: string,
   amount: number
-): SimProposal {
+): { success: boolean; proposal?: SimProposal; error?: string } {
   const s = getState();
+  const proposer = getOrCreateAccount(proposerAddress);
+  if (!proposer.investorRole) {
+    return { success: false, error: "Investor role required to create proposals" };
+  }
+  if (amount <= 0) return { success: false, error: "Amount must be positive" };
   const id = s.nextProposalId++;
   const proposal: SimProposal = {
     id,
@@ -267,9 +326,15 @@ export function simCreateProposal(
     createdAt: Math.floor(Date.now() / 1000),
     proposer: proposerAddress,
     votedBy: [],
+    quorumRequired: quorumVotes(),
+    distributionOpened: false,
+    distributionAmount: 0,
+    distributionSnapshotDeposits: 0,
+    distributionClaimed: 0,
+    claimedBy: [],
   };
   s.proposals.push(proposal);
-  return proposal;
+  return { success: true, proposal };
 }
 
 export function simCastVote(
@@ -278,9 +343,14 @@ export function simCastVote(
   voteYes: boolean
 ): { success: boolean; error?: string } {
   const s = getState();
+  const voter = getOrCreateAccount(address);
+  if (!voter.investorRole) return { success: false, error: "Investor role required to vote" };
   const proposal = s.proposals.find((p) => p.id === proposalId);
   if (!proposal) return { success: false, error: "Proposal not found" };
   if (proposal.status !== 0) return { success: false, error: "Proposal is not active" };
+  if (Math.floor(Date.now() / 1000) >= proposal.deadline) {
+    return { success: false, error: "Voting period has ended" };
+  }
   if (proposal.votedBy.includes(address)) return { success: false, error: "Already voted" };
 
   proposal.votedBy.push(address);
@@ -298,7 +368,10 @@ export function simFinalizeProposal(proposalId: number): { success: boolean; err
   if (Math.floor(Date.now() / 1000) < proposal.deadline) {
     return { success: false, error: "Voting window is still open" };
   }
-  if (proposal.yesVotes + proposal.noVotes === 0) return { success: false, error: "No votes cast yet" };
+  const totalVotes = proposal.yesVotes + proposal.noVotes;
+  if (totalVotes < quorumVotes()) {
+    return { success: false, error: `Quorum not reached: ${totalVotes}/${quorumVotes()} votes` };
+  }
 
   proposal.status = proposal.yesVotes > proposal.noVotes ? 1 : 2;
   return { success: true };
@@ -309,41 +382,73 @@ export function simExecuteProposal(proposalId: number): { success: boolean; erro
   const proposal = s.proposals.find((p) => p.id === proposalId);
   if (!proposal) return { success: false, error: "Proposal not found" };
   if (proposal.status !== 1) return { success: false, error: "Proposal must be Passed first (finalize it)" };
+  proposal.status = 3; // executed
+  return { success: true };
+}
+
+export function simOpenDistribution(proposalId: number): { success: boolean; error?: string } {
+  const s = getState();
+  const proposal = s.proposals.find((p) => p.id === proposalId);
+  if (!proposal) return { success: false, error: "Proposal not found" };
+  if (proposal.status !== 3) return { success: false, error: "Proposal must be executed first" };
+  if (proposal.distributionOpened) return { success: false, error: "Distribution already open" };
 
   const available = s.fund.totalDeposits - s.fund.totalInDefi - s.fund.totalAllocated;
   if (proposal.amount > available) return { success: false, error: "Insufficient available fund balance" };
+  if (s.fund.totalDeposits <= 0) return { success: false, error: "No deposits in fund" };
 
-  proposal.status = 3; // executed
+  proposal.distributionOpened = true;
+  proposal.distributionAmount = proposal.amount;
+  proposal.distributionSnapshotDeposits = s.fund.totalDeposits;
+  proposal.distributionClaimed = 0;
+  proposal.claimedBy = [];
+
   s.fund.totalAllocated += proposal.amount;
-
-  // FSFT minting: pro-rata to investor deposit tickets.
-  const fsftToMint = proposal.amount;
-  const investors = Object.entries(s.accounts)
-    .filter(([, acct]) => acct.depositedAmount > 0)
-    .map(([address, acct]) => ({ address, deposit: acct.depositedAmount }));
-
-  if (investors.length === 0) return { success: false, error: "No investors to distribute to" };
-
-  let distributed = 0;
-  for (const inv of investors) {
-    const minted = Math.floor((fsftToMint * inv.deposit) / s.fund.totalDeposits);
-    if (minted > 0) {
-      s.accounts[inv.address].fsftBalance += minted;
-      distributed += minted;
-    }
-  }
-  const remainder = fsftToMint - distributed;
-  if (remainder > 0) {
-    s.accounts[investors[0].address].fsftBalance += remainder;
-    distributed += remainder;
-  }
-
-  s.fund.fsftTotalSupply += distributed;
   s.fund.lastAssetSalePrice = proposal.amount;
-  s.fund.lastFsftMinted = distributed;
-  s.fund.tokenPriceBps = Math.floor((proposal.amount * 10000) / Math.max(distributed, 1));
+  s.fund.lastFsftMinted = proposal.amount;
+  s.fund.tokenPriceBps = 10_000;
 
-  return { success: true, fsftMinted: distributed };
+  return { success: true };
+}
+
+export function simGetClaimableAmount(proposalId: number, address: string): number {
+  const s = getState();
+  const proposal = s.proposals.find((p) => p.id === proposalId);
+  if (!proposal || !proposal.distributionOpened) return 0;
+  if (proposal.claimedBy.includes(address)) return 0;
+
+  const acct = getOrCreateAccount(address);
+  if (acct.depositedAmount <= 0) return 0;
+  if (proposal.distributionSnapshotDeposits <= 0) return 0;
+
+  const raw = Math.floor(
+    (proposal.distributionAmount * acct.depositedAmount) / proposal.distributionSnapshotDeposits
+  );
+  const remaining = Math.max(0, proposal.distributionAmount - proposal.distributionClaimed);
+  return Math.max(0, Math.min(raw, remaining));
+}
+
+export function simClaimDistribution(
+  proposalId: number,
+  address: string
+): { success: boolean; error?: string; claimedAmount?: number } {
+  const s = getState();
+  const proposal = s.proposals.find((p) => p.id === proposalId);
+  if (!proposal) return { success: false, error: "Proposal not found" };
+  if (!proposal.distributionOpened) return { success: false, error: "Distribution is not open" };
+  if (proposal.claimedBy.includes(address)) return { success: false, error: "Already claimed" };
+
+  const claimable = simGetClaimableAmount(proposalId, address);
+  if (claimable <= 0) return { success: false, error: "No claimable amount" };
+
+  const acct = getOrCreateAccount(address);
+  acct.fsftBalance += claimable;
+
+  proposal.claimedBy.push(address);
+  proposal.distributionClaimed += claimable;
+
+  s.fund.fsftTotalSupply += claimable;
+  return { success: true, claimedAmount: claimable };
 }
 
 // ── Accounts ──────────────────────────────────────────────────────────────────

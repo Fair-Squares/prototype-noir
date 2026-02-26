@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
-import { simGetKYCStatus } from "@/lib/simulationStore";
+import { simGetKYCProfile } from "@/lib/simulationStore";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -12,7 +12,8 @@ export async function GET(request: NextRequest) {
 
   // ── Simulation mode ──────────────────────────────────────────────────────
   if (!isLiveModeEnabled() && isVercelSimulationMode()) {
-    return NextResponse.json({ verified: simGetKYCStatus(address), source: "simulation" });
+    const profile = simGetKYCProfile(address);
+    return NextResponse.json({ ...profile, source: "simulation" });
   }
   if (!isLiveModeEnabled()) {
     return NextResponse.json(
@@ -24,7 +25,9 @@ export async function GET(request: NextRequest) {
   // ── Live mode: call is_verified() utility function on KYCVerifier ────────
   try {
     const kycAddr = process.env.NEXT_PUBLIC_KYC_VERIFIER_ADDRESS ?? "";
-    if (!kycAddr) return NextResponse.json({ verified: false, source: "live" });
+    if (!kycAddr) {
+      return NextResponse.json({ verified: false, isInvestor: false, roles: [], source: "live" });
+    }
 
     // Use admin wallet to query (utility functions are read-only, no signing needed)
     const { getTestAccount } = await import("@/lib/serverWallet");
@@ -39,12 +42,21 @@ export async function GET(request: NextRequest) {
     const kycArtifact = loadContractArtifact(KycArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet);
 
-    // is_verified is #[external("utility")] unconstrained — call via simulate()
     const verified = await kycContract.methods
       .is_verified(AztecAddress.fromString(address))
       .simulate({ from: AztecAddress.fromString(admin.address) });
+    const isInvestor = await kycContract.methods
+      .is_investor(AztecAddress.fromString(address))
+      .simulate({ from: AztecAddress.fromString(admin.address) });
+    const roles: string[] = [];
+    if (Boolean(isInvestor)) roles.push("investor");
 
-    return NextResponse.json({ verified: Boolean(verified), source: "live" });
+    return NextResponse.json({
+      verified: Boolean(verified),
+      isInvestor: Boolean(isInvestor),
+      roles,
+      source: "live",
+    });
   } catch (error) {
     console.error("[kyc/status] live read failed:", error);
     return NextResponse.json({ error: "Failed to read live KYC status" }, { status: 500 });

@@ -8,8 +8,10 @@ interface ProposalCardProps {
   onVote?: (proposalId: number, voteYes: boolean) => Promise<void>;
   onFinalize?: (proposalId: number) => Promise<void>;
   onExecute?: (proposalId: number, amount: number) => Promise<void>;
+  onClaim?: (proposalId: number) => Promise<void>;
   isVoting?: boolean;
   userAddress?: string | null;
+  isInvestor?: boolean;
   showActions?: boolean;
   onOpen?: () => void;
 }
@@ -19,16 +21,24 @@ export default function ProposalCard({
   onVote,
   onFinalize,
   onExecute,
+  onClaim,
   isVoting,
   userAddress,
+  isInvestor = true,
   showActions = true,
   onOpen,
 }: ProposalCardProps) {
   const totalVotes = proposal.yesVotes + proposal.noVotes;
+  const quorumRequired = proposal.quorumRequired ?? 2;
+  const quorumProgress = quorumRequired > 0 ? Math.min(100, Math.round((totalVotes / quorumRequired) * 100)) : 0;
+  const quorumReached = totalVotes >= quorumRequired;
   const yesPercent = totalVotes > 0 ? Math.round((proposal.yesVotes / totalVotes) * 100) : 0;
   const isActive = proposal.status === 0;
   const isPassed = proposal.status === 1;
   const isExecuted = proposal.status === 3;
+  const distributionOpened = Boolean(proposal.distributionOpened);
+  const hasClaimed = Boolean(proposal.hasClaimed);
+  const claimableAmount = proposal.claimableAmount ?? 0;
   const hasBlockTiming = proposal.currentBlock !== undefined || proposal.deadlineBlock !== undefined;
   const currentBlock = proposal.currentBlock ?? 0;
   const deadlineBlock = proposal.deadlineBlock ?? proposal.deadline ?? 0;
@@ -45,8 +55,10 @@ export default function ProposalCard({
     3: "text-purple-600 bg-purple-50",
   };
 
-  const canFinalize = showActions && isActive && isExpired && !!onFinalize && !!userAddress;
+  const canVote = !!userAddress && isInvestor;
+  const canFinalize = showActions && isActive && isExpired && quorumReached && !!onFinalize && !!userAddress;
   const canExecute = showActions && isPassed && !!onExecute && !!userAddress;
+  const canClaim = showActions && isExecuted && distributionOpened && !hasClaimed && claimableAmount > 0 && !!onClaim && !!userAddress;
 
   const step = isExecuted ? 3 : isPassed ? 2 : isActive ? 1 : 2;
   const isInteractive = typeof onOpen === "function";
@@ -127,6 +139,24 @@ export default function ProposalCard({
         )}
       </div>
 
+      <div className="mb-4 rounded-lg bg-bg border border-border p-3">
+        <div className="flex items-center justify-between text-xs mb-1.5">
+          <span className="text-text-2 font-medium">Quorum</span>
+          <span className={`font-semibold ${quorumReached ? "text-fs-teal" : "text-text-3"}`}>
+            {totalVotes}/{quorumRequired}
+          </span>
+        </div>
+        <div className="h-1.5 bg-white rounded-full overflow-hidden border border-border/60">
+          <div
+            className={`h-full rounded-full ${quorumReached ? "bg-fs-teal" : "bg-text-3/40"}`}
+            style={{ width: `${quorumProgress}%` }}
+          />
+        </div>
+        {!quorumReached && isActive && isExpired && (
+          <p className="text-xs text-fs-magenta mt-2">Finalize blocked: minimum quorum is {quorumRequired} votes.</p>
+        )}
+      </div>
+
       <p className="text-xs text-text-3 mb-4">
         {hasBlockTiming && isActive && !isExpired
           ? `Voting closes at block ${deadlineBlock} (${blocksLeft} blocks left)`
@@ -143,11 +173,11 @@ export default function ProposalCard({
 
       {isExecuted && (
         <div className="mb-4 rounded-lg bg-purple-50 border border-purple-100 px-3 py-2 text-xs text-purple-700 font-medium">
-          Asset acquired and FSFT distributed to investor wallets
+          Proposal executed. Distribution is permissionless and each investor claims FSFT pro-rata.
         </div>
       )}
 
-      {showActions && isActive && !isExpired && onVote && userAddress && (
+      {showActions && isActive && !isExpired && onVote && canVote && (
         <div className="flex gap-2">
           <button
             onClick={() => onVote(proposal.id, true)}
@@ -175,20 +205,52 @@ export default function ProposalCard({
           {isVoting ? "…" : "Finalize Proposal"}
         </button>
       )}
+      {showActions && isActive && isExpired && !quorumReached && !!userAddress && (
+        <p className="text-xs text-text-3 text-center">Need at least {quorumRequired} total votes before finalization.</p>
+      )}
 
       {canExecute && (
         <div className="space-y-2">
           <p className="text-xs text-text-3">
-            Proposal passed — execute to acquire the asset and mint {proposal.amount.toLocaleString()} FSFT.
+            Proposal passed. Execute to mark it on-chain and open investor claim distribution.
           </p>
           <button
             onClick={() => onExecute!(proposal.id, proposal.amount)}
             disabled={isVoting}
             className="w-full py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 disabled:opacity-40 transition-colors"
           >
-            {isVoting ? "…" : `Execute & Mint ${proposal.amount.toLocaleString()} FSFT`}
+            {isVoting ? "…" : "Execute & Open Distribution"}
           </button>
         </div>
+      )}
+
+      {showActions && isExecuted && distributionOpened && (
+        <div className="space-y-2">
+          <p className="text-xs text-text-3">
+            Distribution claimed: {(proposal.distributionClaimed ?? 0).toLocaleString()} / {(proposal.distributionAmount ?? 0).toLocaleString()} FSFT
+          </p>
+          {hasClaimed && (
+            <div className="w-full py-2 rounded-lg bg-fs-mint text-fs-teal-dark text-sm font-semibold text-center">
+              Claimed
+            </div>
+          )}
+          {!hasClaimed && canClaim && (
+            <button
+              onClick={() => onClaim!(proposal.id)}
+              disabled={isVoting}
+              className="w-full py-2 rounded-lg bg-fs-teal text-white text-sm font-semibold hover:bg-fs-teal-dark disabled:opacity-40 transition-colors"
+            >
+              {isVoting ? "…" : `Claim ${claimableAmount.toLocaleString()} FSFT`}
+            </button>
+          )}
+          {!hasClaimed && !canClaim && !!userAddress && (
+            <p className="text-xs text-text-3">No claimable amount for your current deposit ticket.</p>
+          )}
+        </div>
+      )}
+
+      {showActions && isActive && userAddress && !canVote && (
+        <p className="text-xs text-text-3 text-center">Investor role required to vote.</p>
       )}
 
       {showActions && isActive && !userAddress && !isExecuted && (

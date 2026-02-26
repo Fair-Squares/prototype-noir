@@ -1,12 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useWallet } from "@/contexts/WalletContext";
+import { fetchKYCProfile } from "@/lib/contracts";
 
 export default function HeaderWalletButton() {
   const { status, activeAccount, accounts, connect, disconnect, switchAccount } =
     useWallet();
   const [showDropdown, setShowDropdown] = useState(false);
+  const [isInvestor, setIsInvestor] = useState(false);
+
+  useEffect(() => {
+    if (!activeAccount?.address) {
+      setIsInvestor(false);
+      return;
+    }
+    fetchKYCProfile(activeAccount.address)
+      .then((profile) => setIsInvestor(Boolean(profile.isInvestor)))
+      .catch(() => setIsInvestor(false));
+  }, [activeAccount?.address]);
 
   // ── Loading ───────────────────────────────────────────────────────────────
   if (status === "loading") {
@@ -101,6 +113,9 @@ export default function HeaderWalletButton() {
         {alias}
         {isAdmin && (
           <span className="text-[9px] font-bold text-fs-teal bg-white/60 px-1 py-0.5 rounded">admin</span>
+        )}
+        {isInvestor && (
+          <span className="text-[9px] font-bold text-blue-700 bg-white/70 px-1 py-0.5 rounded">investor</span>
         )}
         <svg className="w-3.5 h-3.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />

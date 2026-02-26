@@ -6,6 +6,8 @@ import {
   simCreateProposal,
   simFinalizeProposal,
   simExecuteProposal,
+  simOpenDistribution,
+  simGetClaimableAmount,
 } from "@/lib/simulationStore";
 
 // -- Helpers -----------------------------------------------------------------
@@ -36,9 +38,25 @@ function toBigInt(value: unknown): bigint {
 
 // -- GET: list proposals ------------------------------------------------------
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const address = searchParams.get("address") ?? "";
+  const accountIndex = Number(searchParams.get("accountIndex") ?? "0");
+
   if (!isLiveModeEnabled() && isVercelSimulationMode()) {
-    return NextResponse.json({ proposals: simGetProposals(), source: "simulation" });
+    const proposals = simGetProposals().map((proposal) => {
+      const totalVotes = proposal.yesVotes + proposal.noVotes;
+      const claimableAmount = address ? simGetClaimableAmount(proposal.id, address) : 0;
+      const hasClaimed = address ? proposal.claimedBy.includes(address) : false;
+      return {
+        ...proposal,
+        totalVotes,
+        quorumReached: totalVotes >= proposal.quorumRequired,
+        claimableAmount,
+        hasClaimed,
+      };
+    });
+    return NextResponse.json({ proposals, source: "simulation" });
   }
   if (!isLiveModeEnabled()) {
     return NextResponse.json(
@@ -50,8 +68,12 @@ export async function GET() {
   try {
     const { getTestAccount } = await import("@/lib/serverWallet");
     const govAddr = process.env.NEXT_PUBLIC_GOVERNANCE_ADDRESS ?? "";
+    const housingFundAddr = process.env.NEXT_PUBLIC_HOUSING_FUND_ADDRESS ?? "";
     if (!govAddr) {
       return NextResponse.json({ error: "NEXT_PUBLIC_GOVERNANCE_ADDRESS not set" }, { status: 500 });
+    }
+    if (!housingFundAddr) {
+      return NextResponse.json({ error: "NEXT_PUBLIC_HOUSING_FUND_ADDRESS not set" }, { status: 500 });
     }
 
     const { Contract } = await import("@aztec/aztec.js/contracts");
@@ -59,19 +81,26 @@ export async function GET() {
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
-    const admin = await getTestAccount(0);
-    const wallet = admin.wallet;
-    const adminAddr = AztecAddress.fromString(admin.address);
+    const reader = await getTestAccount(accountIndex);
+    const wallet = reader.wallet;
+    const from = AztecAddress.fromString(reader.address);
 
     const GovArtifactJson = await loadGeneratedArtifactJson("governance-Governance.json");
+    const HfArtifactJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
     const govArtifact = loadContractArtifact(GovArtifactJson as Parameters<typeof loadContractArtifact>[0]);
-    const govContract = await Contract.at(AztecAddress.fromString(govAddr), govArtifact, wallet);
+    const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
 
-    const count = Number(await govContract.methods.get_proposal_count().simulate({ from: adminAddr }));
+    const govContract = await Contract.at(AztecAddress.fromString(govAddr), govArtifact, wallet);
+    const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, wallet);
+
+    const count = Number(await govContract.methods.get_proposal_count().simulate({ from }));
     const currentBlock = await getBlockNumber();
+    const quorum = Number(await govContract.methods.get_min_quorum_votes().simulate({ from }));
+    const requestedAddress = address ? AztecAddress.fromString(address) : null;
+
     const proposals = await Promise.all(
       Array.from({ length: count }, async (_, id) => {
-        const raw = await govContract.methods.get_proposal(id).simulate({ from: adminAddr });
+        const raw = await govContract.methods.get_proposal(id).simulate({ from });
         const tuple = Array.isArray(raw)
           ? raw
           : [BigInt(0), BigInt(0), BigInt(0), BigInt(0), BigInt(0), BigInt(0), BigInt(0)];
@@ -83,6 +112,29 @@ export async function GET() {
         const status = Number(toBigInt(tuple[4]));
         const createdBlock = Number(toBigInt(tuple[5]));
         const deadlineBlock = Number(toBigInt(tuple[6]));
+        const totalVotes = yesVotes + noVotes;
+
+        const distributionRaw = await hfContract.methods
+          .get_distribution_status(id)
+          .simulate({ from });
+        const distributionTuple = Array.isArray(distributionRaw)
+          ? distributionRaw
+          : [false, BigInt(0), BigInt(0), BigInt(0)];
+        const distributionOpened = Boolean(distributionTuple[0]);
+        const distributionAmount = Number(toBigInt(distributionTuple[1]));
+        const distributionSnapshotDeposits = Number(toBigInt(distributionTuple[2]));
+        const distributionClaimed = Number(toBigInt(distributionTuple[3]));
+
+        let hasClaimed = false;
+        let claimableAmount = 0;
+        if (requestedAddress) {
+          hasClaimed = Boolean(
+            await hfContract.methods.has_claimed(id, requestedAddress).simulate({ from })
+          );
+          claimableAmount = Number(
+            await hfContract.methods.get_claimable_amount(id, requestedAddress).simulate({ from })
+          );
+        }
 
         return {
           id,
@@ -98,6 +150,15 @@ export async function GET() {
           createdBlock,
           deadlineBlock,
           currentBlock,
+          quorumRequired: quorum,
+          totalVotes,
+          quorumReached: totalVotes >= quorum,
+          distributionOpened,
+          distributionAmount,
+          distributionSnapshotDeposits,
+          distributionClaimed,
+          hasClaimed,
+          claimableAmount,
         };
       })
     );
@@ -120,13 +181,14 @@ export async function POST(request: NextRequest) {
       if (!title || !amount) {
         return NextResponse.json({ error: "title and amount required" }, { status: 400 });
       }
-      const proposal = simCreateProposal(
+      const result = simCreateProposal(
         address ?? "0x0",
         title,
         description ?? "",
         Number(amount)
       );
-      return NextResponse.json({ success: true, proposal });
+      if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
+      return NextResponse.json({ success: true, proposal: result.proposal });
     }
 
     if (action === "finalize") {
@@ -136,12 +198,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "execute") {
-      const result = simExecuteProposal(Number(proposalId));
-      if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
+      const executeResult = simExecuteProposal(Number(proposalId));
+      if (!executeResult.success) return NextResponse.json({ error: executeResult.error }, { status: 400 });
+      const openResult = simOpenDistribution(Number(proposalId));
+      if (!openResult.success) return NextResponse.json({ error: openResult.error }, { status: 400 });
       return NextResponse.json({
         success: true,
-        message: `Asset acquired - ${result.fsftMinted?.toLocaleString()} FSFT minted`,
-        fsftMinted: result.fsftMinted,
+        message: "Proposal executed and distribution opened",
       });
     }
 
@@ -162,21 +225,16 @@ export async function POST(request: NextRequest) {
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     const govAddr = process.env.NEXT_PUBLIC_GOVERNANCE_ADDRESS ?? "";
-    const fundTokenAddr = process.env.NEXT_PUBLIC_FUND_TOKEN_ADDRESS ?? "";
     const housingFundAddr = process.env.NEXT_PUBLIC_HOUSING_FUND_ADDRESS ?? "";
 
     if (!govAddr) return NextResponse.json({ error: "NEXT_PUBLIC_GOVERNANCE_ADDRESS not set" }, { status: 500 });
 
     const actor = await getTestAccount(accountIndex);
-    const admin = await getTestAccount(0);
 
     const GovArtifactJson = await loadGeneratedArtifactJson("governance-Governance.json");
     const HfArtifactJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
-    const FtArtifactJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
-
     const govArtifact = loadContractArtifact(GovArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
-    const ftArtifact = loadContractArtifact(FtArtifactJson as Parameters<typeof loadContractArtifact>[0]);
 
     const govContract = await Contract.at(AztecAddress.fromString(govAddr), govArtifact, actor.wallet);
 
@@ -184,12 +242,24 @@ export async function POST(request: NextRequest) {
       if (!title || !amount) {
         return NextResponse.json({ error: "title and amount required" }, { status: 400 });
       }
+      const kycAddr = process.env.NEXT_PUBLIC_KYC_VERIFIER_ADDRESS ?? "";
+      if (!kycAddr) {
+        return NextResponse.json({ error: "NEXT_PUBLIC_KYC_VERIFIER_ADDRESS not set" }, { status: 500 });
+      }
+      const KycArtifactJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
+      const kycArtifact = loadContractArtifact(KycArtifactJson as Parameters<typeof loadContractArtifact>[0]);
+      const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, actor.wallet);
+      const actorAddress = AztecAddress.fromString(actor.address);
+      const isInvestor = await kycContract.methods.is_investor(actorAddress).simulate({ from: actorAddress });
+      if (!Boolean(isInvestor)) {
+        return NextResponse.json({ error: "Investor role required to create proposals" }, { status: 403 });
+      }
 
       const descHashBytes = Buffer.from(title.slice(0, 31), "utf-8");
       const descHash = BigInt("0x" + descHashBytes.toString("hex").padStart(64, "0"));
       const receipt = await govContract.methods
         .create_proposal(descHash, BigInt(amount))
-        .send({ from: AztecAddress.fromString(actor.address) });
+        .send({ from: actorAddress });
 
       return NextResponse.json({
         success: true,
@@ -206,116 +276,23 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "execute") {
-      if (!fundTokenAddr || !housingFundAddr) {
-        return NextResponse.json({ error: "FUND_TOKEN_ADDRESS and HOUSING_FUND_ADDRESS are required" }, { status: 500 });
+      if (!housingFundAddr) {
+        return NextResponse.json({ error: "NEXT_PUBLIC_HOUSING_FUND_ADDRESS is required" }, { status: 500 });
       }
+      const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, actor.wallet);
 
-      // Read amount directly from on-chain proposal to avoid client tampering.
-      const rawProposal = await govContract.methods
-        .get_proposal(Number(proposalId))
-        .simulate({ from: AztecAddress.fromString(actor.address) });
-      const tuple = Array.isArray(rawProposal) ? rawProposal : [BigInt(0), BigInt(0)];
-      const proposalAmount = Number(toBigInt(tuple[1]));
-      if (proposalAmount <= 0) {
-        return NextResponse.json({ error: "Invalid proposal amount" }, { status: 400 });
-      }
-
-      // 1) Execute proposal state transition in governance.
-      // Contract authorizes only council (test0) or housing fund.
-      const govAdminContract = await Contract.at(AztecAddress.fromString(govAddr), govArtifact, admin.wallet);
-      const executeReceipt = await govAdminContract.methods
+      const executeReceipt = await govContract.methods
         .execute_proposal(Number(proposalId))
-        .send({ from: AztecAddress.fromString(admin.address) });
-
-      // 2) Reserve amount in HousingFund accounting.
-      const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, admin.wallet);
-      try {
-        await hfContract.methods
-          .reserve_for_property(BigInt(proposalAmount))
-          .send({ from: AztecAddress.fromString(admin.address) });
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        return NextResponse.json({ error: `reserve_for_property failed: ${msg}` }, { status: 500 });
-      }
-
-      // 3) Read investor tickets and mint FSFT pro-rata to users.
-      const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, admin.wallet);
-      const fundStatsRaw = await hfContract.methods
-        .get_fund_stats()
-        .simulate({ from: AztecAddress.fromString(admin.address) });
-      const statsTuple = Array.isArray(fundStatsRaw) ? fundStatsRaw : [BigInt(0)];
-      const totalDeposits = Number(toBigInt(statsTuple[0]));
-      if (totalDeposits <= 0) {
-        return NextResponse.json({ error: "No deposits in housing fund" }, { status: 400 });
-      }
-
-      const investorCount = Number(
-        await hfContract.methods.get_investor_count().simulate({ from: AztecAddress.fromString(admin.address) })
-      );
-
-      const investors: { addr: string; ticket: number }[] = [];
-      for (let i = 0; i < investorCount; i++) {
-        const investorAddrObj = await hfContract.methods
-          .get_investor_at(i)
-          .simulate({ from: AztecAddress.fromString(admin.address) });
-        const investorAddr = investorAddrObj.toString();
-        if (!investorAddr || investorAddr === "0x0") continue;
-
-        const ticket = Number(
-          await hfContract.methods
-            .get_user_deposit_ticket(AztecAddress.fromString(investorAddr))
-            .simulate({ from: AztecAddress.fromString(admin.address) })
-        );
-        if (ticket > 0) investors.push({ addr: investorAddr, ticket });
-      }
-
-      if (investors.length === 0) {
-        return NextResponse.json({ error: "No active investors with deposit tickets" }, { status: 400 });
-      }
-
-      let distributed = 0;
-      const mints: { addr: string; amount: number }[] = investors.map((inv) => {
-        const minted = Math.floor((proposalAmount * inv.ticket) / totalDeposits);
-        distributed += minted;
-        return { addr: inv.addr, amount: minted };
-      });
-
-      const remainder = proposalAmount - distributed;
-      if (remainder > 0) {
-        mints[0].amount += remainder;
-        distributed += remainder;
-      }
-
-      let distributedTo = 0;
-      for (const mint of mints) {
-        if (mint.amount <= 0) continue;
-        try {
-          await ftContract.methods
-            .mint_public(AztecAddress.fromString(mint.addr), BigInt(mint.amount))
-            .send({ from: AztecAddress.fromString(admin.address) });
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          return NextResponse.json({ error: `mint_public failed for ${mint.addr}: ${msg}` }, { status: 500 });
-        }
-        distributedTo += 1;
-      }
-
-      // 4) Persist valuation snapshot on-chain (sale price, minted amount, token price bps).
-      try {
-        await hfContract.methods
-          .record_asset_sale(BigInt(proposalAmount), BigInt(distributed))
-          .send({ from: AztecAddress.fromString(admin.address) });
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        return NextResponse.json({ error: `record_asset_sale failed: ${msg}` }, { status: 500 });
-      }
+        .send({ from: AztecAddress.fromString(actor.address) });
+      const openReceipt = await hfContract.methods
+        .open_distribution(Number(proposalId))
+        .send({ from: AztecAddress.fromString(actor.address) });
 
       return NextResponse.json({
         success: true,
         txHash: executeReceipt.txHash?.toString(),
-        fsftMinted: distributed,
-        distributedTo,
-        message: `Executed proposal and distributed ${distributed.toLocaleString()} FSFT to ${distributedTo} investor wallets`,
+        openDistributionTxHash: openReceipt.txHash?.toString(),
+        message: "Proposal executed and distribution opened",
       });
     }
 

@@ -11,14 +11,17 @@ export default function ProposalDetailPage({ params }: { params: Promise<{ id: s
 
   const { activeAccount } = useWallet();
   const address = activeAccount?.address ?? null;
+  const accountIndex = activeAccount?.index ?? 0;
 
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [isVoting, setIsVoting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
-    fetchProposals().then((proposals) => setProposal(proposals.find((p) => p.id === proposalId) ?? null));
-  }, [proposalId]);
+    fetchProposals(address ?? undefined, accountIndex).then((proposals) =>
+      setProposal(proposals.find((p) => p.id === proposalId) ?? null)
+    );
+  }, [proposalId, address, accountIndex]);
 
   const handleVote = async (pid: number, voteYes: boolean) => {
     if (!address) {
@@ -28,10 +31,10 @@ export default function ProposalDetailPage({ params }: { params: Promise<{ id: s
     setIsVoting(true);
     setMessage(null);
     try {
-      const result = await castVote(address, pid, voteYes);
+      const result = await castVote(address, pid, voteYes, accountIndex);
       if (result.success) {
         setMessage({ type: "success", text: "✅ Vote cast — ZK proof verified" });
-        const proposals = await fetchProposals();
+        const proposals = await fetchProposals(address, accountIndex);
         setProposal(proposals.find((p) => p.id === pid) ?? null);
       } else {
         setMessage({ type: "error", text: result.error ?? "Vote failed" });
@@ -65,7 +68,7 @@ export default function ProposalDetailPage({ params }: { params: Promise<{ id: s
         </div>
       )}
 
-      <ProposalCard proposal={proposal} onVote={handleVote} isVoting={isVoting} />
+      <ProposalCard proposal={proposal} onVote={handleVote} isVoting={isVoting} userAddress={address} />
 
       <div className="rounded-xl bg-card p-6">
         <h2 className="text-base font-semibold mb-4">Details</h2>

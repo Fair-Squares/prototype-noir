@@ -1,6 +1,63 @@
 # Implementation Status
 
-*Updated: 2026-02-25*
+*Updated: 2026-02-26*
+
+## ✅ Governance + Investor Role + NAV v2 (Implemented)
+
+### On-chain / Noir
+- [x] `KYCVerifier` now tracks investor role (`is_investor`) in addition to verified status
+- [x] `register_kyc` grants investor role; `revoke_kyc` removes verified + investor role
+- [x] `Governance` constructor now includes `kyc_verifier` and `min_quorum_votes`
+- [x] Governance enforces investor role for `create_proposal` and `cast_vote`
+- [x] Governance quorum rule enforced in `finalize_proposal`: `yes + no >= min_quorum_votes`
+- [x] `execute_proposal` is permissionless once passed (no council/admin execution gate)
+- [x] `HousingFund.deposit` enforces investor role via KYC view call
+- [x] Permissionless distribution lifecycle added to HousingFund:
+  - [x] `open_distribution(proposal_id)`
+  - [x] `claim_distribution(proposal_id)`
+  - [x] `get_claimable_amount(proposal_id, user)`
+  - [x] `has_claimed(proposal_id, user)`
+  - [x] `get_distribution_status(proposal_id)`
+- [x] HousingFund distribution snapshot + anti-double-claim storage added
+- [x] Governance/HousingFund Nargo deps updated for cross-contract calls
+
+### Bootstrap / Wiring
+- [x] Governance deploy args updated to `(housing_fund, kyc_verifier, voting_window_blocks, min_quorum_votes)`
+- [x] `GOVERNANCE_MIN_QUORUM_VOTES` support added to bootstrap and env example
+- [x] FSFT admin transfer to HousingFund in bootstrap (`FundToken.set_admin(housing_fund)`)
+- [x] EUR token admin left unchanged for demo top-up
+
+### Backend API
+- [x] `POST /api/governance/proposals` `action=execute` now:
+  - [x] executes proposal with selected actor
+  - [x] opens distribution via `housing_fund.open_distribution`
+  - [x] removes admin reserve/mint loop
+- [x] New `POST /api/governance/claim` route for `claim_distribution`
+- [x] Investor role checks mirrored in API flow (create/vote/deposit prechecks + simulation parity)
+- [x] `GET /api/kyc/status` now returns `verified`, `isInvestor`, and `roles`
+- [x] `GET /api/fund/stats` and `GET /api/portfolio` now return NAV-centric fields (`navEur`, `navPerFsftEur`)
+- [x] Portfolio FSFT market value now derived from NAV/FSFT (not fixed €1)
+
+### Simulation v2 parity
+- [x] Investor role state added and tied to KYC registration/revocation
+- [x] Investor-only deposit/proposal/vote enforcement
+- [x] Quorum=2 finalize semantics
+- [x] Execute -> open distribution -> claim flow added
+- [x] NAV fields exposed and used in simulated valuation
+
+### Frontend UX / Messaging
+- [x] Governance cards/modal now show quorum progress and quorum-block reason
+- [x] Executed proposals now show claim status + claim CTA in modal
+- [x] Investor role surfaced in UI (KYC success text, wallet badge, account badges)
+- [x] Invest flow blocks deposit UX when investor role is missing
+- [x] FSFT copy updated from fixed peg to NAV/share-token narrative
+- [x] Fund/portfolio views now surface NAV and NAV per FSFT
+
+### Verification
+- [x] `npx tsc --noEmit --incremental false` (frontend) passes
+- [x] `npm run build` (frontend) passes
+
+---
 
 ## ✅ Implemented
 

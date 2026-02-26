@@ -7,11 +7,12 @@ import InfoTooltip from "@/components/InfoTooltip";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   fetchFundStats,
-  fetchKYCStatus,
+  fetchKYCProfile,
   fetchPortfolio,
   depositFunds,
   type FundStats as FundStatsType,
   type PortfolioData,
+  type KYCProfile,
 } from "@/lib/contracts";
 
 export default function InvestPage() {
@@ -19,7 +20,7 @@ export default function InvestPage() {
   const address = activeAccount?.address ?? null;
   const accountIndex = activeAccount?.index ?? 0;
 
-  const [isKYCVerified, setIsKYCVerified] = useState(false);
+  const [kycProfile, setKycProfile] = useState<KYCProfile>({ verified: false, isInvestor: false, roles: [] });
   const [stats, setStats] = useState<FundStatsType | null>(null);
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
   const [txMessage, setTxMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -36,9 +37,12 @@ export default function InvestPage() {
   useEffect(() => { fetchFundStats().then(setStats); }, []);
 
   useEffect(() => {
-    if (!address) return;
+    if (!address) {
+      setKycProfile({ verified: false, isInvestor: false, roles: [] });
+      return;
+    }
     Promise.all([
-      fetchKYCStatus(address).then(setIsKYCVerified),
+      fetchKYCProfile(address).then(setKycProfile),
       fetchPortfolio(address, accountIndex).then(setPortfolio),
     ]);
   }, [address, accountIndex]);
@@ -62,6 +66,11 @@ export default function InvestPage() {
         <p className="text-text-2 text-sm">
           Deposit EUR into the housing fund. Your deposit is tracked privately as a ticket on Aztec.
         </p>
+        {kycProfile.isInvestor && (
+          <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-fs-mint px-2.5 py-1 text-xs font-semibold text-fs-teal-dark">
+            Investor role granted
+          </p>
+        )}
       </div>
 
       {txMessage && (
@@ -86,7 +95,7 @@ export default function InvestPage() {
       <div className="grid xl:grid-cols-[1.05fr_0.95fr] gap-6">
         <div className="rounded-2xl bg-card border border-border p-5">
           <InvestForm
-            isKYCVerified={isKYCVerified}
+            isInvestor={kycProfile.isInvestor}
             isConnected={!!address}
             eurBalance={portfolio?.eurBalance ?? 0}
             onDeposit={handleDeposit}
@@ -115,7 +124,7 @@ export default function InvestPage() {
                   title: "Fund Share Token",
                   summary: "Distributed after executed proposals",
                   details:
-                    "FSFT is minted only after governance approves and executes a property acquisition.",
+                    "FSFT is a fund share token. Issue price may start near €1 at settlement, then value follows NAV per FSFT.",
                 },
               ].map((t) => (
                 <div key={t.symbol} className="flex gap-3">

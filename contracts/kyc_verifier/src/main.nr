@@ -11,7 +11,7 @@ use aztec::macros::aztec;
 pub contract KYCVerifier {
     use aztec::{
         macros::{
-            functions::{external, initializer},
+            functions::{external, initializer, view},
             storage::storage,
         },
         protocol::address::AztecAddress,
@@ -23,6 +23,7 @@ pub contract KYCVerifier {
         admin: PublicMutable<AztecAddress, Context>,
         verifiers: Map<AztecAddress, PublicMutable<bool, Context>, Context>,
         verified: Map<AztecAddress, PublicMutable<bool, Context>, Context>,
+        investor_role: Map<AztecAddress, PublicMutable<bool, Context>, Context>,
         verified_count: PublicMutable<u32, Context>,
     }
 
@@ -57,6 +58,7 @@ pub contract KYCVerifier {
         assert_eq(self.msg_sender(), self.storage.admin.read(), "caller is not admin");
         if self.storage.verified.at(user).read() {
             self.storage.verified.at(user).write(false);
+            self.storage.investor_role.at(user).write(false);
             let count = self.storage.verified_count.read();
             if count > 0 {
                 self.storage.verified_count.write(count - 1);
@@ -76,16 +78,27 @@ pub contract KYCVerifier {
 
         if !self.storage.verified.at(user).read() {
             self.storage.verified.at(user).write(true);
+            self.storage.investor_role.at(user).write(true);
             let count = self.storage.verified_count.read();
             self.storage.verified_count.write(count + 1);
+        } else {
+            // Ensure investor role exists for already-verified legacy entries.
+            self.storage.investor_role.at(user).write(true);
         }
     }
 
     // VIEW FUNCTIONS
 
-    #[external("utility")]
-    unconstrained fn is_verified(user: AztecAddress) -> pub bool {
+    #[external("public")]
+    #[view]
+    fn is_verified(user: AztecAddress) -> pub bool {
         self.storage.verified.at(user).read()
+    }
+
+    #[external("public")]
+    #[view]
+    fn is_investor(user: AztecAddress) -> pub bool {
+        self.storage.investor_role.at(user).read()
     }
 
     #[external("utility")]

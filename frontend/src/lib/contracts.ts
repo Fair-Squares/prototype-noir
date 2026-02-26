@@ -18,6 +18,11 @@ export interface FundStats {
   isPaused: boolean;
   investorCount: number;
   totalSupply: number;
+  lastAssetSalePrice?: number;
+  lastFsftMinted?: number;
+  tokenPriceBps?: number;
+  navEur?: number;
+  navPerFsftEur?: number;
 }
 
 export async function fetchFundStats(): Promise<FundStats> {
@@ -56,17 +61,34 @@ export async function withdrawFunds(
 
 // ── KYC Status ────────────────────────────────────────────────────────────────
 
-export async function fetchKYCStatus(address: string): Promise<boolean> {
+export interface KYCProfile {
+  verified: boolean;
+  isInvestor: boolean;
+  roles: string[];
+  source?: string;
+}
+
+export async function fetchKYCProfile(address: string): Promise<KYCProfile> {
   const res = await fetch(`/api/kyc/status?address=${encodeURIComponent(address)}`);
-  if (!res.ok) return false;
+  if (!res.ok) return { verified: false, isInvestor: false, roles: [] };
   const data = await res.json();
-  return data.verified;
+  return {
+    verified: Boolean(data.verified),
+    isInvestor: Boolean(data.isInvestor),
+    roles: Array.isArray(data.roles) ? data.roles : [],
+    source: data.source,
+  };
+}
+
+export async function fetchKYCStatus(address: string): Promise<boolean> {
+  const profile = await fetchKYCProfile(address);
+  return profile.verified;
 }
 
 export async function registerKYC(
   userAddress: string,
   devMode = false
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; message?: string; verified?: boolean; isInvestor?: boolean; roles?: string[] }> {
   const res = await fetch("/api/kyc/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -91,6 +113,15 @@ export interface Proposal {
   deadlineBlock?: number;
   createdBlock?: number;
   currentBlock?: number;
+  quorumRequired?: number;
+  totalVotes?: number;
+  quorumReached?: boolean;
+  distributionOpened?: boolean;
+  distributionAmount?: number;
+  distributionSnapshotDeposits?: number;
+  distributionClaimed?: number;
+  claimableAmount?: number;
+  hasClaimed?: boolean;
 }
 
 export const PROPOSAL_STATUS: Record<number, string> = {
@@ -100,8 +131,12 @@ export const PROPOSAL_STATUS: Record<number, string> = {
   3: "Executed",
 };
 
-export async function fetchProposals(): Promise<Proposal[]> {
-  const res = await fetch("/api/governance/proposals");
+export async function fetchProposals(address?: string, accountIndex?: number): Promise<Proposal[]> {
+  const params = new URLSearchParams();
+  if (address) params.set("address", address);
+  if (accountIndex !== undefined) params.set("accountIndex", String(accountIndex));
+  const query = params.toString();
+  const res = await fetch(query ? `/api/governance/proposals?${query}` : "/api/governance/proposals");
   if (!res.ok) return [];
   const data = await res.json();
   return data.proposals;
@@ -150,13 +185,26 @@ export async function finalizeProposal(
 
 export async function executeProposal(
   proposalId: number,
-  amount: number,
+  amount = 0,
   accountIndex = 0
 ): Promise<{ success: boolean; message?: string; fsftMinted?: number; error?: string }> {
   const res = await fetch("/api/governance/proposals", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "execute", proposalId, amount, accountIndex }),
+  });
+  return res.json();
+}
+
+export async function claimProposalDistribution(
+  proposalId: number,
+  address: string,
+  accountIndex = 0
+): Promise<{ success: boolean; message?: string; claimedAmount?: number; txHash?: string; error?: string }> {
+  const res = await fetch("/api/governance/claim", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ proposalId, address, accountIndex }),
   });
   return res.json();
 }
@@ -176,9 +224,12 @@ export interface PortfolioData {
   estimatedYield: number;
   tokenPriceBps?: number;
   tokenPriceEur?: number;
+  navEur?: number;
+  navPerFsftEur?: number;
   fsftMarketValue?: number;
   lastAssetSalePrice?: number;
   lastFsftMinted?: number;
+  totalYield?: number;
   fundTokenSymbol?: string;
   eurTokenSymbol?: string;
 }
@@ -194,9 +245,12 @@ export async function fetchPortfolio(address: string, accountIndex?: number): Pr
 // ── EUR / Token Balances ──────────────────────────────────────────────────────
 
 export interface TokenInfo {
-  fundToken: { symbol: string; name: string; description: string; totalSupply: number };
-  eurToken: { symbol: string; name: string; description: string; network: string };
+  fundToken: { symbol: string; name: string; description: string; totalSupply: number; peg?: string; decimals?: number };
+  eurToken: { symbol: string; name: string; description: string; peg?: string; decimals?: number };
   eurBalance?: number;
+  fsftBalance?: number;
+  address?: string | null;
+  source?: string;
 }
 
 export async function fetchTokenInfo(address?: string): Promise<TokenInfo> {

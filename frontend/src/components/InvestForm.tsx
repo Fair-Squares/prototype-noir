@@ -5,14 +5,14 @@ import { formatEURDecimals } from "@/lib/contracts";
 import InfoTooltip from "@/components/InfoTooltip";
 
 interface InvestFormProps {
-  isKYCVerified: boolean;
+  isInvestor: boolean;
   isConnected: boolean;
   eurBalance: number; // EUR available in wallet to deposit
   onDeposit: (amount: string) => Promise<void>;
 }
 
 export default function InvestForm({
-  isKYCVerified,
+  isInvestor,
   isConnected,
   eurBalance,
   onDeposit,
@@ -60,7 +60,7 @@ export default function InvestForm({
     );
   }
 
-  if (!isKYCVerified) {
+  if (!isInvestor) {
     return (
       <div className="rounded-xl bg-card p-10 text-center">
         <div className="w-12 h-12 rounded-full bg-amber-50 mx-auto mb-4 flex items-center justify-center">
@@ -68,9 +68,9 @@ export default function InvestForm({
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
           </svg>
         </div>
-        <p className="font-semibold mb-2">Identity verification required</p>
+        <p className="font-semibold mb-2">Investor role required</p>
         <p className="text-sm text-text-3 mb-4">
-          A quick check is required before investing to comply with housing fund regulations.
+          Complete KYC to unlock the investor role before making deposits.
         </p>
         <a href="/kyc" className="inline-flex items-center gap-1.5 text-fs-teal hover:text-fs-teal-dark font-medium text-sm">
           Verify with zkPassport

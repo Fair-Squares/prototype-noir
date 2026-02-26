@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
     let lastAssetSalePrice = 0;
     let lastFsftMinted = 0;
     let tokenPriceBps = 0;
+    let totalYield = 0;
 
     if (eurTokenAddr) {
       const EurJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
@@ -119,8 +120,10 @@ export async function GET(request: NextRequest) {
     }
 
     const sharePercent = totalSupply > 0 ? Math.round((fsftBalance / totalSupply) * 10000) / 100 : 0;
-    const tokenPriceEur = tokenPriceBps > 0 ? tokenPriceBps / 10000 : 1;
-    const fsftMarketValue = Math.round(fsftBalance * tokenPriceEur * 100) / 100;
+    const tokenPriceEur = tokenPriceBps > 0 ? tokenPriceBps / 10000 : 0;
+    const navEur = Math.max(0, totalFundDeposits + totalYield);
+    const navPerFsftEur = totalSupply > 0 ? Math.round((navEur / totalSupply) * 10000) / 10000 : 0;
+    const fsftMarketValue = Math.round(fsftBalance * navPerFsftEur * 100) / 100;
 
     return NextResponse.json({
       balance: fsftBalance,
@@ -135,9 +138,12 @@ export async function GET(request: NextRequest) {
       estimatedYield: Math.round(depositTicket * 0.03),
       tokenPriceBps,
       tokenPriceEur,
+      navEur,
+      navPerFsftEur,
       fsftMarketValue,
       lastAssetSalePrice,
       lastFsftMinted,
+      totalYield,
       source: "live",
     });
   } catch (error) {
