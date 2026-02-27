@@ -104,6 +104,11 @@ export default function FundStats(props: FundStatsProps) {
         </div>
       </div>
 
+      <div className="rounded-xl border border-border bg-bg px-4 py-3 text-xs text-text-2">
+        The protocol may park part of idle EUR liquidity in DeFi lending venues while no acquisition is active.
+        This is a treasury-level allocation decision, not an individual user action.
+      </div>
+
       {props.isPaused && (
         <div className="rounded-xl bg-fs-magenta/10 p-4 text-center text-fs-magenta text-sm font-medium">
           The fund is temporarily paused

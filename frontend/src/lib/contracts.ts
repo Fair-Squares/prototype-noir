@@ -23,6 +23,7 @@ export interface FundStats {
   tokenPriceBps?: number;
   navEur?: number;
   navPerFsftEur?: number;
+  parkedAllocationBps?: number;
 }
 
 export async function fetchFundStats(): Promise<FundStats> {
@@ -124,6 +125,16 @@ export interface Proposal {
   hasClaimed?: boolean;
 }
 
+export interface GovernanceEligibility {
+  investorRole: boolean;
+  hasDepositTicket: boolean;
+  hasFsftExposure: boolean;
+  hasFsftVotingAttestation: boolean;
+  canVote: boolean;
+  reason: string;
+  source?: string;
+}
+
 export const PROPOSAL_STATUS: Record<number, string> = {
   0: "Active",
   1: "Passed",
@@ -152,6 +163,38 @@ export async function castVote(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ address, proposalId, voteYes, accountIndex }),
+  });
+  return res.json();
+}
+
+export async function fetchGovernanceEligibility(
+  address: string,
+  accountIndex = 0
+): Promise<GovernanceEligibility> {
+  const params = new URLSearchParams({
+    address,
+    accountIndex: String(accountIndex),
+  });
+  const res = await fetch(`/api/governance/eligibility?${params.toString()}`);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return {
+      investorRole: false,
+      hasDepositTicket: false,
+      hasFsftExposure: false,
+      hasFsftVotingAttestation: false,
+      canVote: false,
+      reason: data?.error ?? "Could not fetch voting eligibility",
+    };
+  }
+  return res.json();
+}
+
+export async function attestFsftForVoting(address: string): Promise<{ success: boolean; message?: string; error?: string }> {
+  const res = await fetch("/api/governance/eligibility", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "attestFsftForVoting", address }),
   });
   return res.json();
 }
@@ -232,6 +275,11 @@ export interface PortfolioData {
   totalYield?: number;
   fundTokenSymbol?: string;
   eurTokenSymbol?: string;
+  protocolTokenBalance?: number;
+  protocolTokenSymbol?: string;
+  rewardsClaimable?: number;
+  lockedEur?: number;
+  lockedFsft?: number;
 }
 
 export async function fetchPortfolio(address: string, accountIndex?: number): Promise<PortfolioData> {
@@ -247,10 +295,144 @@ export async function fetchPortfolio(address: string, accountIndex?: number): Pr
 export interface TokenInfo {
   fundToken: { symbol: string; name: string; description: string; totalSupply: number; peg?: string; decimals?: number };
   eurToken: { symbol: string; name: string; description: string; peg?: string; decimals?: number };
+  protocolToken?: { symbol: string; name: string; description: string; distribution?: string; decimals?: number };
   eurBalance?: number;
   fsftBalance?: number;
+  protocolBalance?: number;
   address?: string | null;
   source?: string;
+}
+
+export interface DexOrder {
+  id: number;
+  side: "buy" | "sell";
+  owner: string;
+  amount: number;
+  remaining: number;
+  priceEur: number;
+  status: "open" | "partial" | "filled" | "cancelled";
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface DexTrade {
+  id: number;
+  buyOrderId: number;
+  sellOrderId: number;
+  buyer: string;
+  seller: string;
+  amount: number;
+  priceEur: number;
+  executedAt: number;
+}
+
+export interface DexOrderbook {
+  priceReferenceEur: number;
+  priceBandMinEur: number;
+  priceBandMaxEur: number;
+  buyOrders: DexOrder[];
+  sellOrders: DexOrder[];
+  userOrders: DexOrder[];
+  recentTrades: DexTrade[];
+  source?: string;
+}
+
+export interface RewardsStats {
+  token: {
+    symbol: string;
+    totalSupply: number;
+    distributionPool: number;
+    years: number;
+    totalEpochs: number;
+  };
+  weighting: {
+    deposit: number;
+    fsft: number;
+    governance: number;
+  };
+  currentEpoch: number;
+  lastClaimedEpoch: number;
+  nextClaimableEpoch: number;
+  claimableUptoEpoch: number;
+  claimable: number;
+  claimMin: number;
+  emittedToDate: number;
+  totalClaimed: number;
+  balance: number;
+  fsftRewardsAttested: boolean;
+  source?: string;
+  nextEpochAt: number;
+}
+
+export async function fetchDexOrderbook(address?: string): Promise<DexOrderbook> {
+  const url = address
+    ? `/api/dex/orders?address=${encodeURIComponent(address)}`
+    : "/api/dex/orders";
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to fetch DEX orderbook");
+  return res.json();
+}
+
+export async function placeDexOrder(
+  address: string,
+  side: "buy" | "sell",
+  amount: number,
+  limitPriceEur?: number
+): Promise<{ success: boolean; message?: string; error?: string; order?: DexOrder }> {
+  const res = await fetch("/api/dex/orders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address, side, amount, limitPriceEur }),
+  });
+  return res.json();
+}
+
+export async function matchDexOrder(
+  address: string,
+  orderId: number
+): Promise<{ success: boolean; message?: string; error?: string }> {
+  const res = await fetch("/api/dex/match", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address, orderId }),
+  });
+  return res.json();
+}
+
+export async function cancelDexOrder(
+  address: string,
+  orderId: number
+): Promise<{ success: boolean; message?: string; error?: string }> {
+  const res = await fetch("/api/dex/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address, orderId }),
+  });
+  return res.json();
+}
+
+export async function fetchRewardsStats(address: string): Promise<RewardsStats> {
+  const res = await fetch(`/api/rewards/stats?address=${encodeURIComponent(address)}`);
+  if (!res.ok) throw new Error("Failed to fetch rewards stats");
+  return res.json();
+}
+
+export async function claimRewards(address: string): Promise<{ success: boolean; claimed?: number; message?: string; error?: string }> {
+  const res = await fetch("/api/rewards/claim", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address }),
+  });
+  return res.json();
+}
+
+export async function attestFsftForRewards(address: string): Promise<{ success: boolean; message?: string; error?: string }> {
+  const res = await fetch("/api/rewards/attest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address }),
+  });
+  return res.json();
 }
 
 export async function fetchTokenInfo(address?: string): Promise<TokenInfo> {

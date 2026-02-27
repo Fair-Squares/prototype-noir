@@ -250,7 +250,7 @@ export default function ProposalCard({
       )}
 
       {showActions && isActive && userAddress && !canVote && (
-        <p className="text-xs text-text-3 text-center">Investor role required to vote.</p>
+        <p className="text-xs text-text-3 text-center">Voting requires investor role plus fund exposure.</p>
       )}
 
       {showActions && isActive && !userAddress && !isExecuted && (

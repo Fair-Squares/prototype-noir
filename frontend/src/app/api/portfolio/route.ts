@@ -144,6 +144,11 @@ export async function GET(request: NextRequest) {
       lastAssetSalePrice,
       lastFsftMinted,
       totalYield,
+      protocolTokenBalance: 0,
+      protocolTokenSymbol: "FSP",
+      rewardsClaimable: 0,
+      lockedEur: 0,
+      lockedFsft: 0,
       source: "live",
     });
   } catch (error) {

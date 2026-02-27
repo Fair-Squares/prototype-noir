@@ -44,6 +44,11 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
     fsftMarketValue = 0,
     lastAssetSalePrice = 0,
     lastFsftMinted = 0,
+    protocolTokenBalance = 0,
+    protocolTokenSymbol = "FSP",
+    rewardsClaimable = 0,
+    lockedEur = 0,
+    lockedFsft = 0,
   } = portfolio;
 
   return (
@@ -124,6 +129,13 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
             <p className="text-text-3 text-xs uppercase tracking-wide mb-1">Issue price reference</p>
             <p className="font-semibold text-fs-teal">{tokenPriceEur > 0 ? `€${tokenPriceEur.toFixed(4)}` : "n/a"}</p>
           </div>
+        </div>
+        <div className="mt-3 rounded-lg border border-border bg-bg px-3 py-2 text-xs text-text-2">
+          Locked for active DEX orders: {formatEURDecimals(lockedEur)} EUR • {lockedFsft.toLocaleString()} FSFT
+        </div>
+        <div className="mt-3 rounded-lg border border-border bg-bg px-3 py-2 text-xs text-text-2">
+          Protocol distribution balance: {protocolTokenBalance.toLocaleString()} {protocolTokenSymbol}
+          {" • "}claimable now: {rewardsClaimable.toLocaleString()} {protocolTokenSymbol}
         </div>
         <div className="mt-4 rounded-lg border border-border bg-bg px-3 py-2 text-xs text-text-2">
           FSFT is a fund share token. Issue price may start near €1 at acquisition settlement; ongoing value is indicative NAV per FSFT (current NAV: {formatEUR(navEur)}).

@@ -6,12 +6,15 @@ import { useWallet } from "@/contexts/WalletContext";
 import {
   fetchProposals,
   fetchKYCProfile,
+  fetchGovernanceEligibility,
   castVote,
   createProposal,
   finalizeProposal,
   executeProposal,
   claimProposalDistribution,
+  attestFsftForVoting,
   type Proposal,
+  type GovernanceEligibility,
   type KYCProfile,
 } from "@/lib/contracts";
 
@@ -25,7 +28,9 @@ export default function GovernancePage() {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(null);
   const [kycProfile, setKycProfile] = useState<KYCProfile | null>(null);
+  const [eligibility, setEligibility] = useState<GovernanceEligibility | null>(null);
   const isInvestor = Boolean(kycProfile?.isInvestor);
+  const canVote = Boolean(eligibility?.canVote);
 
   // Create proposal form state
   const [showCreate, setShowCreate] = useState(false);
@@ -45,12 +50,22 @@ export default function GovernancePage() {
   useEffect(() => {
     if (!address) {
       setKycProfile(null);
+      setEligibility(null);
       return;
     }
-    fetchKYCProfile(address)
-      .then(setKycProfile)
-      .catch(() => setKycProfile({ verified: false, isInvestor: false, roles: [] }));
-  }, [address]);
+    Promise.all([
+      fetchKYCProfile(address),
+      fetchGovernanceEligibility(address, accountIndex),
+    ])
+      .then(([profile, nextEligibility]) => {
+        setKycProfile(profile);
+        setEligibility(nextEligibility);
+      })
+      .catch(() => {
+        setKycProfile({ verified: false, isInvestor: false, roles: [] });
+        setEligibility(null);
+      });
+  }, [address, accountIndex]);
 
   useEffect(() => {
     if (!selectedProposal) return;
@@ -68,13 +83,30 @@ export default function GovernancePage() {
 
   const handleVote = async (proposalId: number, voteYes: boolean) => {
     if (!address) { notify("error", "Connect your wallet first."); return; }
-    if (!isInvestor) { notify("error", "Investor role required to vote."); return; }
+    if (!canVote) { notify("error", eligibility?.reason ?? "Voting eligibility requirements not met."); return; }
     setLoading(true);
     try {
       const result = await castVote(address, proposalId, voteYes, accountIndex);
       if (result.success) { notify("success", `Vote on #${proposalId} recorded.`); await refresh(); }
       else notify("error", result.error ?? "Vote failed");
     } finally { setLoading(false); }
+  };
+
+  const handleAttestFsft = async () => {
+    if (!address) return;
+    setLoading(true);
+    try {
+      const result = await attestFsftForVoting(address);
+      if (!result.success) {
+        notify("error", result.error ?? "Attestation failed");
+      } else {
+        notify("success", "FSFT voting attestation recorded.");
+        const next = await fetchGovernanceEligibility(address, accountIndex);
+        setEligibility(next);
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleFinalize = async (proposalId: number) => {
@@ -162,6 +194,19 @@ export default function GovernancePage() {
       {address && !isInvestor && (
         <div className="rounded-lg border border-border bg-bg p-3 text-sm text-text-2">
           Investor role not found for this account. You can still review/finalize/execute/claim, but creating and voting require investor status.
+        </div>
+      )}
+      {address && isInvestor && !canVote && (
+        <div className="rounded-lg border border-border bg-bg p-3 text-sm text-text-2 flex flex-wrap items-center justify-between gap-2">
+          <span>{eligibility?.reason ?? "Voting requires fund exposure."}</span>
+          <button
+            type="button"
+            onClick={handleAttestFsft}
+            disabled={loading}
+            className="px-3 py-1.5 rounded-md border border-border text-xs font-semibold hover:bg-white disabled:opacity-50"
+          >
+            Attest FSFT eligibility
+          </button>
         </div>
       )}
 
@@ -304,7 +349,7 @@ export default function GovernancePage() {
               onClaim={handleClaim}
               isVoting={loading}
               userAddress={address}
-              isInvestor={isInvestor}
+              isInvestor={canVote}
             />
 
             <div className="rounded-lg bg-bg border border-border p-3 mt-4">

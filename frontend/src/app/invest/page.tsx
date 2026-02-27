@@ -126,6 +126,14 @@ export default function InvestPage() {
                   details:
                     "FSFT is a fund share token. Issue price may start near €1 at settlement, then value follows NAV per FSFT.",
                 },
+                {
+                  symbol: "FSP",
+                  color: "bg-amber-100 text-amber-700",
+                  title: "Protocol Token",
+                  summary: "Distributed over 10 years",
+                  details:
+                    "Protocol token emissions reward active participation (deposits, FSFT holder attestations, and governance voting).",
+                },
               ].map((t) => (
                 <div key={t.symbol} className="flex gap-3">
                   <div className={`rounded-md px-2 py-0.5 text-xs font-bold shrink-0 h-fit mt-0.5 ${t.color}`}>{t.symbol}</div>
@@ -149,8 +157,9 @@ export default function InvestPage() {
             <div className="space-y-2 text-xs text-text-2">
               {[
                 ["1", "Sent to the housing fund", "Your amount is recorded privately as a deposit ticket."],
-                ["2", "Governance decides on assets", "FSFT is not minted at deposit time."],
-                ["3", "FSFT minting happens later", "Only after a proposal passes and the asset purchase is executed."],
+                ["2", "Idle capital is parked by protocol", "A managed allocation can be lent out in DeFi (Aave-like) while waiting for acquisitions."],
+                ["3", "Governance decides on assets", "FSFT is not minted at deposit time."],
+                ["4", "FSFT minting happens later", "Only after a proposal passes and the asset purchase is executed."],
               ].map(([step, label, sub]) => (
                 <div key={label} className="flex items-start gap-2">
                   <span className="font-bold text-fs-teal shrink-0 w-8">{step}</span>

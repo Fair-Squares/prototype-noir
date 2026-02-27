@@ -102,16 +102,21 @@ export default function Dashboard() {
             },
             {
               step: "2",
-              title: "The community picks properties to buy",
-              desc: "Verified investors propose and vote on acquisitions. Quorum and outcomes are enforced on-chain.",
+              title: "Idle EUR is parked by the protocol",
+              desc: "While no acquisition is active, the fund can park a managed allocation in DeFi lending to avoid idle capital.",
             },
             {
               step: "3",
+              title: "The community picks properties to buy",
+              desc: "Verified investors with active fund exposure propose and vote on acquisitions. Quorum and outcomes are enforced on-chain.",
+            },
+            {
+              step: "4",
               title: "A housing corporation manages the building",
               desc: "Once purchased, management rights go to a professional housing corporation. They handle tenants, maintenance, everything.",
             },
             {
-              step: "4",
+              step: "5",
               title: "Tenants pay fair rent, investors earn returns",
               desc: "Rent is set at ~20% below market. Rental income goes to maintenance, management costs, and investor returns (~3% annually).",
             },

@@ -13,6 +13,7 @@ export const metadata: Metadata = {
 const NAV_ITEMS = [
   { label: "Overview", href: "/" },
   { label: "Invest", href: "/invest" },
+  { label: "Trade", href: "/dex" },
   { label: "Proposals", href: "/governance" },
   { label: "My Account", href: "/portfolio" },
 ] as const;

@@ -15,8 +15,9 @@ A privacy-first housing investment fund built on [Aztec Network](https://aztec.n
 5. [Wallet & Account Model](#wallet--account-model)
 6. [Contracts Reference](#contracts-reference)
 7. [Development Guide](#development-guide)
-8. [Troubleshooting](#troubleshooting)
-9. [Project Structure](#project-structure)
+8. [Changelog Workflow](#changelog-workflow)
+9. [Troubleshooting](#troubleshooting)
+10. [Project Structure](#project-structure)
 
 ---
 
@@ -315,6 +316,14 @@ For contract simulations, the `getWallet()` helper in `aztecClient.ts` returns
 the node client. This works for `.simulate()` calls on contracts but **not**
 for `.send()` (which requires signing keys). Write operations must be done
 from the browser.
+
+---
+
+## Changelog Workflow
+
+- `CHANGELOG.md` is the canonical release history.
+- Every shipped feature/fix should update the current `Unreleased` section.
+- On release, move `Unreleased` entries into a dated section and start a new `Unreleased` block.
 
 ---
 

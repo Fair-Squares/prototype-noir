@@ -3,7 +3,17 @@
 import { useEffect, useState } from "react";
 import PrivateBalance from "@/components/PrivateBalance";
 import { useWallet } from "@/contexts/WalletContext";
-import { fetchKYCProfile, fetchPortfolio, formatEUR, type KYCProfile, type PortfolioData } from "@/lib/contracts";
+import {
+  attestFsftForRewards,
+  claimRewards,
+  fetchKYCProfile,
+  fetchPortfolio,
+  fetchRewardsStats,
+  formatEUR,
+  type KYCProfile,
+  type PortfolioData,
+  type RewardsStats,
+} from "@/lib/contracts";
 
 export default function PortfolioPage() {
   const { activeAccount } = useWallet();
@@ -12,8 +22,10 @@ export default function PortfolioPage() {
 
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
   const [kycProfile, setKycProfile] = useState<KYCProfile>({ verified: false, isInvestor: false, roles: [] });
+  const [rewards, setRewards] = useState<RewardsStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [topUpMsg, setTopUpMsg] = useState<string | null>(null);
+  const [rewardMsg, setRewardMsg] = useState<string | null>(null);
   const isDevOrSimulation =
     process.env.NEXT_PUBLIC_DEV_MODE === "true" ||
     process.env.NEXT_PUBLIC_SIMULATION === "true";
@@ -32,9 +44,13 @@ export default function PortfolioPage() {
       fetchKYCProfile(address)
         .then(setKycProfile)
         .catch(() => setKycProfile({ verified: false, isInvestor: false, roles: [] }));
+      fetchRewardsStats(address)
+        .then(setRewards)
+        .catch(() => setRewards(null));
     } else {
       setPortfolio(null);
       setKycProfile({ verified: false, isInvestor: false, roles: [] });
+      setRewards(null);
     }
   }, [address, accountIndex]);
 
@@ -54,6 +70,33 @@ export default function PortfolioPage() {
     await loadPortfolio(address);
     setTopUpMsg("Demo EURs topped up to €50,000 ✓");
     setTimeout(() => setTopUpMsg(null), 4000);
+  };
+
+  const handleClaimRewards = async () => {
+    if (!address) return;
+    const result = await claimRewards(address);
+    if (!result.success) {
+      setRewardMsg(result.error ?? "Claim failed");
+      setTimeout(() => setRewardMsg(null), 5000);
+      return;
+    }
+    setRewardMsg(`Claimed ${(result.claimed ?? 0).toLocaleString()} ${rewards?.token.symbol ?? "tokens"} ✓`);
+    setTimeout(() => setRewardMsg(null), 5000);
+    await loadPortfolio(address);
+    fetchRewardsStats(address).then(setRewards).catch(() => undefined);
+  };
+
+  const handleAttestRewards = async () => {
+    if (!address) return;
+    const result = await attestFsftForRewards(address);
+    if (!result.success) {
+      setRewardMsg(result.error ?? "Attestation failed");
+      setTimeout(() => setRewardMsg(null), 5000);
+      return;
+    }
+    setRewardMsg("FSFT rewards attestation recorded ✓");
+    setTimeout(() => setRewardMsg(null), 5000);
+    fetchRewardsStats(address).then(setRewards).catch(() => undefined);
   };
 
   return (
@@ -130,11 +173,47 @@ export default function PortfolioPage() {
               Go to Invest
             </a>
             <a
+              href="/dex"
+              className="w-full inline-flex items-center justify-center rounded-lg border border-border text-sm font-semibold py-2.5 text-text-2 hover:text-text-1 hover:bg-bg"
+            >
+              Trade FSFT/EUR
+            </a>
+            <a
               href="/governance"
               className="w-full inline-flex items-center justify-center rounded-lg border border-border text-sm font-semibold py-2.5 text-text-2 hover:text-text-1 hover:bg-bg"
             >
               Review Proposals
             </a>
+
+            <div className="rounded-lg bg-bg border border-border p-4 space-y-3">
+              <p className="text-sm font-semibold text-text-1">Protocol token distribution</p>
+              <p className="text-xs text-text-3">
+                8M tokens are emitted over 10 years (40% deposit, 40% FSFT holder bucket, 20% governance participation).
+              </p>
+              <div className="text-xs text-text-2 space-y-1">
+                <p>
+                  Balance: <strong>{(portfolio?.protocolTokenBalance ?? 0).toLocaleString()} {rewards?.token.symbol ?? "FSP"}</strong>
+                </p>
+                <p>
+                  Claimable: <strong>{(rewards?.claimable ?? 0).toLocaleString()} {rewards?.token.symbol ?? "FSP"}</strong>
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleAttestRewards}
+                  className="flex-1 rounded-md border border-border px-2 py-1.5 text-xs font-semibold hover:bg-white"
+                >
+                  Attest FSFT
+                </button>
+                <button
+                  onClick={handleClaimRewards}
+                  className="flex-1 rounded-md bg-fs-teal text-white px-2 py-1.5 text-xs font-semibold hover:bg-fs-teal-dark"
+                >
+                  Claim
+                </button>
+              </div>
+              {rewardMsg && <p className="text-xs text-fs-teal font-medium">{rewardMsg}</p>}
+            </div>
           </aside>
         </div>
       )}

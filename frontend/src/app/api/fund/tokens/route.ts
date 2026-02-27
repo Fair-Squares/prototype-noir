@@ -29,8 +29,17 @@ export async function GET(request: NextRequest) {
         peg: "1 EURs = €1",
         description: "Private token used to invest in the fund",
       },
+      protocolToken: {
+        address: process.env.NEXT_PUBLIC_PROTOCOL_TOKEN_ADDRESS ?? "sim",
+        symbol: "FSP",
+        name: "Fair Squares Protocol Token",
+        decimals: 0,
+        distribution: "8M over 10 years",
+        description: "Protocol token distributed for deposits, governance participation, and FSFT holder activity.",
+      },
       eurBalance: portfolio?.eurBalance ?? 0,
       fsftBalance: portfolio?.balance ?? 0,
+      protocolBalance: portfolio?.protocolTokenBalance ?? 0,
       address: address || null,
       source: "simulation",
     });
@@ -76,6 +85,14 @@ export async function GET(request: NextRequest) {
         peg: "1 EURs = €1",
         description: "Private token used to invest in the fund",
       },
+      protocolToken: {
+        address: process.env.NEXT_PUBLIC_PROTOCOL_TOKEN_ADDRESS ?? "",
+        symbol: "FSP",
+        name: "Fair Squares Protocol Token",
+        decimals: 0,
+        distribution: "8M over 10 years",
+        description: "Protocol token distributed for deposits, governance participation, and FSFT holder activity.",
+      },
       eurBalance: await (async () => {
         if (!address || !eurTokenAddr) return 0;
         try {
@@ -120,6 +137,7 @@ export async function GET(request: NextRequest) {
           );
         } catch { return 0; }
       })(),
+      protocolBalance: 0,
       address: address || null,
       source: "live",
     });

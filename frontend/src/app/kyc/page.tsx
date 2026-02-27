@@ -22,17 +22,18 @@ export default function KYCPage() {
   }, [address]);
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold mb-2">KYC Verification</h1>
-        <p className="text-text-2 text-sm">Verify your identity privately using your passport.</p>
+    <div className="max-w-3xl mx-auto space-y-6">
+      <div className="rounded-2xl border border-border bg-card p-6">
+        <h1 className="text-2xl mb-1">KYC Verification</h1>
+        <p className="text-text-2 text-sm">
+          Verify privately with zkPassport. Successful verification grants investor role access.
+        </p>
       </div>
 
       {!address ? (
-        <div className="rounded-xl bg-card p-12 text-center">
-          <div className="text-4xl mb-3">🔗</div>
+        <div className="rounded-2xl border border-border bg-card p-10 text-center">
           <p className="font-medium text-text-1 text-lg mb-2">Connect your wallet first</p>
-          <p className="text-sm text-text-3">Use the button in the top-right to connect.</p>
+          <p className="text-sm text-text-3">Use the wallet button in the top-right to begin verification.</p>
         </div>
       ) : (
         <KYCFlow

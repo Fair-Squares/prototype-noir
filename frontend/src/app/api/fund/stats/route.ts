@@ -83,6 +83,7 @@ export async function GET() {
       valuationBlock: toNumberSafe(valuation[3]),
       navEur,
       navPerFsftEur,
+      parkedAllocationBps: 3000,
       source: "live",
     });
   } catch (error) {

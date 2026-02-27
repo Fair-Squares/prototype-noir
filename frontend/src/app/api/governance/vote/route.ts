@@ -36,8 +36,12 @@ export async function POST(request: NextRequest) {
 
     const govAddr = process.env.NEXT_PUBLIC_GOVERNANCE_ADDRESS ?? "";
     const kycAddr = process.env.NEXT_PUBLIC_KYC_VERIFIER_ADDRESS ?? "";
+    const housingFundAddr = process.env.NEXT_PUBLIC_HOUSING_FUND_ADDRESS ?? "";
+    const fundTokenAddr = process.env.NEXT_PUBLIC_FUND_TOKEN_ADDRESS ?? "";
     if (!govAddr) return NextResponse.json({ error: "NEXT_PUBLIC_GOVERNANCE_ADDRESS not set" }, { status: 500 });
     if (!kycAddr) return NextResponse.json({ error: "NEXT_PUBLIC_KYC_VERIFIER_ADDRESS not set" }, { status: 500 });
+    if (!housingFundAddr) return NextResponse.json({ error: "NEXT_PUBLIC_HOUSING_FUND_ADDRESS not set" }, { status: 500 });
+    if (!fundTokenAddr) return NextResponse.json({ error: "NEXT_PUBLIC_FUND_TOKEN_ADDRESS not set" }, { status: 500 });
 
     const { Contract } = await import("@aztec/aztec.js/contracts");
     const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
@@ -47,13 +51,30 @@ export async function POST(request: NextRequest) {
     const userAddress = AztecAddress.fromString(address);
 
     const KycArtifactJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
+    const HfArtifactJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
+    const FtArtifactJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
     const kycArtifact = loadContractArtifact(KycArtifactJson as Parameters<typeof loadContractArtifact>[0]);
+    const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
+    const ftArtifact = loadContractArtifact(FtArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet);
+    const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, wallet);
+    const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, wallet);
     const isInvestor = await kycContract.methods
       .is_investor(userAddress)
       .simulate({ from: accountAddress });
     if (!Boolean(isInvestor)) {
       return NextResponse.json({ error: "Investor role required to vote" }, { status: 403 });
+    }
+
+    const [depositTicket, fsftBalance] = await Promise.all([
+      hfContract.methods.get_user_deposit_ticket(userAddress).simulate({ from: accountAddress }),
+      ftContract.methods.public_balance_of(userAddress).simulate({ from: accountAddress }),
+    ]);
+    if (Number(depositTicket) <= 0 && Number(fsftBalance) <= 0) {
+      return NextResponse.json(
+        { error: "Voting requires fund exposure: hold FSFT or have EUR deposited in the housing fund" },
+        { status: 403 }
+      );
     }
 
     const GovArtifactJson = await loadGeneratedArtifactJson("governance-Governance.json");
