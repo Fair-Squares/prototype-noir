@@ -4,7 +4,7 @@ import { simAttestFsftForRewards } from "@/lib/simulationStore";
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
-  const { address } = body as { address?: string };
+  const { address, accountIndex = 0 } = body as { address?: string; accountIndex?: number };
 
   if (!address) {
     return NextResponse.json({ error: "address required" }, { status: 400 });
@@ -26,8 +26,38 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return NextResponse.json(
-    { error: "FSFT rewards attestation is not deployed yet in live mode" },
-    { status: 501 }
-  );
+  try {
+    const rewardsAddr = process.env.NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS ?? "";
+    if (!rewardsAddr) {
+      return NextResponse.json({ error: "NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS not set" }, { status: 500 });
+    }
+
+    const { getTestAccount } = await import("@/lib/serverWallet");
+    const { Contract } = await import("@aztec/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
+
+    const actor = await getTestAccount(accountIndex);
+    if (address.toLowerCase() !== actor.address.toLowerCase()) {
+      return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
+    }
+
+    const actorAddress = AztecAddress.fromString(actor.address);
+    const RewardsJson = await loadGeneratedArtifactJson("protocol_rewards-ProtocolRewards.json");
+    const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
+    const rewardsContract = await Contract.at(AztecAddress.fromString(rewardsAddr), rewardsArtifact, actor.wallet);
+
+    const receipt = await rewardsContract.methods.attest_private_fsft_for_rewards().send({ from: actorAddress });
+    return NextResponse.json({
+      success: true,
+      message: "FSFT rewards attestation recorded",
+      txHash: receipt.txHash?.toString() ?? "unknown",
+      source: "live",
+    });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[rewards/attest]", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }

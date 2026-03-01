@@ -17,7 +17,7 @@ pub contract HousingFund {
     use kyc_verifier::KYCVerifier;
     use aztec::{
         macros::{
-            functions::{external, initializer},
+            functions::{external, initializer, view},
             storage::storage,
         },
         protocol::{
@@ -50,6 +50,10 @@ pub contract HousingFund {
         // EUR per FSFT in basis points (10000 = 1.0000 EUR/FSFT)
         last_token_price_bps: PublicMutable<u64, Context>,
         last_valuation_block: PublicMutable<u32, Context>,
+        // Parked-capital policy for idle EUR allocations (basis points)
+        parked_target_bps: PublicMutable<u32, Context>,
+        parked_min_bps: PublicMutable<u32, Context>,
+        parked_max_bps: PublicMutable<u32, Context>,
         // Proposal distribution snapshots
         d_open: Map<Field, PublicMutable<bool, Context>, Context>,
         d_amount: Map<Field, PublicMutable<u64, Context>, Context>,
@@ -73,6 +77,9 @@ pub contract HousingFund {
         self.storage.last_fsft_minted.write(0);
         self.storage.last_token_price_bps.write(0);
         self.storage.last_valuation_block.write(0);
+        self.storage.parked_target_bps.write(3000);
+        self.storage.parked_min_bps.write(2000);
+        self.storage.parked_max_bps.write(5000);
         self.storage.is_paused.write(false);
     }
 
@@ -165,6 +172,22 @@ pub contract HousingFund {
         assert(amount <= in_defi, "exceeds defi balance");
 
         self.storage.total_in_defi.write(in_defi - amount);
+    }
+
+    #[external("public")]
+    fn set_parked_capital_policy(target_bps: u32, min_bps: u32, max_bps: u32) {
+        let caller = self.msg_sender();
+        let admin = self.storage.admin.read();
+        let gov = self.storage.governance.read();
+        assert(admin.eq(caller) | gov.eq(caller), "not authorized");
+
+        assert(max_bps <= 10000, "max bps out of range");
+        assert(min_bps <= max_bps, "invalid min/max policy");
+        assert((target_bps >= min_bps) & (target_bps <= max_bps), "target outside policy range");
+
+        self.storage.parked_target_bps.write(target_bps);
+        self.storage.parked_min_bps.write(min_bps);
+        self.storage.parked_max_bps.write(max_bps);
     }
 
     // -- Governance: Property reservation ---------------------------------
@@ -324,6 +347,17 @@ pub contract HousingFund {
         )
     }
 
+    #[external("public")]
+    #[view]
+    fn get_valuation_public() -> pub (u64, u64, u64, u32) {
+        (
+            self.storage.last_asset_sale_price.read(),
+            self.storage.last_fsft_minted.read(),
+            self.storage.last_token_price_bps.read(),
+            self.storage.last_valuation_block.read(),
+        )
+    }
+
     #[external("utility")]
     unconstrained fn get_claimable_amount(proposal_id: u32, user: AztecAddress) -> pub u64 {
         let pid = proposal_id as Field;
@@ -365,6 +399,15 @@ pub contract HousingFund {
     #[external("utility")]
     unconstrained fn is_paused() -> pub bool {
         self.storage.is_paused.read()
+    }
+
+    #[external("utility")]
+    unconstrained fn get_parked_capital_policy() -> pub (u32, u32, u32) {
+        (
+            self.storage.parked_target_bps.read(),
+            self.storage.parked_min_bps.read(),
+            self.storage.parked_max_bps.read(),
+        )
     }
 
     #[external("utility")]

@@ -66,13 +66,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Investor role required to vote" }, { status: 403 });
     }
 
-    const [depositTicket, fsftBalance] = await Promise.all([
+    const [depositTicket, fsftBalance, hasPrivateHolderProof] = await Promise.all([
       hfContract.methods.get_user_deposit_ticket(userAddress).simulate({ from: accountAddress }),
       ftContract.methods.public_balance_of(userAddress).simulate({ from: accountAddress }),
+      ftContract.methods.has_private_holder_proof(userAddress).simulate({ from: accountAddress }),
     ]);
-    if (Number(depositTicket) <= 0 && Number(fsftBalance) <= 0) {
+    const hasDepositTicket = Number(depositTicket) > 0;
+    const hasFsftExposure = Number(fsftBalance) > 0 || Boolean(hasPrivateHolderProof);
+    if (!hasDepositTicket && !hasFsftExposure) {
       return NextResponse.json(
-        { error: "Voting requires fund exposure: hold FSFT or have EUR deposited in the housing fund" },
+        { error: "Voting requires fund exposure: deposit ticket, FSFT holding, or private-holder proof" },
         { status: 403 }
       );
     }
@@ -80,6 +83,11 @@ export async function POST(request: NextRequest) {
     const GovArtifactJson = await loadGeneratedArtifactJson("governance-Governance.json");
     const govArtifact = loadContractArtifact(GovArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const govContract = await Contract.at(AztecAddress.fromString(govAddr), govArtifact, wallet);
+
+    if (hasDepositTicket && !hasFsftExposure) {
+      // Governance now keeps a voter self-attestation path for deposit-ticket exposure.
+      await govContract.methods.attest_deposit_exposure().send({ from: accountAddress });
+    }
 
     const receipt = await govContract.methods
       .cast_vote(Number(proposalId), Boolean(voteYes))

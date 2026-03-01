@@ -96,7 +96,7 @@ export default function GovernancePage() {
     if (!address) return;
     setLoading(true);
     try {
-      const result = await attestFsftForVoting(address);
+      const result = await attestFsftForVoting(address, accountIndex);
       if (!result.success) {
         notify("error", result.error ?? "Attestation failed");
       } else {

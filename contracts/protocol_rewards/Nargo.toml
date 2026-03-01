@@ -1,0 +1,12 @@
+[package]
+name = "protocol_rewards"
+type = "contract"
+authors = ["Fair Squares"]
+compiler_version = ">=0.18.0"
+
+[dependencies]
+aztec = { git = "https://github.com/AztecProtocol/aztec-nr/", tag = "v4.0.0-devnet.2-patch.1", directory = "aztec" }
+fund_token = { path = "../fund_token" }
+housing_fund = { path = "../housing_fund" }
+governance = { path = "../governance" }
+kyc_verifier = { path = "../kyc_verifier" }

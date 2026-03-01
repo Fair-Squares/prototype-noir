@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
+function devRequestIdForAddress(userAddress: string): string {
+  return `dev_${userAddress.toLowerCase()}`;
+}
+
 /**
  * POST /api/zkpassport/request
  *
@@ -23,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     // ── Dev mode: instant bypass ─────────────────────────────────────────
     if (isSimulation) {
-      const requestId = `dev_${userAddress.slice(2, 10)}_${Date.now()}`;
+      const requestId = devRequestIdForAddress(userAddress);
       return NextResponse.json({
         qrUrl: `dev://bypass?id=${requestId}&address=${userAddress}`,
         requestId,
@@ -76,7 +80,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ qrUrl: url, requestId: compositeId, devMode: false });
     } catch (sdkErr) {
       console.warn("[zkpassport] SDK error, falling back to dev mode:", sdkErr);
-      const requestId = `dev_${userAddress.slice(2, 10)}_${Date.now()}`;
+      const requestId = devRequestIdForAddress(userAddress);
       return NextResponse.json({
         qrUrl: `dev://bypass?id=${requestId}&address=${userAddress}`,
         requestId,

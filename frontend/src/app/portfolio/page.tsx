@@ -44,7 +44,7 @@ export default function PortfolioPage() {
       fetchKYCProfile(address)
         .then(setKycProfile)
         .catch(() => setKycProfile({ verified: false, isInvestor: false, roles: [] }));
-      fetchRewardsStats(address)
+      fetchRewardsStats(address, accountIndex)
         .then(setRewards)
         .catch(() => setRewards(null));
     } else {
@@ -74,7 +74,7 @@ export default function PortfolioPage() {
 
   const handleClaimRewards = async () => {
     if (!address) return;
-    const result = await claimRewards(address);
+    const result = await claimRewards(address, accountIndex);
     if (!result.success) {
       setRewardMsg(result.error ?? "Claim failed");
       setTimeout(() => setRewardMsg(null), 5000);
@@ -83,12 +83,12 @@ export default function PortfolioPage() {
     setRewardMsg(`Claimed ${(result.claimed ?? 0).toLocaleString()} ${rewards?.token.symbol ?? "tokens"} ✓`);
     setTimeout(() => setRewardMsg(null), 5000);
     await loadPortfolio(address);
-    fetchRewardsStats(address).then(setRewards).catch(() => undefined);
+    fetchRewardsStats(address, accountIndex).then(setRewards).catch(() => undefined);
   };
 
   const handleAttestRewards = async () => {
     if (!address) return;
-    const result = await attestFsftForRewards(address);
+    const result = await attestFsftForRewards(address, accountIndex);
     if (!result.success) {
       setRewardMsg(result.error ?? "Attestation failed");
       setTimeout(() => setRewardMsg(null), 5000);
@@ -96,7 +96,7 @@ export default function PortfolioPage() {
     }
     setRewardMsg("FSFT rewards attestation recorded ✓");
     setTimeout(() => setRewardMsg(null), 5000);
-    fetchRewardsStats(address).then(setRewards).catch(() => undefined);
+    fetchRewardsStats(address, accountIndex).then(setRewards).catch(() => undefined);
   };
 
   return (

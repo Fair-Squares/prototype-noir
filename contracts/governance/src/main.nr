@@ -11,6 +11,7 @@ use aztec::macros::aztec;
 ///   3. After deadline, anyone calls finalize_proposal() -- public
 #[aztec]
 pub contract Governance {
+    use fund_token::FundToken;
     use kyc_verifier::KYCVerifier;
     use aztec::{
         macros::{
@@ -35,6 +36,7 @@ pub contract Governance {
         // Linked contract addresses
         housing_fund: PublicMutable<AztecAddress, Context>,
         kyc_verifier: PublicMutable<AztecAddress, Context>,
+        fund_token: PublicMutable<AztecAddress, Context>,
         voting_window_blocks: PublicMutable<u32, Context>,
         min_quorum_votes: PublicMutable<u32, Context>,
 
@@ -54,6 +56,8 @@ pub contract Governance {
         // Track who has voted (voter_address + proposal_id -> bool)
         // Key: hash of voter + proposal_id (stored as a Map<Field, ...>)
         has_voted: Map<Field, PublicMutable<bool, Context>, Context>,
+        // Investor self-attestation for deposit-ticket based voting eligibility.
+        deposit_exposure_attested: Map<AztecAddress, PublicMutable<bool, Context>, Context>,
     }
 
     #[initializer]
@@ -61,15 +65,18 @@ pub contract Governance {
     fn constructor(
         housing_fund: AztecAddress,
         kyc_verifier: AztecAddress,
+        fund_token: AztecAddress,
         voting_window_blocks: u32,
         min_quorum_votes: u32,
     ) {
         assert(!housing_fund.is_zero(), "invalid housing_fund");
         assert(!kyc_verifier.is_zero(), "invalid kyc_verifier");
+        assert(!fund_token.is_zero(), "invalid fund_token");
         assert(voting_window_blocks > 0, "invalid voting window");
         assert(min_quorum_votes > 0, "invalid quorum");
         self.storage.housing_fund.write(housing_fund);
         self.storage.kyc_verifier.write(kyc_verifier);
+        self.storage.fund_token.write(fund_token);
         self.storage.voting_window_blocks.write(voting_window_blocks);
         self.storage.min_quorum_votes.write(min_quorum_votes);
         self.storage.proposal_count.write(0);
@@ -114,6 +121,15 @@ pub contract Governance {
         let kyc_contract = KYCVerifier::at(self.storage.kyc_verifier.read());
         let is_investor = self.view(kyc_contract.is_investor(voter));
         assert(is_investor, "investor role required");
+
+        let fund_token = FundToken::at(self.storage.fund_token.read());
+        let has_deposit_ticket = self.storage.deposit_exposure_attested.at(voter).read();
+        let has_public_fsft = self.view(fund_token.public_balance_of_public(voter)) > 0;
+        let has_private_holder_proof = self.view(fund_token.has_private_holder_proof(voter));
+        assert(
+            has_deposit_ticket | has_public_fsft | has_private_holder_proof,
+            "fund exposure required for voting",
+        );
 
         // Check proposal is active
         assert(
@@ -216,6 +232,36 @@ pub contract Governance {
     fn get_proposal_amount_public(proposal_id: u32) -> pub u64 {
         let pid = proposal_id as Field;
         self.storage.p_amount.at(pid).read()
+    }
+
+    #[external("public")]
+    fn attest_deposit_exposure() {
+        let user = self.msg_sender();
+        let kyc_contract = KYCVerifier::at(self.storage.kyc_verifier.read());
+        let is_investor = self.view(kyc_contract.is_investor(user));
+        assert(is_investor, "investor role required");
+        self.storage.deposit_exposure_attested.at(user).write(true);
+    }
+
+    #[external("public")]
+    #[view]
+    fn get_voting_eligibility(user: AztecAddress) -> pub (bool, bool, bool, bool, bool) {
+        let kyc_contract = KYCVerifier::at(self.storage.kyc_verifier.read());
+        let fund_token = FundToken::at(self.storage.fund_token.read());
+
+        let investor_role = self.view(kyc_contract.is_investor(user));
+        let has_deposit_ticket = self.storage.deposit_exposure_attested.at(user).read();
+        let has_public_fsft = self.view(fund_token.public_balance_of_public(user)) > 0;
+        let has_private_holder_proof = self.view(fund_token.has_private_holder_proof(user));
+        let can_vote = investor_role & (has_deposit_ticket | has_public_fsft | has_private_holder_proof);
+
+        (
+            investor_role,
+            has_deposit_ticket,
+            has_public_fsft,
+            has_private_holder_proof,
+            can_vote,
+        )
     }
 
     #[external("utility")]

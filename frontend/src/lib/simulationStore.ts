@@ -18,7 +18,8 @@ export const SIM_ACCOUNTS = [
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const DEX_PRICE_BAND_BPS = 200; // +/-2%
+const DEX_PRICE_BAND_BPS = Number(process.env.DEX_PRICE_BAND_BPS ?? "200") || 200; // +/-2%
+const DEX_DEFAULT_TTL_SECONDS = 30 * 60; // 30 minutes
 const REWARD_TOKEN_SYMBOL = "FSP";
 const REWARD_TOKEN_TOTAL_SUPPLY = 10_000_000;
 const REWARD_DISTRIBUTION_POOL = 8_000_000;
@@ -73,6 +74,8 @@ interface SimFundState {
   investorCount: number;
   totalYield: number;
   parkedAllocationBps: number;
+  parkedMinBps: number;
+  parkedMaxBps: number;
 }
 
 interface SimAccountState {
@@ -125,9 +128,10 @@ export interface SimDexOrder {
   amount: number;
   remaining: number;
   priceEur: number;
-  status: "open" | "partial" | "filled" | "cancelled";
+  status: "open" | "partial" | "filled" | "cancelled" | "expired";
   createdAt: number;
   updatedAt: number;
+  expiresAt: number;
   reservedEurRemaining: number;
   reservedFsftRemaining: number;
 }
@@ -181,6 +185,12 @@ function quorumVotes(): number {
 
 function nowSeconds(): number {
   return Math.floor(Date.now() / 1000);
+}
+
+function dexOrderTtlSeconds(): number {
+  const ttl = Number(process.env.DEX_ORDER_TTL_SECONDS ?? "");
+  if (!Number.isFinite(ttl) || ttl <= 0) return DEX_DEFAULT_TTL_SECONDS;
+  return Math.max(60, Math.floor(ttl));
 }
 
 function roundTo4(n: number): number {
@@ -302,6 +312,8 @@ function createInitialState(): SimState {
       investorCount: 1,
       totalYield: 0,
       parkedAllocationBps: 3000,
+      parkedMinBps: 2000,
+      parkedMaxBps: 5000,
     },
     accounts,
     proposals: [],
@@ -424,6 +436,8 @@ export function simGetFundStats() {
     navEur,
     navPerFsftEur,
     parkedAllocationBps: fund.parkedAllocationBps,
+    parkedMinBps: fund.parkedMinBps,
+    parkedMaxBps: fund.parkedMaxBps,
     source: "simulation" as const,
   };
 }
@@ -433,6 +447,7 @@ export function simGetFundStats() {
 export function simGetPortfolio(address: string) {
   const acct = getOrCreateAccount(address);
   const { fund } = getState();
+  const eligibility = simGetVotingEligibility(address);
   const sharePercent = fund.fsftTotalSupply > 0 ? (acct.fsftBalance / fund.fsftTotalSupply) * 100 : 0;
   const navEur = Math.max(0, fund.totalDeposits + fund.totalYield);
   const navPerFsftEur = fund.fsftTotalSupply > 0 ? roundTo4(navEur / fund.fsftTotalSupply) : 0;
@@ -460,6 +475,9 @@ export function simGetPortfolio(address: string) {
     protocolTokenBalance: acct.protocolTokenBalance,
     protocolTokenSymbol: REWARD_TOKEN_SYMBOL,
     rewardsClaimable: rewards.claimable,
+    canTradeDex: acct.investorRole,
+    rewardsEligible: acct.investorRole && (acct.depositedAmount > 0 || acct.fsftBalance > 0 || acct.fsftRewardsAttested),
+    governanceEligibility: eligibility,
     lockedEur: acct.lockedEur,
     lockedFsft: acct.lockedFsft,
     source: "simulation" as const,
@@ -708,6 +726,18 @@ function getOrderById(state: SimState, orderId: number): SimDexOrder | undefined
   return state.dex.orders.find((o) => o.id === orderId);
 }
 
+function expireOpenOrders(state: SimState): void {
+  const now = nowSeconds();
+  for (const order of state.dex.orders) {
+    if (order.status !== "open" && order.status !== "partial") continue;
+    if (order.expiresAt > now) continue;
+    order.status = "expired";
+    order.remaining = 0;
+    order.updatedAt = now;
+    releaseOrderLocks(state, order);
+  }
+}
+
 function releaseOrderLocks(state: SimState, order: SimDexOrder): void {
   const owner = getOrCreateAccount(order.owner);
   if (order.side === "buy" && order.reservedEurRemaining > 0) {
@@ -763,6 +793,7 @@ function settleTrade(state: SimState, buyOrder: SimDexOrder, sellOrder: SimDexOr
 }
 
 function matchOrder(state: SimState, taker: SimDexOrder): void {
+  expireOpenOrders(state);
   if (taker.status !== "open" && taker.status !== "partial") return;
 
   const referencePrice = getReferenceFsftPriceEur(state);
@@ -802,6 +833,7 @@ export function simPlaceDexOrder(
 ): { success: boolean; error?: string; order?: SimDexOrder } {
   const state = getState();
   const acct = getOrCreateAccount(address);
+  expireOpenOrders(state);
 
   if (!acct.investorRole) return { success: false, error: "Complete KYC to trade FSFT/EUR." };
   if (amount <= 0) return { success: false, error: "Amount must be positive" };
@@ -828,6 +860,7 @@ export function simPlaceDexOrder(
     status: "open",
     createdAt: now,
     updatedAt: now,
+    expiresAt: now + dexOrderTtlSeconds(),
     reservedEurRemaining: 0,
     reservedFsftRemaining: 0,
   };
@@ -862,10 +895,11 @@ export function simPlaceDexOrder(
 
 export function simCancelDexOrder(address: string, orderId: number): { success: boolean; error?: string } {
   const state = getState();
+  expireOpenOrders(state);
   const order = getOrderById(state, orderId);
   if (!order) return { success: false, error: "Order not found" };
   if (order.owner !== address) return { success: false, error: "Only the order owner can cancel" };
-  if (order.status === "filled" || order.status === "cancelled") {
+  if (order.status === "filled" || order.status === "cancelled" || order.status === "expired") {
     return { success: false, error: "Order cannot be cancelled" };
   }
 
@@ -879,6 +913,7 @@ export function simCancelDexOrder(address: string, orderId: number): { success: 
 
 export function simMatchDexOrder(_address: string, orderId: number): { success: boolean; error?: string } {
   const state = getState();
+  expireOpenOrders(state);
   const order = getOrderById(state, orderId);
   if (!order) return { success: false, error: "Order not found" };
   if (order.status !== "open" && order.status !== "partial") {
@@ -891,6 +926,7 @@ export function simMatchDexOrder(_address: string, orderId: number): { success: 
 
 export function simGetDexOrderbook(address?: string) {
   const state = getState();
+  expireOpenOrders(state);
   const referencePrice = getReferenceFsftPriceEur(state);
   const band = allowedPriceBand(referencePrice);
 

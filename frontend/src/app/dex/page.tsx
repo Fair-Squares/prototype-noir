@@ -17,6 +17,7 @@ import {
 export default function DexPage() {
   const { activeAccount } = useWallet();
   const address = activeAccount?.address ?? null;
+  const accountIndex = activeAccount?.index ?? 0;
   const [orderbook, setOrderbook] = useState<DexOrderbook | null>(null);
   const [profile, setProfile] = useState<KYCProfile>({ verified: false, isInvestor: false, roles: [] });
   const [side, setSide] = useState<"buy" | "sell">("buy");
@@ -60,7 +61,8 @@ export default function DexPage() {
         address,
         side,
         Number(amount),
-        limitPrice ? Number(limitPrice) : undefined
+        limitPrice ? Number(limitPrice) : undefined,
+        accountIndex
       );
       if (!result.success) {
         notify("error", result.error ?? "Order failed");
@@ -77,7 +79,7 @@ export default function DexPage() {
     if (!address) return;
     setBusy(true);
     try {
-      const result = await cancelDexOrder(address, orderId);
+      const result = await cancelDexOrder(address, orderId, accountIndex);
       if (!result.success) notify("error", result.error ?? "Cancel failed");
       else {
         notify("success", "Order cancelled.");
@@ -92,7 +94,7 @@ export default function DexPage() {
     if (!address) return;
     setBusy(true);
     try {
-      const result = await matchDexOrder(address, orderId);
+      const result = await matchDexOrder(address, orderId, undefined, accountIndex);
       if (!result.success) notify("error", result.error ?? "Match failed");
       else {
         notify("success", "Match attempted.");
@@ -232,14 +234,14 @@ export default function DexPage() {
                   </div>
                   <div className="flex gap-2">
                     <button
-                      disabled={busy || order.status === "cancelled" || order.status === "filled"}
+                      disabled={busy || order.status === "cancelled" || order.status === "filled" || order.status === "expired"}
                       onClick={() => matchOrder(order.id)}
                       className="rounded-md border border-border px-2.5 py-1 text-xs"
                     >
                       Match
                     </button>
                     <button
-                      disabled={busy || order.status === "cancelled" || order.status === "filled"}
+                      disabled={busy || order.status === "cancelled" || order.status === "filled" || order.status === "expired"}
                       onClick={() => cancelOrder(order.id)}
                       className="rounded-md bg-fs-anthracite text-white px-2.5 py-1 text-xs disabled:opacity-50"
                     >

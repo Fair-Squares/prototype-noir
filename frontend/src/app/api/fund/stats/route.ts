@@ -12,9 +12,27 @@ function toNumberSafe(value: unknown): number {
   return 0;
 }
 
+function buildV3FeatureMeta() {
+  return {
+    dex: {
+      enabled: Boolean(process.env.NEXT_PUBLIC_FSFT_DEX_ADDRESS),
+      priceBandBps: Number(process.env.DEX_PRICE_BAND_BPS ?? "200"),
+      maxTtlBlocks: Number(process.env.DEX_MAX_TTL_BLOCKS ?? "120"),
+    },
+    rewards: {
+      enabled: Boolean(process.env.NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS),
+      claimMin: Number(process.env.PROTOCOL_REWARDS_CLAIM_MIN ?? "1"),
+    },
+    governanceVoting: {
+      requiresInvestorRole: true,
+      requiresEconomicExposure: true,
+    },
+  };
+}
+
 export async function GET() {
   if (!isLiveModeEnabled() && isVercelSimulationMode()) {
-    return NextResponse.json(simGetFundStats());
+    return NextResponse.json({ ...simGetFundStats(), ...buildV3FeatureMeta() });
   }
   if (!isLiveModeEnabled()) {
     return NextResponse.json(
@@ -56,6 +74,11 @@ export async function GET() {
 
     const valuationRaw = await hfContract.methods.get_valuation().simulate({ from });
     const valuation = Array.isArray(valuationRaw) ? valuationRaw : [0, 0, 0, 0];
+    const parkedPolicyRaw = await hfContract.methods
+      .get_parked_capital_policy()
+      .simulate({ from })
+      .catch(() => [3000, 2000, 5000] as const);
+    const parkedPolicy = Array.isArray(parkedPolicyRaw) ? parkedPolicyRaw : [3000, 2000, 5000];
 
     const investorCount = Number(await hfContract.methods.get_investor_count().simulate({ from }));
     const isPaused = Boolean(await hfContract.methods.is_paused().simulate({ from }));
@@ -83,7 +106,10 @@ export async function GET() {
       valuationBlock: toNumberSafe(valuation[3]),
       navEur,
       navPerFsftEur,
-      parkedAllocationBps: 3000,
+      parkedAllocationBps: toNumberSafe(parkedPolicy[0]),
+      parkedMinBps: toNumberSafe(parkedPolicy[1]),
+      parkedMaxBps: toNumberSafe(parkedPolicy[2]),
+      ...buildV3FeatureMeta(),
       source: "live",
     });
   } catch (error) {

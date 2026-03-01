@@ -24,11 +24,18 @@ export function isLiveModeEnabled(): boolean {
 }
 
 /**
- * Simulation mode is allowed only for Vercel deployments.
- * Local/dev Docker should run with AZTEC_LIVE=true for full contract-state.
+ * Simulation mode is enabled when live mode is off and either:
+ * - running on Vercel, or
+ * - AZTEC_SIMULATION=true (server-only), or
+ * - NEXT_PUBLIC_SIMULATION=true (frontend flag, useful in local dev)
  */
 export function isVercelSimulationMode(): boolean {
-  return !isLiveModeEnabled() && process.env.VERCEL === "1";
+  if (isLiveModeEnabled()) return false;
+  return (
+    process.env.VERCEL === "1" ||
+    process.env.AZTEC_SIMULATION === "true" ||
+    process.env.NEXT_PUBLIC_SIMULATION === "true"
+  );
 }
 
 // ── Contract addresses from env ───────────────────────────────────────────────

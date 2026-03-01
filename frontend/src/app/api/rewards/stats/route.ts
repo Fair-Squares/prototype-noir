@@ -5,6 +5,7 @@ import { simGetRewardsStatus } from "@/lib/simulationStore";
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const address = searchParams.get("address") ?? "";
+  const accountIndex = Number(searchParams.get("accountIndex") ?? "0");
 
   if (!address) {
     return NextResponse.json({ error: "address required" }, { status: 400 });
@@ -20,8 +21,100 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  return NextResponse.json(
-    { error: "Rewards live contract is not deployed yet. Use simulation mode." },
-    { status: 501 }
-  );
+  try {
+    const rewardsAddr = process.env.NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS ?? "";
+    const protocolTokenAddr = process.env.NEXT_PUBLIC_PROTOCOL_TOKEN_ADDRESS ?? "";
+    if (!rewardsAddr) {
+      return NextResponse.json({ error: "NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS not set" }, { status: 500 });
+    }
+
+    const { getTestAccount } = await import("@/lib/serverWallet");
+    const { Contract } = await import("@aztec/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
+
+    const actor = await getTestAccount(accountIndex);
+    const actorAddress = AztecAddress.fromString(actor.address);
+    const userAddress = AztecAddress.fromString(address);
+
+    const RewardsJson = await loadGeneratedArtifactJson("protocol_rewards-ProtocolRewards.json");
+    const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
+    const rewardsContract = await Contract.at(AztecAddress.fromString(rewardsAddr), rewardsArtifact, actor.wallet);
+
+    const [configRaw, userRaw] = await Promise.all([
+      rewardsContract.methods.get_rewards_config().simulate({ from: actorAddress }),
+      rewardsContract.methods.get_user_stats(userAddress).simulate({ from: actorAddress }),
+    ]);
+
+    const cfg = Array.isArray(configRaw) ? configRaw : [8_000_000, 0, 0, 0, 120, 1];
+    const user = Array.isArray(userRaw) ? userRaw : [0, 0, 0, false];
+
+    const distributionPool = Number(cfg[0] ?? 8_000_000);
+    const emittedToDate = Number(cfg[1] ?? 0);
+    const totalClaimed = Number(cfg[2] ?? 0);
+    const currentEpoch = Number(cfg[3] ?? 0);
+    const totalEpochs = Number(cfg[4] ?? 120);
+    const claimMin = Number(cfg[5] ?? 1);
+
+    const claimable = Number(user[0] ?? 0);
+    const totalUserClaimed = Number(user[1] ?? 0);
+    const rawLastClaimedEpoch = Number(user[2] ?? 0);
+    const fsftRewardsAttested = Boolean(user[3]);
+    let balance = 0;
+
+    if (protocolTokenAddr) {
+      try {
+        const FtJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
+        const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);
+        const tokenContract = await Contract.at(
+          AztecAddress.fromString(protocolTokenAddr),
+          ftArtifact,
+          actor.wallet
+        );
+        balance = Number(
+          await tokenContract.methods.public_balance_of(userAddress).simulate({ from: actorAddress })
+        );
+      } catch {
+        balance = 0;
+      }
+    }
+
+    const lastClaimedEpoch = totalUserClaimed > 0 ? rawLastClaimedEpoch : -1;
+    const rewardStart = Date.parse(process.env.PROTOCOL_REWARDS_START ?? "2026-01-01T00:00:00.000Z");
+    const epochMs = 30 * 24 * 60 * 60 * 1000;
+    const nextEpochAt = rewardStart + (currentEpoch + 1) * epochMs;
+
+    return NextResponse.json({
+      token: {
+        symbol: "FSP",
+        totalSupply: 10_000_000,
+        distributionPool,
+        years: 10,
+        totalEpochs,
+      },
+      weighting: {
+        deposit: 40,
+        fsft: 40,
+        governance: 20,
+      },
+      currentEpoch,
+      lastClaimedEpoch,
+      nextClaimableEpoch: Math.max(0, lastClaimedEpoch + 1),
+      claimableUptoEpoch: currentEpoch,
+      claimable,
+      claimMin,
+      emittedToDate,
+      totalClaimed,
+      totalUserClaimed,
+      balance,
+      fsftRewardsAttested,
+      source: "live",
+      nextEpochAt,
+    });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[rewards/stats]", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }

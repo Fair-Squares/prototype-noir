@@ -24,6 +24,8 @@ export interface FundStats {
   navEur?: number;
   navPerFsftEur?: number;
   parkedAllocationBps?: number;
+  parkedMinBps?: number;
+  parkedMaxBps?: number;
 }
 
 export async function fetchFundStats(): Promise<FundStats> {
@@ -66,6 +68,12 @@ export interface KYCProfile {
   verified: boolean;
   isInvestor: boolean;
   roles: string[];
+  canTradeDex?: boolean;
+  canVote?: boolean;
+  voteEligibilityReason?: string;
+  hasDepositTicket?: boolean;
+  hasFsftExposure?: boolean;
+  rewardsEligible?: boolean;
   source?: string;
 }
 
@@ -190,11 +198,14 @@ export async function fetchGovernanceEligibility(
   return res.json();
 }
 
-export async function attestFsftForVoting(address: string): Promise<{ success: boolean; message?: string; error?: string }> {
+export async function attestFsftForVoting(
+  address: string,
+  accountIndex = 0
+): Promise<{ success: boolean; message?: string; error?: string; txHash?: string }> {
   const res = await fetch("/api/governance/eligibility", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "attestFsftForVoting", address }),
+    body: JSON.stringify({ action: "attestFsftForVoting", address, accountIndex }),
   });
   return res.json();
 }
@@ -278,6 +289,9 @@ export interface PortfolioData {
   protocolTokenBalance?: number;
   protocolTokenSymbol?: string;
   rewardsClaimable?: number;
+  canTradeDex?: boolean;
+  rewardsEligible?: boolean;
+  governanceEligibility?: GovernanceEligibility;
   lockedEur?: number;
   lockedFsft?: number;
 }
@@ -310,9 +324,11 @@ export interface DexOrder {
   amount: number;
   remaining: number;
   priceEur: number;
-  status: "open" | "partial" | "filled" | "cancelled";
+  status: "open" | "partial" | "filled" | "cancelled" | "expired";
   createdAt: number;
   updatedAt: number;
+  expiryBlock?: number;
+  expiresAt?: number;
 }
 
 export interface DexTrade {
@@ -358,10 +374,27 @@ export interface RewardsStats {
   claimMin: number;
   emittedToDate: number;
   totalClaimed: number;
+  totalUserClaimed?: number;
   balance: number;
   fsftRewardsAttested: boolean;
   source?: string;
   nextEpochAt: number;
+}
+
+export interface RewardsEpoch {
+  epoch: number;
+  open: boolean;
+  emission: number;
+  allocated: number;
+  claimMin: number;
+}
+
+export interface RewardsClaim {
+  success: boolean;
+  claimed?: number;
+  txHash?: string;
+  message?: string;
+  error?: string;
 }
 
 export async function fetchDexOrderbook(address?: string): Promise<DexOrderbook> {
@@ -377,60 +410,66 @@ export async function placeDexOrder(
   address: string,
   side: "buy" | "sell",
   amount: number,
-  limitPriceEur?: number
+  limitPriceEur?: number,
+  accountIndex = 0,
+  ttlBlocks?: number
 ): Promise<{ success: boolean; message?: string; error?: string; order?: DexOrder }> {
   const res = await fetch("/api/dex/orders", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, side, amount, limitPriceEur }),
+    body: JSON.stringify({ address, side, amount, limitPriceEur, accountIndex, ttlBlocks }),
   });
   return res.json();
 }
 
 export async function matchDexOrder(
   address: string,
-  orderId: number
+  orderId: number,
+  makerOrderId?: number,
+  accountIndex = 0
 ): Promise<{ success: boolean; message?: string; error?: string }> {
   const res = await fetch("/api/dex/match", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, orderId }),
+    body: JSON.stringify({ address, orderId, makerOrderId, accountIndex }),
   });
   return res.json();
 }
 
 export async function cancelDexOrder(
   address: string,
-  orderId: number
+  orderId: number,
+  accountIndex = 0
 ): Promise<{ success: boolean; message?: string; error?: string }> {
   const res = await fetch("/api/dex/cancel", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, orderId }),
+    body: JSON.stringify({ address, orderId, accountIndex }),
   });
   return res.json();
 }
 
-export async function fetchRewardsStats(address: string): Promise<RewardsStats> {
-  const res = await fetch(`/api/rewards/stats?address=${encodeURIComponent(address)}`);
+export async function fetchRewardsStats(address: string, accountIndex = 0): Promise<RewardsStats> {
+  const query = new URLSearchParams({ address, accountIndex: String(accountIndex) });
+  const res = await fetch(`/api/rewards/stats?${query.toString()}`);
   if (!res.ok) throw new Error("Failed to fetch rewards stats");
   return res.json();
 }
 
-export async function claimRewards(address: string): Promise<{ success: boolean; claimed?: number; message?: string; error?: string }> {
+export async function claimRewards(address: string, accountIndex = 0): Promise<RewardsClaim> {
   const res = await fetch("/api/rewards/claim", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address }),
+    body: JSON.stringify({ address, accountIndex }),
   });
   return res.json();
 }
 
-export async function attestFsftForRewards(address: string): Promise<{ success: boolean; message?: string; error?: string }> {
+export async function attestFsftForRewards(address: string, accountIndex = 0): Promise<{ success: boolean; message?: string; error?: string; txHash?: string }> {
   const res = await fetch("/api/rewards/attest", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address }),
+    body: JSON.stringify({ address, accountIndex }),
   });
   return res.json();
 }

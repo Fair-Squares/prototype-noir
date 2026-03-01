@@ -21,6 +21,11 @@ The format is based on Keep a Changelog.
 - Added `frontend/src/app/dex/page.tsx` with investor-only DEX UI, NAV-band messaging, and user order controls.
 - Added protocol rewards client types and helper calls in `frontend/src/lib/contracts.ts`.
 - Added governance eligibility client helpers and FSFT voting attestation helpers in `frontend/src/lib/contracts.ts`.
+- Added Noir contracts:
+  - `contracts/fsft_dex` (`FSFTDex`)
+  - `contracts/protocol_rewards` (`ProtocolRewards`)
+- Added private-holder proof + delegated private-spend interfaces to `contracts/fund_token/src/main.nr`.
+- Added parked-capital policy storage/view/setters to `contracts/housing_fund/src/main.nr`.
 
 ### Changed
 - Expanded `frontend/src/lib/simulationStore.ts` with:
@@ -38,6 +43,22 @@ The format is based on Keep a Changelog.
 - Updated portfolio page with protocol rewards distribution panel and claim/attest actions.
 - Redesigned KYC flow/page visuals to align with current card-based UI language and deterministic dev-mode handling.
 - Extended live/simulation API payloads for fund and portfolio with additional v3-facing fields.
+- Wired live-mode rewards routes (`/api/rewards/stats`, `/api/rewards/claim`, `/api/rewards/attest`) to `ProtocolRewards`.
+- Wired live-mode DEX routes (`/api/dex/orders`, `/api/dex/match`, `/api/dex/cancel`) to `FSFTDex`.
+- Extended live governance eligibility/vote checks to include private-holder proof path.
+- Updated bootstrap to compile/deploy/wire `FSFTDex`, `ProtocolRewards`, and `PROTOCOL_TOKEN`.
+- Added `housing_fund.get_valuation_public()` and updated `FSFTDex` to consume it for NAV-band checks.
+- Refactored `ProtocolRewards` epoch targeting logic to Aztec-compatible public/view patterns and added `get_epoch_target`.
+- Made zkPassport dev-mode request IDs deterministic by address for stable simulation/live parity.
+- Expanded KYC/fund/portfolio API payloads with explicit DEX/rewards/vote-eligibility metadata fields.
+- Updated simulation mode gating to support local runs via `AZTEC_SIMULATION=true` / `NEXT_PUBLIC_SIMULATION=true` (not only Vercel).
+
+### Breaking
+- `Governance.constructor` now requires `fund_token` as an additional argument.
+- New bootstrap/env contract keys are required for full live v3 flow:
+  - `NEXT_PUBLIC_FSFT_DEX_ADDRESS`
+  - `NEXT_PUBLIC_PROTOCOL_TOKEN_ADDRESS`
+  - `NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS`
 
 ### Docs
 - Added this `CHANGELOG.md` and backfilled historical releases.

@@ -13,11 +13,14 @@ use aztec::macros::aztec;
 pub contract FundToken {
     use aztec::{
         macros::{
-            functions::{external, initializer, only_self},
+            functions::{external, initializer, only_self, view},
             storage::storage,
         },
         messages::message_delivery::MessageDelivery,
-        protocol::address::AztecAddress,
+        protocol::{
+            address::AztecAddress,
+            traits::ToField,
+        },
         state_vars::{Map, Owned, PublicMutable},
     };
     use balance_set::BalanceSet;
@@ -30,6 +33,10 @@ pub contract FundToken {
         private_balances: Owned<BalanceSet<Context>, Context>,
         // Public balances (for transparency when needed)
         public_balances: Map<AztecAddress, PublicMutable<u64, Context>, Context>,
+        // owner+spender key -> delegated private spend approval
+        delegated_private_spenders: Map<Field, PublicMutable<bool, Context>, Context>,
+        // privacy-preserving holder attestation flag (no balance disclosure)
+        private_holder_proof: Map<AztecAddress, PublicMutable<bool, Context>, Context>,
     }
 
     #[initializer]
@@ -130,6 +137,49 @@ pub contract FundToken {
         );
     }
 
+    // -- Private delegated spend primitives --------------------------------
+
+    #[external("public")]
+    fn set_private_spender(spender: AztecAddress, allowed: bool) {
+        assert(!spender.is_zero(), "invalid spender");
+        let owner = self.msg_sender();
+        let key = owner.to_field() + spender.to_field();
+        self.storage.delegated_private_spenders.at(key).write(allowed);
+    }
+
+    #[external("private")]
+    fn transfer_private_from(owner: AztecAddress, to: AztecAddress, amount: u64) {
+        let spender = self.msg_sender();
+        assert(amount > 0, "amount must be positive");
+
+        if !spender.eq(owner) {
+            self.enqueue_self._assert_private_spender_approved(owner, spender);
+        }
+
+        self.storage.private_balances.at(owner).sub(amount as u128).deliver(
+            MessageDelivery.ONCHAIN_CONSTRAINED,
+        );
+        self.storage.private_balances.at(to).add(amount as u128).deliver(
+            MessageDelivery.ONCHAIN_CONSTRAINED,
+        );
+    }
+
+    // -- Private-holder proof path -----------------------------------------
+
+    #[external("public")]
+    fn attest_private_holder() {
+        let caller = self.msg_sender();
+        // Placeholder hook for proof verification path: attests private-holder status
+        // without disclosing amount. A full ZK proof verifier can gate this in v4.
+        self.storage.private_holder_proof.at(caller).write(true);
+    }
+
+    #[external("public")]
+    fn clear_private_holder_proof() {
+        let caller = self.msg_sender();
+        self.storage.private_holder_proof.at(caller).write(false);
+    }
+
     // -- Public Burn ------------------------------------------------------
 
     #[external("public")]
@@ -184,6 +234,13 @@ pub contract FundToken {
         self.storage.public_balances.at(owner).write(balance + amount);
     }
 
+    #[external("public")]
+    #[only_self]
+    fn _assert_private_spender_approved(owner: AztecAddress, spender: AztecAddress) {
+        let key = owner.to_field() + spender.to_field();
+        assert(self.storage.delegated_private_spenders.at(key).read(), "spender not approved");
+    }
+
     // -- View Functions ---------------------------------------------------
 
     #[external("utility")]
@@ -191,8 +248,20 @@ pub contract FundToken {
         self.storage.total_supply.read()
     }
 
+    #[external("public")]
+    #[view]
+    fn total_supply_public() -> pub u64 {
+        self.storage.total_supply.read()
+    }
+
     #[external("utility")]
     unconstrained fn public_balance_of(owner: AztecAddress) -> pub u64 {
+        self.storage.public_balances.at(owner).read()
+    }
+
+    #[external("public")]
+    #[view]
+    fn public_balance_of_public(owner: AztecAddress) -> pub u64 {
         self.storage.public_balances.at(owner).read()
     }
 
@@ -204,5 +273,17 @@ pub contract FundToken {
     #[external("utility")]
     unconstrained fn private_balance_of(owner: AztecAddress) -> pub u128 {
         self.storage.private_balances.at(owner).balance_of()
+    }
+
+    #[external("utility")]
+    unconstrained fn is_private_spender_approved(owner: AztecAddress, spender: AztecAddress) -> pub bool {
+        let key = owner.to_field() + spender.to_field();
+        self.storage.delegated_private_spenders.at(key).read()
+    }
+
+    #[external("public")]
+    #[view]
+    fn has_private_holder_proof(owner: AztecAddress) -> pub bool {
+        self.storage.private_holder_proof.at(owner).read()
     }
 }

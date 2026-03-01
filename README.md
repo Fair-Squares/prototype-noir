@@ -39,7 +39,7 @@ Startup sequence (~4 min total):
 |------|------|-------------|
 | Anvil (L1) | ~5 s | Local Ethereum chain on port 8545 |
 | Aztec node | ~30 s | Deploys L1 contracts, starts PXE + sequencer on port 8080 |
-| Bootstrap | ~3 min | Compiles 5 Noir contracts, deploys them, wires them together |
+| Bootstrap | ~3 min | Compiles 7 Noir contracts, deploys them, wires them together |
 | Frontend | ~10 s | Next.js starts on port 3000 with contract addresses in env |
 
 ### Simulation mode (no Aztec needed)
@@ -338,6 +338,8 @@ from the browser.
 | `HousingFund` | `contracts/housing_fund/` | Core fund: deposit, withdraw, yield, DeFi routing |
 | `Governance` | `contracts/governance/` | Property proposals and voting |
 | `DeFiVault` | `contracts/defi_vault/` | Yield stub (simulates 3% APY on locked funds) |
+| `FSFTDex` | `contracts/fsft_dex/` | Investor-only FSFT/EUR orderbook with NAV guardrails |
+| `ProtocolRewards` | `contracts/protocol_rewards/` | Protocol token epoch emissions and claims |
 
 ### Contract Wiring
 
@@ -347,6 +349,7 @@ After deployment, contracts are connected:
 HousingFund.set_contracts(kyc, token, vault, gov)
 DeFiVault.set_housing_fund(housing_fund)
 FundToken.set_admin(housing_fund)
+ProtocolToken.set_admin(protocol_rewards)
 ```
 
 This means:
@@ -389,6 +392,10 @@ NEXT_PUBLIC_FUND_TOKEN_ADDRESS=0x...
 NEXT_PUBLIC_DEFI_VAULT_ADDRESS=0x...
 NEXT_PUBLIC_HOUSING_FUND_ADDRESS=0x...
 NEXT_PUBLIC_GOVERNANCE_ADDRESS=0x...
+NEXT_PUBLIC_FSFT_DEX_ADDRESS=0x...
+NEXT_PUBLIC_EUR_TOKEN_ADDRESS=0x...
+NEXT_PUBLIC_PROTOCOL_TOKEN_ADDRESS=0x...
+NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS=0x...
 NEXT_PUBLIC_ADMIN_ADDRESS=0x...
 ```
 
@@ -468,6 +475,10 @@ docker compose --profile aztec up frontend
 | `NEXT_PUBLIC_HOUSING_FUND_ADDRESS` | — | Set by bootstrap |
 | `NEXT_PUBLIC_GOVERNANCE_ADDRESS` | — | Set by bootstrap |
 | `NEXT_PUBLIC_DEFI_VAULT_ADDRESS` | — | Set by bootstrap |
+| `NEXT_PUBLIC_FSFT_DEX_ADDRESS` | — | Set by bootstrap |
+| `NEXT_PUBLIC_EUR_TOKEN_ADDRESS` | — | Set by bootstrap |
+| `NEXT_PUBLIC_PROTOCOL_TOKEN_ADDRESS` | — | Set by bootstrap |
+| `NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS` | — | Set by bootstrap |
 | `NEXT_PUBLIC_ADMIN_ADDRESS` | — | Set by bootstrap |
 
 ---
