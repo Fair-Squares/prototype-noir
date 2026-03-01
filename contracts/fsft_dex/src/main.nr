@@ -8,19 +8,21 @@ use aztec::macros::aztec;
 /// - taker-match with partial fills
 /// - expiry support
 ///
-/// Settlement remains contract-mediated and deterministic; private delegated
-/// settlement hooks are handled at integration level.
+/// Settlement is private-note based and deterministic:
+/// EUR and FSFT legs are transferred via delegated private spend,
+/// then public orderbook state is finalized through an only_self step.
 #[aztec]
 pub contract FSFTDex {
+    use fund_token::FundToken;
     use housing_fund::HousingFund;
     use kyc_verifier::KYCVerifier;
     use aztec::{
         macros::{
-            functions::{external, initializer, view},
+            functions::{external, initializer, only_self, view},
             storage::storage,
         },
         protocol::address::AztecAddress,
-        state_vars::{Map, PublicMutable},
+        state_vars::{Map, PublicImmutable, PublicMutable},
     };
 
     global SIDE_BUY: u8 = 0;
@@ -37,6 +39,8 @@ pub contract FSFTDex {
         admin: PublicMutable<AztecAddress, Context>,
         kyc_verifier: PublicMutable<AztecAddress, Context>,
         housing_fund: PublicMutable<AztecAddress, Context>,
+        fsft_token: PublicImmutable<AztecAddress, Context>,
+        eur_token: PublicImmutable<AztecAddress, Context>,
         // NAV guardrail and order ttl policy
         price_band_bps: PublicMutable<u32, Context>,
         max_ttl_blocks: PublicMutable<u32, Context>,
@@ -60,18 +64,24 @@ pub contract FSFTDex {
         admin: AztecAddress,
         kyc_verifier: AztecAddress,
         housing_fund: AztecAddress,
+        fsft_token: AztecAddress,
+        eur_token: AztecAddress,
         price_band_bps: u32,
         max_ttl_blocks: u32,
     ) {
         assert(!admin.is_zero(), "invalid admin");
         assert(!kyc_verifier.is_zero(), "invalid kyc verifier");
         assert(!housing_fund.is_zero(), "invalid housing fund");
+        assert(!fsft_token.is_zero(), "invalid fsft token");
+        assert(!eur_token.is_zero(), "invalid eur token");
         assert(price_band_bps > 0, "invalid price band");
         assert(max_ttl_blocks > 0, "invalid max ttl");
 
         self.storage.admin.write(admin);
         self.storage.kyc_verifier.write(kyc_verifier);
         self.storage.housing_fund.write(housing_fund);
+        self.storage.fsft_token.initialize(fsft_token);
+        self.storage.eur_token.initialize(eur_token);
         self.storage.price_band_bps.write(price_band_bps);
         self.storage.max_ttl_blocks.write(max_ttl_blocks);
         self.storage.order_count.write(0);
@@ -127,107 +137,42 @@ pub contract FSFTDex {
     }
 
     /// Taker-match against a specific maker order id.
-    /// Caller must be an investor. Partial fills are supported.
-    #[external("public")]
-    fn match_order(taker_order_id: u32, maker_order_id: u32) {
-        let caller = self.msg_sender();
-        let kyc_contract = KYCVerifier::at(self.storage.kyc_verifier.read());
-        let is_investor = self.view(kyc_contract.is_investor(caller));
-        assert(is_investor, "Complete KYC to trade FSFT/EUR.");
+    /// Private settlement path:
+    /// - executes private-note transfers atomically
+    /// - then enqueues a public only_self finalizer which re-validates and applies fill
+    ///
+    /// The matcher passes expected settlement parameters, and `_apply_match_fill`
+    /// enforces correctness against current public orderbook state.
+    #[external("private")]
+    fn match_order(
+        taker_order_id: u32,
+        maker_order_id: u32,
+        fill_amount: u64,
+        eur_amount: u64,
+        buyer: AztecAddress,
+        seller: AztecAddress,
+    ) {
+        let matcher = self.msg_sender();
+        let eur = FundToken::at(self.storage.eur_token.read());
+        let fsft = FundToken::at(self.storage.fsft_token.read());
 
-        assert(taker_order_id != maker_order_id, "invalid pair");
+        // Atomic private-note settlement:
+        // - Buyer pays EUR privately to seller
+        // - Seller delivers FSFT privately to buyer
+        self.call(eur.transfer_private_from(buyer, seller, eur_amount));
+        self.call(fsft.transfer_private_from(seller, buyer, fill_amount));
 
-        let taker = taker_order_id as Field;
-        let maker = maker_order_id as Field;
-
-        let taker_owner = self.storage.o_owner.at(taker).read();
-        let maker_owner = self.storage.o_owner.at(maker).read();
-        assert(!taker_owner.is_zero(), "taker order missing");
-        assert(!maker_owner.is_zero(), "maker order missing");
-        assert(!taker_owner.eq(maker_owner), "self-match not allowed");
-
-        let taker_status_pre = self.storage.o_status.at(taker).read();
-        let maker_status_pre = self.storage.o_status.at(maker).read();
-
-        let taker_expired = if (taker_status_pre == STATUS_OPEN) | (taker_status_pre == STATUS_PARTIAL) {
-            let expiry = self.storage.o_expiry_block.at(taker).read();
-            if self.context.block_number() >= expiry {
-                self.storage.o_status.at(taker).write(STATUS_EXPIRED);
-                self.storage.o_remaining.at(taker).write(0);
-                true
-            } else {
-                false
-            }
-        } else {
-            false
-        };
-
-        let maker_expired = if (maker_status_pre == STATUS_OPEN) | (maker_status_pre == STATUS_PARTIAL) {
-            let expiry = self.storage.o_expiry_block.at(maker).read();
-            if self.context.block_number() >= expiry {
-                self.storage.o_status.at(maker).write(STATUS_EXPIRED);
-                self.storage.o_remaining.at(maker).write(0);
-                true
-            } else {
-                false
-            }
-        } else {
-            false
-        };
-        assert(!taker_expired, "taker order expired");
-        assert(!maker_expired, "maker order expired");
-
-        let taker_status = self.storage.o_status.at(taker).read();
-        let maker_status = self.storage.o_status.at(maker).read();
-        assert(
-            (taker_status == STATUS_OPEN) | (taker_status == STATUS_PARTIAL),
-            "taker order not matchable",
+        // Update public orderbook state only after private settlement succeeded,
+        // and re-validate all matching invariants in public context.
+        self.enqueue_self._apply_match_fill(
+            taker_order_id,
+            maker_order_id,
+            fill_amount,
+            eur_amount,
+            buyer,
+            seller,
+            matcher,
         );
-        assert(
-            (maker_status == STATUS_OPEN) | (maker_status == STATUS_PARTIAL),
-            "maker order not matchable",
-        );
-
-        let taker_side = self.storage.o_side.at(taker).read();
-        let maker_side = self.storage.o_side.at(maker).read();
-        assert(taker_side != maker_side, "sides must oppose");
-
-        let taker_price = self.storage.o_price_bps.at(taker).read();
-        let maker_price = self.storage.o_price_bps.at(maker).read();
-
-        if taker_side == SIDE_BUY {
-            assert(taker_price >= maker_price, "price does not cross");
-        } else {
-            assert(maker_price >= taker_price, "price does not cross");
-        }
-
-        let taker_remaining = self.storage.o_remaining.at(taker).read();
-        let maker_remaining = self.storage.o_remaining.at(maker).read();
-        assert(taker_remaining > 0, "taker has no remaining");
-        assert(maker_remaining > 0, "maker has no remaining");
-
-        let fill_amount = if taker_remaining < maker_remaining {
-            taker_remaining
-        } else {
-            maker_remaining
-        };
-
-        self.storage.o_remaining.at(taker).write(taker_remaining - fill_amount);
-        self.storage.o_remaining.at(maker).write(maker_remaining - fill_amount);
-
-        let taker_remaining_after = self.storage.o_remaining.at(taker).read();
-        if taker_remaining_after == 0 {
-            self.storage.o_status.at(taker).write(STATUS_FILLED);
-        } else {
-            self.storage.o_status.at(taker).write(STATUS_PARTIAL);
-        }
-
-        let maker_remaining_after = self.storage.o_remaining.at(maker).read();
-        if maker_remaining_after == 0 {
-            self.storage.o_status.at(maker).write(STATUS_FILLED);
-        } else {
-            self.storage.o_status.at(maker).write(STATUS_PARTIAL);
-        }
     }
 
     #[external("public")]
@@ -265,6 +210,103 @@ pub contract FSFTDex {
 
         self.storage.o_status.at(oid).write(STATUS_CANCELLED);
         self.storage.o_remaining.at(oid).write(0);
+    }
+
+    #[external("public")]
+    #[only_self]
+    fn _apply_match_fill(
+        taker_order_id: u32,
+        maker_order_id: u32,
+        fill_amount: u64,
+        eur_amount: u64,
+        buyer: AztecAddress,
+        seller: AztecAddress,
+        matcher: AztecAddress,
+    ) {
+        assert(taker_order_id != maker_order_id, "invalid pair");
+        let taker = taker_order_id as Field;
+        let maker = maker_order_id as Field;
+
+        let kyc_contract = KYCVerifier::at(self.storage.kyc_verifier.read());
+        let matcher_is_investor = self.view(kyc_contract.is_investor(matcher));
+        assert(matcher_is_investor, "Complete KYC to trade FSFT/EUR.");
+
+        let taker_owner = self.storage.o_owner.at(taker).read();
+        let maker_owner = self.storage.o_owner.at(maker).read();
+        assert(!taker_owner.is_zero(), "taker order missing");
+        assert(!maker_owner.is_zero(), "maker order missing");
+        assert(matcher.eq(taker_owner), "only taker owner can match");
+        assert(!taker_owner.eq(maker_owner), "self-match not allowed");
+
+        let taker_status = self.storage.o_status.at(taker).read();
+        let maker_status = self.storage.o_status.at(maker).read();
+        assert(
+            (taker_status == STATUS_OPEN) | (taker_status == STATUS_PARTIAL),
+            "taker order not matchable",
+        );
+        assert(
+            (maker_status == STATUS_OPEN) | (maker_status == STATUS_PARTIAL),
+            "maker order not matchable",
+        );
+
+        let now_block = self.context.block_number();
+        let taker_expiry = self.storage.o_expiry_block.at(taker).read();
+        let maker_expiry = self.storage.o_expiry_block.at(maker).read();
+        assert(now_block < taker_expiry, "taker order expired");
+        assert(now_block < maker_expiry, "maker order expired");
+
+        let taker_side = self.storage.o_side.at(taker).read();
+        let maker_side = self.storage.o_side.at(maker).read();
+        assert(taker_side != maker_side, "sides must oppose");
+
+        let taker_price = self.storage.o_price_bps.at(taker).read();
+        let maker_price = self.storage.o_price_bps.at(maker).read();
+        if taker_side == SIDE_BUY {
+            assert(taker_price >= maker_price, "price does not cross");
+        } else {
+            assert(maker_price >= taker_price, "price does not cross");
+        }
+
+        let taker_remaining = self.storage.o_remaining.at(taker).read();
+        let maker_remaining = self.storage.o_remaining.at(maker).read();
+        assert(taker_remaining >= fill_amount, "invalid taker fill");
+        assert(maker_remaining >= fill_amount, "invalid maker fill");
+
+        let expected_fill = if taker_remaining < maker_remaining {
+            taker_remaining
+        } else {
+            maker_remaining
+        };
+        assert(fill_amount == expected_fill, "invalid fill amount");
+
+        let (expected_buyer, expected_seller) = if taker_side == SIDE_BUY {
+            (taker_owner, maker_owner)
+        } else {
+            (maker_owner, taker_owner)
+        };
+        assert(buyer.eq(expected_buyer), "invalid buyer");
+        assert(seller.eq(expected_seller), "invalid seller");
+
+        let expected_eur_amount = (fill_amount * maker_price + 9999) / 10000;
+        assert(eur_amount == expected_eur_amount, "invalid eur amount");
+
+        let taker_remaining_after = taker_remaining - fill_amount;
+        let maker_remaining_after = maker_remaining - fill_amount;
+
+        self.storage.o_remaining.at(taker).write(taker_remaining_after);
+        self.storage.o_remaining.at(maker).write(maker_remaining_after);
+
+        if taker_remaining_after == 0 {
+            self.storage.o_status.at(taker).write(STATUS_FILLED);
+        } else {
+            self.storage.o_status.at(taker).write(STATUS_PARTIAL);
+        }
+
+        if maker_remaining_after == 0 {
+            self.storage.o_status.at(maker).write(STATUS_FILLED);
+        } else {
+            self.storage.o_status.at(maker).write(STATUS_PARTIAL);
+        }
     }
 
     // -- Views -------------------------------------------------------------
@@ -313,5 +355,14 @@ pub contract FSFTDex {
     fn can_trade(user: AztecAddress) -> pub bool {
         let kyc_contract = KYCVerifier::at(self.storage.kyc_verifier.read());
         self.view(kyc_contract.is_investor(user))
+    }
+
+    #[external("public")]
+    #[view]
+    fn get_settlement_tokens() -> pub (AztecAddress, AztecAddress) {
+        (
+            self.storage.fsft_token.read(),
+            self.storage.eur_token.read(),
+        )
     }
 }

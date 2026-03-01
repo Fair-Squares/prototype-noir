@@ -796,9 +796,6 @@ function matchOrder(state: SimState, taker: SimDexOrder): void {
   expireOpenOrders(state);
   if (taker.status !== "open" && taker.status !== "partial") return;
 
-  const referencePrice = getReferenceFsftPriceEur(state);
-  const tradePrice = referencePrice;
-
   const candidates = state.dex.orders.filter((o) => {
     if (o.id === taker.id) return false;
     if (o.status !== "open" && o.status !== "partial") return false;
@@ -818,6 +815,7 @@ function matchOrder(state: SimState, taker: SimDexOrder): void {
 
     const amount = roundTo4(Math.min(taker.remaining, maker.remaining));
     if (amount <= 0) continue;
+    const tradePrice = roundTo4(maker.priceEur);
 
     const buyOrder = taker.side === "buy" ? taker : maker;
     const sellOrder = taker.side === "sell" ? taker : maker;
@@ -896,6 +894,9 @@ export function simPlaceDexOrder(
 export function simCancelDexOrder(address: string, orderId: number): { success: boolean; error?: string } {
   const state = getState();
   expireOpenOrders(state);
+  const account = getOrCreateAccount(address);
+  if (!account.investorRole) return { success: false, error: "Complete KYC to trade FSFT/EUR." };
+
   const order = getOrderById(state, orderId);
   if (!order) return { success: false, error: "Order not found" };
   if (order.owner !== address) return { success: false, error: "Only the order owner can cancel" };
@@ -914,10 +915,16 @@ export function simCancelDexOrder(address: string, orderId: number): { success: 
 export function simMatchDexOrder(_address: string, orderId: number): { success: boolean; error?: string } {
   const state = getState();
   expireOpenOrders(state);
+  const account = getOrCreateAccount(_address);
+  if (!account.investorRole) return { success: false, error: "Complete KYC to trade FSFT/EUR." };
+
   const order = getOrderById(state, orderId);
   if (!order) return { success: false, error: "Order not found" };
   if (order.status !== "open" && order.status !== "partial") {
     return { success: false, error: "Order is not matchable" };
+  }
+  if (order.owner !== _address) {
+    return { success: false, error: "Only the taker order owner can match" };
   }
 
   matchOrder(state, order);

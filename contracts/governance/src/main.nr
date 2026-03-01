@@ -56,8 +56,8 @@ pub contract Governance {
         // Track who has voted (voter_address + proposal_id -> bool)
         // Key: hash of voter + proposal_id (stored as a Map<Field, ...>)
         has_voted: Map<Field, PublicMutable<bool, Context>, Context>,
-        // Investor self-attestation for deposit-ticket based voting eligibility.
-        deposit_exposure_attested: Map<AztecAddress, PublicMutable<bool, Context>, Context>,
+        // Mirrored deposit tickets synced from HousingFund.
+        user_deposit_ticket: Map<AztecAddress, PublicMutable<u64, Context>, Context>,
     }
 
     #[initializer]
@@ -123,7 +123,7 @@ pub contract Governance {
         assert(is_investor, "investor role required");
 
         let fund_token = FundToken::at(self.storage.fund_token.read());
-        let has_deposit_ticket = self.storage.deposit_exposure_attested.at(voter).read();
+        let has_deposit_ticket = self.storage.user_deposit_ticket.at(voter).read() > 0;
         let has_public_fsft = self.view(fund_token.public_balance_of_public(voter)) > 0;
         let has_private_holder_proof = self.view(fund_token.has_private_holder_proof(voter));
         assert(
@@ -235,12 +235,9 @@ pub contract Governance {
     }
 
     #[external("public")]
-    fn attest_deposit_exposure() {
-        let user = self.msg_sender();
-        let kyc_contract = KYCVerifier::at(self.storage.kyc_verifier.read());
-        let is_investor = self.view(kyc_contract.is_investor(user));
-        assert(is_investor, "investor role required");
-        self.storage.deposit_exposure_attested.at(user).write(true);
+    fn sync_deposit_ticket(user: AztecAddress, ticket_amount: u64) {
+        assert_eq(self.msg_sender(), self.storage.housing_fund.read(), "only housing fund can sync tickets");
+        self.storage.user_deposit_ticket.at(user).write(ticket_amount);
     }
 
     #[external("public")]
@@ -250,7 +247,7 @@ pub contract Governance {
         let fund_token = FundToken::at(self.storage.fund_token.read());
 
         let investor_role = self.view(kyc_contract.is_investor(user));
-        let has_deposit_ticket = self.storage.deposit_exposure_attested.at(user).read();
+        let has_deposit_ticket = self.storage.user_deposit_ticket.at(user).read() > 0;
         let has_public_fsft = self.view(fund_token.public_balance_of_public(user)) > 0;
         let has_private_holder_proof = self.view(fund_token.has_private_holder_proof(user));
         let can_vote = investor_role & (has_deposit_ticket | has_public_fsft | has_private_holder_proof);

@@ -63,7 +63,19 @@ export async function POST(request: NextRequest) {
       .is_investor(userAddress)
       .simulate({ from: accountAddress });
     if (!Boolean(isInvestor)) {
-      return NextResponse.json({ error: "Investor role required to vote" }, { status: 403 });
+      return NextResponse.json(
+        {
+          error: "Investor role required to vote",
+          eligibility: {
+            investorRole: false,
+            hasDepositTicket: false,
+            hasFsftExposure: false,
+            hasPrivateHolderProof: false,
+            reason: "Complete KYC investor verification first.",
+          },
+        },
+        { status: 403 }
+      );
     }
 
     const [depositTicket, fsftBalance, hasPrivateHolderProof] = await Promise.all([
@@ -75,7 +87,16 @@ export async function POST(request: NextRequest) {
     const hasFsftExposure = Number(fsftBalance) > 0 || Boolean(hasPrivateHolderProof);
     if (!hasDepositTicket && !hasFsftExposure) {
       return NextResponse.json(
-        { error: "Voting requires fund exposure: deposit ticket, FSFT holding, or private-holder proof" },
+        {
+          error: "Voting requires fund exposure: deposit ticket, FSFT holding, or private-holder proof",
+          eligibility: {
+            investorRole: true,
+            hasDepositTicket,
+            hasFsftExposure,
+            hasPrivateHolderProof: Boolean(hasPrivateHolderProof),
+            reason: "No deposit ticket, public FSFT, or private-holder proof found.",
+          },
+        },
         { status: 403 }
       );
     }
@@ -83,11 +104,6 @@ export async function POST(request: NextRequest) {
     const GovArtifactJson = await loadGeneratedArtifactJson("governance-Governance.json");
     const govArtifact = loadContractArtifact(GovArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const govContract = await Contract.at(AztecAddress.fromString(govAddr), govArtifact, wallet);
-
-    if (hasDepositTicket && !hasFsftExposure) {
-      // Governance now keeps a voter self-attestation path for deposit-ticket exposure.
-      await govContract.methods.attest_deposit_exposure().send({ from: accountAddress });
-    }
 
     const receipt = await govContract.methods
       .cast_vote(Number(proposalId), Boolean(voteYes))

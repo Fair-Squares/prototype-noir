@@ -52,9 +52,14 @@ The format is based on Keep a Changelog.
 - Made zkPassport dev-mode request IDs deterministic by address for stable simulation/live parity.
 - Expanded KYC/fund/portfolio API payloads with explicit DEX/rewards/vote-eligibility metadata fields.
 - Updated simulation mode gating to support local runs via `AZTEC_SIMULATION=true` / `NEXT_PUBLIC_SIMULATION=true` (not only Vercel).
+- Switched `FSFTDex.match_order` to private settlement with delegated private-note transfers and a public `only_self` finalizer (`_apply_match_fill`) that enforces all matching invariants.
+- Replaced governance deposit exposure attestation with explicit on-chain deposit-ticket synchronization from `HousingFund` via `Governance.sync_deposit_ticket`.
+- Tightened simulation DEX parity to enforce investor-only match/cancel permissions, taker-owner-only matching, and maker-price settlement.
 
 ### Breaking
 - `Governance.constructor` now requires `fund_token` as an additional argument.
+- `FSFTDex.constructor` now requires `fsft_token` and `eur_token` addresses.
+- `FSFTDex.match_order` signature changed to private settlement args (`fill_amount`, `eur_amount`, `buyer`, `seller`) and now finalizes state through `only_self`.
 - New bootstrap/env contract keys are required for full live v3 flow:
   - `NEXT_PUBLIC_FSFT_DEX_ADDRESS`
   - `NEXT_PUBLIC_PROTOCOL_TOKEN_ADDRESS`

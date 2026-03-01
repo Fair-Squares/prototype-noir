@@ -12,6 +12,16 @@ function toNumberSafe(value: unknown): number {
   return 0;
 }
 
+function toBigIntSafe(value: unknown): bigint {
+  if (typeof value === "bigint") return value;
+  if (typeof value === "number") return BigInt(Math.trunc(value));
+  if (typeof value === "string") return BigInt(value);
+  if (value && typeof value === "object" && "toString" in value) {
+    return BigInt((value as { toString: () => string }).toString());
+  }
+  return 0n;
+}
+
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const { address, orderId, makerOrderId, accountIndex = 0 } = body as {
@@ -98,8 +108,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No compatible maker order found" }, { status: 400 });
     }
 
+    const takerRaw = await dexContract.methods.get_order(Number(orderId)).simulate({ from: actorAddress });
+    const makerRaw = await dexContract.methods.get_order(Number(makerId)).simulate({ from: actorAddress });
+    const taker = Array.isArray(takerRaw) ? takerRaw : [];
+    const maker = Array.isArray(makerRaw) ? makerRaw : [];
+
+    const takerOwner = AztecAddress.fromString(String(taker[0]));
+    const makerOwner = AztecAddress.fromString(String(maker[0]));
+    const takerSide = toNumberSafe(taker[1]); // 0 buy, 1 sell
+    const takerRemaining = toBigIntSafe(taker[3]);
+    const makerRemaining = toBigIntSafe(maker[3]);
+    const makerPriceBps = toBigIntSafe(maker[4]);
+    const fillAmount = takerRemaining < makerRemaining ? takerRemaining : makerRemaining;
+    if (fillAmount <= 0n) {
+      return NextResponse.json({ error: "No matchable remaining amount" }, { status: 400 });
+    }
+    const eurAmount = (fillAmount * makerPriceBps + 9999n) / 10000n;
+    if (eurAmount <= 0n) {
+      return NextResponse.json({ error: "Computed settlement amount is zero" }, { status: 400 });
+    }
+    const buyer = takerSide === 0 ? takerOwner : makerOwner;
+    const seller = takerSide === 0 ? makerOwner : takerOwner;
+
     const receipt = await dexContract.methods
-      .match_order(Number(orderId), Number(makerId))
+      .match_order(
+        Number(orderId),
+        Number(makerId),
+        fillAmount,
+        eurAmount,
+        buyer,
+        seller
+      )
       .send({ from: actorAddress });
 
     return NextResponse.json({
@@ -108,6 +147,8 @@ export async function POST(request: NextRequest) {
       txHash: receipt.txHash?.toString() ?? "unknown",
       source: "live",
       makerOrderId: Number(makerId),
+      fillAmount: Number(fillAmount),
+      eurAmount: Number(eurAmount),
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);

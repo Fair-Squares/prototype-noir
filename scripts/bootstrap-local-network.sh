@@ -202,16 +202,16 @@ deploy_contracts() {
     --args "${FUND_ADDR}" "${KYC_ADDR}" "${TOKEN_ADDR}" "${GOVERNANCE_VOTING_WINDOW_BLOCKS}" "${GOVERNANCE_MIN_QUORUM_VOTES}")
   [ -z "$GOV_ADDR" ] && die "governance deploy failed — no address in output"
 
-  DEX_ADDR=$(_deploy "fsft_dex" \
-    "fsft_dex/target/fsft_dex-FSFTDex.json" \
-    --args accounts:test0 "${KYC_ADDR}" "${FUND_ADDR}" "${DEX_PRICE_BAND_BPS}" "${DEX_MAX_TTL_BLOCKS}")
-  [ -z "$DEX_ADDR" ] && die "fsft_dex deploy failed — no address in output"
-
   # -- Deploy EUR token (second instance of fund_token — represents EURs stablecoin) --
   EUR_ADDR=$(_deploy "eur_token" \
     "fund_token/target/fund_token-FundToken.json" \
     --args accounts:test0)
   [ -z "$EUR_ADDR" ] && die "eur_token deploy failed — no address in output"
+
+  DEX_ADDR=$(_deploy "fsft_dex" \
+    "fsft_dex/target/fsft_dex-FSFTDex.json" \
+    --args accounts:test0 "${KYC_ADDR}" "${FUND_ADDR}" "${TOKEN_ADDR}" "${EUR_ADDR}" "${DEX_PRICE_BAND_BPS}" "${DEX_MAX_TTL_BLOCKS}")
+  [ -z "$DEX_ADDR" ] && die "fsft_dex deploy failed — no address in output"
 
   # -- Deploy protocol token (third instance of fund_token — rewards token) --
   PROTOCOL_TOKEN_ADDR=$(_deploy "protocol_token" \
