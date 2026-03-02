@@ -18,8 +18,8 @@ export async function GET(request: NextRequest) {
         name: "Fair Squares Fund Token",
         totalSupply: stats.fsftTotalSupply,
         decimals: 0,
-        peg: "NAV-based share value",
-        description: "Fund share token. Issue price may start near €1 at settlement; ongoing value tracks NAV per FSFT.",
+        peg: "Estimated share price",
+        description: "Fund share token. Value follows the fund's estimated share price.",
       },
       eurToken: {
         address: process.env.NEXT_PUBLIC_EUR_TOKEN_ADDRESS ?? "sim",
@@ -74,8 +74,8 @@ export async function GET(request: NextRequest) {
         name: "Fair Squares Fund Token",
         totalSupply,
         decimals: 0,
-        peg: "NAV-based share value",
-        description: "Fund share token. Issue price may start near €1 at settlement; ongoing value tracks NAV per FSFT.",
+        peg: "Estimated share price",
+        description: "Fund share token. Value follows the fund's estimated share price.",
       },
       eurToken: {
         address: eurTokenAddr || "native",

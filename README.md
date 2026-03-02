@@ -37,7 +37,7 @@ Startup sequence (~4 min total):
 
 | Step | Time | What happens |
 |------|------|-------------|
-| Anvil (L1) | ~5 s | Local Ethereum chain on port 8545 |
+| Anvil (L1) | ~5 s | Local Ethereum chain on port 8545 (mines every 1s by default) |
 | Aztec node | ~30 s | Deploys L1 contracts, starts PXE + sequencer on port 8080 |
 | Bootstrap | ~3 min | Compiles 7 Noir contracts, deploys them, wires them together |
 | Frontend | ~10 s | Next.js starts on port 3000 with contract addresses in env |
@@ -480,6 +480,16 @@ docker compose --profile aztec up frontend
 | `NEXT_PUBLIC_PROTOCOL_TOKEN_ADDRESS` | — | Set by bootstrap |
 | `NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS` | — | Set by bootstrap |
 | `NEXT_PUBLIC_ADMIN_ADDRESS` | — | Set by bootstrap |
+| `ANVIL_BLOCK_TIME` | `1` | L1 block time in seconds for local Anvil |
+| `GOVERNANCE_VOTING_WINDOW_BLOCKS` | `300` | Voting window in L1 blocks (set by bootstrap) |
+
+Governance timing in local mode is controlled by:
+
+`governance_minutes ~= GOVERNANCE_VOTING_WINDOW_BLOCKS * ANVIL_BLOCK_TIME / 60`
+
+Recommended defaults:
+- `ANVIL_BLOCK_TIME=1`
+- `GOVERNANCE_VOTING_WINDOW_BLOCKS=300` (about 5 minutes)
 
 ---
 

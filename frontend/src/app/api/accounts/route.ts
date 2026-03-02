@@ -1,11 +1,11 @@
 /**
  * GET /api/accounts
  *
- * Returns the 3 selectable test accounts for the devnet prototype.
+ * Returns selectable test accounts for the devnet prototype.
  *
  * Simulation mode: returns static SIM_ACCOUNTS (instant, no Aztec needed).
  * Live mode: reads from env vars (written by bootstrap) then enriches
- *   with server wallet for computed test1/test2 addresses.
+ *   with server wallet for computed account addresses.
  */
 
 import { NextResponse } from "next/server";

@@ -88,13 +88,13 @@ export async function POST(request: NextRequest) {
     if (!hasDepositTicket && !hasFsftExposure) {
       return NextResponse.json(
         {
-          error: "Voting requires fund exposure: deposit ticket, FSFT holding, or private-holder proof",
+          error: "Voting requires an active position: a deposit or FSFT holdings.",
           eligibility: {
             investorRole: true,
             hasDepositTicket,
             hasFsftExposure,
             hasPrivateHolderProof: Boolean(hasPrivateHolderProof),
-            reason: "No deposit ticket, public FSFT, or private-holder proof found.",
+            reason: "No deposit or FSFT position found for this account.",
           },
         },
         { status: 403 }

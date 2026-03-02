@@ -2,6 +2,59 @@ import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simGetRewardsStatus } from "@/lib/simulationStore";
 
+async function fetchJsonSafe(url: string): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return null;
+    return (await res.json()) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function buildEligibility(
+  investorRole: boolean,
+  depositBucketEligible: boolean,
+  fsftBalance: number,
+  fsftRewardsAttested: boolean,
+  claimable: number,
+  claimMin: number
+) {
+  const fsftBucketEligible = investorRole && fsftBalance > 0 && fsftRewardsAttested;
+  const canClaimNow = claimable >= claimMin;
+  const nextSteps: string[] = [];
+
+  if (!investorRole) {
+    nextSteps.push("Complete KYC to unlock FSP rewards.");
+  }
+  if (investorRole && !depositBucketEligible) {
+    nextSteps.push("Add EURs in Invest to join the deposit reward bucket.");
+  }
+  if (investorRole && fsftBalance <= 0) {
+    nextSteps.push("Hold FSFT to join the FSFT reward bucket.");
+  } else if (investorRole && fsftBalance > 0 && !fsftRewardsAttested) {
+    nextSteps.push("Enable FSFT rewards in Portfolio.");
+  }
+  if (investorRole) {
+    nextSteps.push("Vote on active proposals this month to earn the governance reward share.");
+  }
+  if (!canClaimNow) {
+    nextSteps.push(`Claims open when you have at least ${claimMin} FSP.`);
+  }
+
+  return {
+    investorRole,
+    depositBucketEligible,
+    fsftBucketEligible,
+    governanceBucketHint: investorRole
+      ? "Governance rewards are based on participation each epoch. Keep voting in active proposals."
+      : "Complete KYC first to unlock governance rewards.",
+    fsftRewardsAttested,
+    canClaimNow,
+    nextSteps,
+  };
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const address = searchParams.get("address") ?? "";
@@ -84,6 +137,30 @@ export async function GET(request: NextRequest) {
     const rewardStart = Date.parse(process.env.PROTOCOL_REWARDS_START ?? "2026-01-01T00:00:00.000Z");
     const epochMs = 30 * 24 * 60 * 60 * 1000;
     const nextEpochAt = rewardStart + (currentEpoch + 1) * epochMs;
+    const origin = new URL(request.url).origin;
+
+    const [portfolio, governance] = await Promise.all([
+      fetchJsonSafe(
+        `${origin}/api/portfolio?address=${encodeURIComponent(address)}&accountIndex=${accountIndex}`
+      ),
+      fetchJsonSafe(
+        `${origin}/api/governance/eligibility?address=${encodeURIComponent(address)}&accountIndex=${accountIndex}`
+      ),
+    ]);
+
+    const depositBucketEligible = Number(portfolio?.depositedAmount ?? 0) > 0;
+    const fsftBalance = Number(portfolio?.balance ?? 0);
+    const portfolioGovernance =
+      (portfolio?.governanceEligibility as { investorRole?: boolean } | undefined)?.investorRole ?? false;
+    const investorRole = Boolean(governance?.investorRole ?? portfolioGovernance ?? false);
+    const eligibility = buildEligibility(
+      investorRole,
+      depositBucketEligible,
+      fsftBalance,
+      fsftRewardsAttested,
+      claimable,
+      claimMin
+    );
 
     return NextResponse.json({
       token: {
@@ -109,6 +186,7 @@ export async function GET(request: NextRequest) {
       totalUserClaimed,
       balance,
       fsftRewardsAttested,
+      eligibility,
       source: "live",
       nextEpochAt,
     });

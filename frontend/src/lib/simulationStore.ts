@@ -14,6 +14,8 @@ export const SIM_ACCOUNTS = [
   { index: 0, alias: "test0 (admin)", address: "0x089323ce9a610e9f013b661ce80dde444b554e9f6ed9f5167adb234668f0af72", isAdmin: true },
   { index: 1, alias: "test1",         address: "0x1000000000000000000000000000000000000000000000000000000000000001", isAdmin: false },
   { index: 2, alias: "test2",         address: "0x1000000000000000000000000000000000000000000000000000000000000002", isAdmin: false },
+  { index: 3, alias: "test3",         address: "0x1000000000000000000000000000000000000000000000000000000000000003", isAdmin: false },
+  { index: 4, alias: "test4",         address: "0x1000000000000000000000000000000000000000000000000000000000000004", isAdmin: false },
 ];
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -160,6 +162,16 @@ interface SimRewardsState {
   voteParticipantsByEpoch: Record<number, Record<string, true>>;
 }
 
+interface SimRewardsEligibility {
+  investorRole: boolean;
+  depositBucketEligible: boolean;
+  fsftBucketEligible: boolean;
+  governanceBucketHint: string;
+  fsftRewardsAttested: boolean;
+  canClaimNow: boolean;
+  nextSteps: string[];
+}
+
 interface SimState {
   fund: SimFundState;
   accounts: Record<string, SimAccountState>;
@@ -261,9 +273,11 @@ function recalcInvestorCount(state: SimState): void {
 
 function createInitialState(): SimState {
   const accounts: Record<string, SimAccountState> = {};
+  const now = nowSeconds();
+  const deadline = now + votingWindowSeconds();
 
   accounts[SIM_ACCOUNTS[0].address] = {
-    eurBalance: 100_000,
+    eurBalance: 150_000,
     fsftBalance: 0,
     protocolTokenBalance: 0,
     kycVerified: true,
@@ -275,19 +289,43 @@ function createInitialState(): SimState {
     fsftRewardsAttested: false,
   };
   accounts[SIM_ACCOUNTS[1].address] = {
-    eurBalance: 50_000,
+    eurBalance: 42_000,
+    fsftBalance: 1_800,
+    protocolTokenBalance: 1_200,
+    kycVerified: true,
+    investorRole: true,
+    depositedAmount: 120_000,
+    lockedEur: 0,
+    lockedFsft: 0,
+    fsftVotingAttested: true,
+    fsftRewardsAttested: true,
+  };
+  accounts[SIM_ACCOUNTS[2].address] = {
+    eurBalance: 35_000,
+    fsftBalance: 1_300,
+    protocolTokenBalance: 300,
+    kycVerified: true,
+    investorRole: true,
+    depositedAmount: 80_000,
+    lockedEur: 0,
+    lockedFsft: 350,
+    fsftVotingAttested: true,
+    fsftRewardsAttested: false,
+  };
+  accounts[SIM_ACCOUNTS[3].address] = {
+    eurBalance: 25_000,
     fsftBalance: 0,
     protocolTokenBalance: 0,
-    kycVerified: false,
-    investorRole: false,
+    kycVerified: true,
+    investorRole: true,
     depositedAmount: 0,
-    lockedEur: 0,
+    lockedEur: 505,
     lockedFsft: 0,
     fsftVotingAttested: false,
     fsftRewardsAttested: false,
   };
-  accounts[SIM_ACCOUNTS[2].address] = {
-    eurBalance: 50_000,
+  accounts[SIM_ACCOUNTS[4].address] = {
+    eurBalance: 15_000,
     fsftBalance: 0,
     protocolTokenBalance: 0,
     kycVerified: false,
@@ -301,33 +339,144 @@ function createInitialState(): SimState {
 
   return {
     fund: {
-      totalDeposits: 500_000,
-      totalInDefi: 150_000,
-      totalAllocated: 0,
-      fsftTotalSupply: 0,
-      lastAssetSalePrice: 0,
-      lastFsftMinted: 0,
+      totalDeposits: 700_000,
+      totalInDefi: 210_000,
+      totalAllocated: 30_000,
+      fsftTotalSupply: 3_100,
+      lastAssetSalePrice: 240_000,
+      lastFsftMinted: 1_200,
       tokenPriceBps: 10_000,
       isPaused: false,
-      investorCount: 1,
-      totalYield: 0,
+      investorCount: 3,
+      totalYield: 15_000,
       parkedAllocationBps: 3000,
       parkedMinBps: 2000,
       parkedMaxBps: 5000,
     },
     accounts,
-    proposals: [],
-    nextProposalId: 0,
+    proposals: [
+      {
+        id: 0,
+        title: "Buy 6-unit building in Utrecht West",
+        description: "Acquire a partially renovated 6-unit building with strong rental demand.",
+        descHash: "0x757472656368745f776573745f6275696c64696e670000000000000000000000",
+        amount: 210_000,
+        yesVotes: 1,
+        noVotes: 0,
+        status: 0,
+        deadline,
+        createdAt: now - 60,
+        proposer: SIM_ACCOUNTS[0].address,
+        votedBy: [SIM_ACCOUNTS[1].address],
+        quorumRequired: quorumVotes(),
+        distributionOpened: false,
+        distributionAmount: 0,
+        distributionSnapshotDeposits: 0,
+        distributionClaimed: 0,
+        claimedBy: [],
+      },
+      {
+        id: 1,
+        title: "Refurbish social housing units in Rotterdam",
+        description: "Allocate budget to improve insulation and lower utility costs for tenants.",
+        descHash: "0x726f7474657264616d5f72656675726269736800000000000000000000000000",
+        amount: 95_000,
+        yesVotes: 1,
+        noVotes: 1,
+        status: 0,
+        deadline,
+        createdAt: now - 45,
+        proposer: SIM_ACCOUNTS[1].address,
+        votedBy: [SIM_ACCOUNTS[1].address, SIM_ACCOUNTS[2].address],
+        quorumRequired: quorumVotes(),
+        distributionOpened: false,
+        distributionAmount: 0,
+        distributionSnapshotDeposits: 0,
+        distributionClaimed: 0,
+        claimedBy: [],
+      },
+      {
+        id: 2,
+        title: "Reserve capital for two Hague family homes",
+        description: "Prepare for a dual purchase pending final legal checks and tenant transfer.",
+        descHash: "0x68616775655f66616d696c795f686f6d65730000000000000000000000000000",
+        amount: 175_000,
+        yesVotes: 0,
+        noVotes: 1,
+        status: 0,
+        deadline,
+        createdAt: now - 30,
+        proposer: SIM_ACCOUNTS[2].address,
+        votedBy: [SIM_ACCOUNTS[3].address],
+        quorumRequired: quorumVotes(),
+        distributionOpened: false,
+        distributionAmount: 0,
+        distributionSnapshotDeposits: 0,
+        distributionClaimed: 0,
+        claimedBy: [],
+      },
+    ],
+    nextProposalId: 3,
     dex: {
-      nextOrderId: 1,
-      nextTradeId: 1,
-      orders: [],
-      trades: [],
+      nextOrderId: 3,
+      nextTradeId: 2,
+      orders: [
+        {
+          id: 2,
+          side: "sell",
+          owner: SIM_ACCOUNTS[2].address,
+          amount: 350,
+          remaining: 350,
+          priceEur: 1.03,
+          status: "open",
+          createdAt: now - 180,
+          updatedAt: now - 180,
+          expiresAt: now + dexOrderTtlSeconds(),
+          reservedEurRemaining: 0,
+          reservedFsftRemaining: 350,
+        },
+        {
+          id: 1,
+          side: "buy",
+          owner: SIM_ACCOUNTS[3].address,
+          amount: 500,
+          remaining: 500,
+          priceEur: 1.01,
+          status: "open",
+          createdAt: now - 210,
+          updatedAt: now - 210,
+          expiresAt: now + dexOrderTtlSeconds(),
+          reservedEurRemaining: 505,
+          reservedFsftRemaining: 0,
+        },
+      ],
+      trades: [
+        {
+          id: 1,
+          buyOrderId: 101,
+          sellOrderId: 102,
+          buyer: SIM_ACCOUNTS[1].address,
+          seller: SIM_ACCOUNTS[2].address,
+          amount: 120,
+          priceEur: 1.02,
+          executedAt: now - 120,
+        },
+      ],
     },
     rewards: {
-      totalClaimed: 0,
-      lastClaimedEpochByAddress: {},
-      voteParticipantsByEpoch: {},
+      totalClaimed: 15_000,
+      lastClaimedEpochByAddress: {
+        [SIM_ACCOUNTS[1].address]: 0,
+      },
+      voteParticipantsByEpoch: {
+        0: {
+          [SIM_ACCOUNTS[1].address]: true,
+          [SIM_ACCOUNTS[2].address]: true,
+        },
+        1: {
+          [SIM_ACCOUNTS[1].address]: true,
+        },
+      },
     },
   };
 }
@@ -343,11 +492,11 @@ function getOrCreateAccount(address: string): SimAccountState {
   const s = getState();
   if (!s.accounts[address]) {
     s.accounts[address] = {
-      eurBalance: 50_000,
+      eurBalance: 25_000,
       fsftBalance: 0,
       protocolTokenBalance: 0,
-      kycVerified: false,
-      investorRole: false,
+      kycVerified: true,
+      investorRole: true,
       depositedAmount: 0,
       lockedEur: 0,
       lockedFsft: 0,
@@ -392,7 +541,7 @@ export function simGetVotingEligibility(address: string): SimVotingEligibility {
     hasFsftExposure,
     hasFsftVotingAttestation: acct.fsftVotingAttested,
     canVote: false,
-    reason: "Voting requires a fund position: deposit ticket or FSFT exposure.",
+    reason: "Voting requires a fund position: a deposit or FSFT exposure.",
   };
 }
 
@@ -554,7 +703,7 @@ export function simSetKYCVerified(address: string): void {
   acct.kycVerified = true;
   acct.investorRole = true;
   if (acct.eurBalance === 0 && acct.depositedAmount === 0) {
-    acct.eurBalance = 50_000;
+    acct.eurBalance = 25_000;
   }
 }
 
@@ -843,7 +992,7 @@ export function simPlaceDexOrder(
   if (!inPriceBand(priceEur, min, max)) {
     return {
       success: false,
-      error: `Price outside allowed NAV band. Allowed range: €${min.toFixed(4)} - €${max.toFixed(4)}`,
+      error: `Price outside the allowed estimated share price band. Allowed range: €${min.toFixed(4)} - €${max.toFixed(4)}`,
     };
   }
 
@@ -1005,12 +1154,61 @@ function computeRewardsForAddress(address: string): {
   return { claimable, nextClaimableEpoch: start, uptoEpoch };
 }
 
+function buildRewardsEligibility(
+  state: SimState,
+  address: string,
+  account: SimAccountState,
+  claimable: number
+): SimRewardsEligibility {
+  const investorRole = account.investorRole;
+  const depositBucketEligible = investorRole && account.depositedAmount > 0;
+  const fsftRewardsAttested = account.fsftRewardsAttested;
+  const fsftBucketEligible = investorRole && account.fsftBalance > 0 && fsftRewardsAttested;
+
+  const hasGovernanceParticipation = Object.values(state.rewards.voteParticipantsByEpoch).some(
+    (bucket) => Boolean(bucket[address])
+  );
+  const governanceBucketHint = hasGovernanceParticipation
+    ? "You have governance activity on record. Keep voting to stay in this reward bucket."
+    : "Vote on an active proposal to unlock the governance reward bucket.";
+
+  const nextSteps: string[] = [];
+  if (!investorRole) {
+    nextSteps.push("Complete KYC to unlock FSP rewards.");
+  }
+  if (investorRole && !depositBucketEligible) {
+    nextSteps.push("Add EURs in Invest to join the deposit reward bucket.");
+  }
+  if (investorRole && account.fsftBalance <= 0) {
+    nextSteps.push("Hold FSFT to join the FSFT reward bucket.");
+  } else if (investorRole && account.fsftBalance > 0 && !fsftRewardsAttested) {
+    nextSteps.push("Enable FSFT rewards in Portfolio.");
+  }
+  if (investorRole && !hasGovernanceParticipation) {
+    nextSteps.push("Vote in Proposals to start earning governance rewards.");
+  }
+  if (claimable < 1) {
+    nextSteps.push("Claims open once your amount reaches at least 1 FSP.");
+  }
+
+  return {
+    investorRole,
+    depositBucketEligible,
+    fsftBucketEligible,
+    governanceBucketHint,
+    fsftRewardsAttested,
+    canClaimNow: claimable >= 1,
+    nextSteps,
+  };
+}
+
 export function simGetRewardsStatus(address: string) {
   const state = getState();
   const acct = getOrCreateAccount(address);
   const current = currentRewardEpoch();
   const emittedToDate = REWARD_EMISSION_SCHEDULE.slice(0, Math.min(current, TOTAL_REWARD_EPOCHS)).reduce((a, b) => a + b, 0);
   const pending = computeRewardsForAddress(address);
+  const eligibility = buildRewardsEligibility(state, address, acct, pending.claimable);
 
   return {
     token: {
@@ -1035,6 +1233,7 @@ export function simGetRewardsStatus(address: string) {
     totalClaimed: state.rewards.totalClaimed,
     balance: acct.protocolTokenBalance,
     fsftRewardsAttested: acct.fsftRewardsAttested,
+    eligibility,
     source: "simulation" as const,
     nextEpochAt: rewardEpochStartMs(Math.min(current + 1, TOTAL_REWARD_EPOCHS)),
   };

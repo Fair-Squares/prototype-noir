@@ -100,7 +100,7 @@ export async function GET(request: NextRequest) {
       ? "Investor role required. Complete KYC first."
       : canVote
       ? "Eligible to vote."
-      : "Voting requires fund exposure: deposit ticket, FSFT holding, or private-holder proof.";
+      : "Voting requires an active position: a deposit or FSFT holdings.";
 
     return NextResponse.json({
       verified: Boolean(verified),

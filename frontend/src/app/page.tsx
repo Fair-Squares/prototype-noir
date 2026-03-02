@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import FundStats from "@/components/FundStats";
+import SimulationModeBadge from "@/components/SimulationModeBadge";
 import { fetchFundStats, type FundStats as FundStatsType } from "@/lib/contracts";
 
 export default function Dashboard() {
@@ -19,6 +20,9 @@ export default function Dashboard() {
       <section className="rounded-3xl border border-border bg-card overflow-hidden">
         <div className="grid lg:grid-cols-[1.15fr_0.85fr]">
           <div className="p-10 md:p-14 lg:p-16">
+            <div className="mb-4">
+              <SimulationModeBadge />
+            </div>
             <h1 className="text-4xl md:text-5xl xl:text-6xl leading-[1.02] mb-5 max-w-2xl">
               Affordable housing,<br />funded by the community
             </h1>
@@ -44,7 +48,7 @@ export default function Dashboard() {
               <div className="rounded-2xl bg-white/90 border border-border p-5">
                 <p className="text-[20px] font-semibold mb-2">Powered by EURs &amp; FSFT</p>
                 <p className="text-[14px] text-text-2 mt-0.5 leading-relaxed">
-                  EUR deposits are sent to the housing fund and tracked privately as deposit tickets. FSFT is minted only after governance-approved asset execution.
+                  EUR deposits go into the housing fund. FSFT is distributed after proposals are approved and executed.
                 </p>
                 <a
                   href="/invest"
@@ -103,12 +107,12 @@ export default function Dashboard() {
             {
               step: "2",
               title: "Idle EUR is parked by the protocol",
-              desc: "While no acquisition is active, the fund can park a managed allocation in DeFi lending to avoid idle capital.",
+              desc: "While no acquisition is active, part of unused EUR can be placed in lending so funds do not sit idle.",
             },
             {
               step: "3",
               title: "The community picks properties to buy",
-              desc: "Verified investors with active fund exposure propose and vote on acquisitions. Quorum and outcomes are enforced on-chain.",
+              desc: "Verified investors with an active position can create proposals and vote on acquisitions.",
             },
             {
               step: "4",

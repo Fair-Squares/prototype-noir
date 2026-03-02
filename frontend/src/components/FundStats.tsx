@@ -23,22 +23,22 @@ const STAT_CARDS = [
   {
     key: "totalDeposits" as const,
     label: "Total fund size",
-    tooltip: "All investor EUR deposits currently held by the fund.",
+    tooltip: "All EURs currently in the fund.",
   },
   {
     key: "totalInDefi" as const,
-    label: "Earning returns",
-    tooltip: "Capital deployed to yield strategies while waiting for asset acquisition.",
+    label: "Earning now",
+    tooltip: "EUR currently earning while no purchase is active.",
   },
   {
     key: "totalAllocated" as const,
     label: "Reserved for housing",
-    tooltip: "Capital reserved for approved property purchases.",
+    tooltip: "EUR set aside for approved purchases.",
   },
   {
     key: "available" as const,
     label: "Ready to deploy",
-    tooltip: "Unused capital that governance can allocate next.",
+    tooltip: "Unused EUR that can be used next.",
   },
 ];
 
@@ -77,14 +77,14 @@ export default function FundStats(props: FundStatsProps) {
               <span><strong className="text-fs-teal">{formatEUR(props.totalYield)}</strong> {eurs} yield paid</span>
               <span className="inline-flex items-center gap-1.5">
                 <strong className="text-text-1">~3%</strong> target annual return
-                <InfoTooltip text="Illustrative target only for demo flow; not guaranteed investment advice." />
+                <InfoTooltip text="Demo target only. Not guaranteed." />
               </span>
             </div>
             <div>
               <div className="flex items-center justify-between mb-1 text-[12px] text-text-3">
                 <span className="inline-flex items-center gap-1.5">
                   Capital utilization
-                  <InfoTooltip text="Share of total fund currently deployed or reserved for assets." />
+                  <InfoTooltip text="How much of the fund is already in use or reserved." />
                 </span>
                 <span>{utilization}%</span>
               </div>
@@ -95,18 +95,17 @@ export default function FundStats(props: FundStatsProps) {
           </div>
 
           <div className="rounded-xl bg-fs-mint text-fs-teal-dark px-3 py-2.5">
-            <p className="text-[11px] uppercase tracking-wide font-semibold">NAV / {fsft}</p>
+            <p className="text-[11px] uppercase tracking-wide font-semibold">Estimated share price / {fsft}</p>
             <p className="text-base font-semibold mt-0.5">€{navPerFsftEur.toFixed(4)}</p>
             <p className="text-[11px] mt-1">
-              NAV: {formatEUR(navEur)} {issueRefEur !== null ? `• Issue ref: €${issueRefEur.toFixed(4)}` : ""}
+              Fund value: {formatEUR(navEur)} {issueRefEur !== null ? `• Starting ref: €${issueRefEur.toFixed(4)}` : ""}
             </p>
           </div>
         </div>
       </div>
 
       <div className="rounded-xl border border-border bg-bg px-4 py-3 text-xs text-text-2">
-        The protocol may park part of idle EUR liquidity in DeFi lending venues while no acquisition is active.
-        This is a treasury-level allocation decision, not an individual user action.
+        When no purchase is active, the fund may place part of unused EUR in lending to avoid idle cash.
       </div>
 
       {props.isPaused && (

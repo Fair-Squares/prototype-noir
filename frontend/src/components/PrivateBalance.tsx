@@ -62,17 +62,17 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
             </div>
             <p className="text-3xl leading-none tabular-nums">{formatEUR(eurBalance)}</p>
             <p className="text-xs text-text-3 mt-2">Available to deposit</p>
-            <p className="text-xs text-text-3 mt-3 pt-3 border-t border-border">Private note on Aztec</p>
+            <p className="text-xs text-text-3 mt-3 pt-3 border-t border-border">Wallet balance</p>
           </div>
 
           <div className="p-6">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs text-text-3 font-medium uppercase tracking-wide">Deposit Ticket</span>
+              <span className="text-xs text-text-3 font-medium uppercase tracking-wide">Deposit position</span>
               <span className="px-2 py-0.5 rounded-full bg-fs-mint text-fs-teal-dark text-[10px] font-bold">Fund</span>
             </div>
             <p className="text-3xl leading-none tabular-nums">{formatEUR(depositedAmount)}</p>
-            <p className="text-xs text-text-3 mt-2">Private ticket balance in housing fund</p>
-            <p className="text-xs text-text-3 mt-3 pt-3 border-t border-border">Private note on Aztec</p>
+            <p className="text-xs text-text-3 mt-2">Your deposited EURs in the fund</p>
+            <p className="text-xs text-text-3 mt-3 pt-3 border-t border-border">Fund position</p>
           </div>
 
           <div className="p-6 bg-fs-mint/45">
@@ -81,8 +81,8 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
               <span className="px-2 py-0.5 rounded-full bg-fs-teal/10 text-fs-teal-dark text-[10px] font-bold">FSFT</span>
             </div>
             <p className="text-3xl leading-none tabular-nums text-fs-teal-dark">{formatEUR(fsftMarketValue)}</p>
-            <p className="text-xs text-fs-teal-dark/70 mt-2">{balance.toLocaleString()} FSFT held • valued at NAV per FSFT</p>
-            <p className="text-xs text-fs-teal-dark/70 mt-3 pt-3 border-t border-fs-teal/15">Private balance on Aztec</p>
+            <p className="text-xs text-fs-teal-dark/70 mt-2">{balance.toLocaleString()} FSFT held • valued at estimated share price</p>
+            <p className="text-xs text-fs-teal-dark/70 mt-3 pt-3 border-t border-fs-teal/15">FSFT holdings</p>
           </div>
         </div>
       </section>
@@ -111,7 +111,7 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
             <p className="text-xl leading-none">{sharePercent.toFixed(2)}%</p>
           </div>
           <div>
-            <p className="text-xs text-text-3 font-medium uppercase tracking-wide mb-1">NAV per FSFT</p>
+            <p className="text-xs text-text-3 font-medium uppercase tracking-wide mb-1">Estimated share price</p>
             <p className="text-xl leading-none text-fs-teal">€{navPerFsftEur.toFixed(4)}</p>
           </div>
         </div>
@@ -138,7 +138,7 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
           {" • "}claimable now: {rewardsClaimable.toLocaleString()} {protocolTokenSymbol}
         </div>
         <div className="mt-4 rounded-lg border border-border bg-bg px-3 py-2 text-xs text-text-2">
-          FSFT is a fund share token. Issue price may start near €1 at acquisition settlement; ongoing value is indicative NAV per FSFT (current NAV: {formatEUR(navEur)}).
+          FSFT tracks your share of the fund. Current fund value: {formatEUR(navEur)}.
         </div>
 
         {balance === 0 && (

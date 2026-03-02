@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import InvestForm from "@/components/InvestForm";
 import FundStats from "@/components/FundStats";
 import InfoTooltip from "@/components/InfoTooltip";
+import SimulationModeBadge from "@/components/SimulationModeBadge";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   fetchFundStats,
@@ -62,9 +63,12 @@ export default function InvestPage() {
   return (
     <div className="space-y-8">
       <div className="rounded-2xl bg-card border border-border p-6">
+        <div className="mb-2">
+          <SimulationModeBadge />
+        </div>
         <h1 className="text-2xl mb-1">Invest</h1>
         <p className="text-text-2 text-sm">
-          Deposit EUR into the housing fund. Your deposit is tracked privately as a ticket on Aztec.
+          Add EURs to the fund. You receive FSFT later when approved purchases are executed.
         </p>
         {kycProfile.isInvestor && (
           <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-fs-mint px-2.5 py-1 text-xs font-semibold text-fs-teal-dark">
@@ -106,33 +110,33 @@ export default function InvestPage() {
           <div className="rounded-2xl bg-card border border-border p-5">
             <div className="flex items-center gap-1.5 mb-3">
               <h3 className="font-semibold text-sm">Token model</h3>
-              <InfoTooltip text="EURs is your spendable stablecoin. FSFT only appears after governance executes an approved acquisition." />
+              <InfoTooltip text="EURs is your cash balance, FSFT is your fund share, and FSP is your reward token." />
             </div>
             <div className="space-y-3">
               {[
                 {
                   symbol: "EURs",
                   color: "bg-blue-100 text-blue-700",
-                  title: "EUR Stablecoin",
-                  summary: "Spendable balance for deposits",
+                  title: "EUR wallet balance",
+                  summary: "Use this to deposit",
                   details:
-                    "Backed 1:1 and stored as a private Aztec note, so your wallet balance is not publicly visible.",
+                    "Your spendable cash balance for this app.",
                 },
                 {
                   symbol: "FSFT",
                   color: "bg-fs-mint text-fs-teal-dark",
-                  title: "Fund Share Token",
-                  summary: "Distributed after executed proposals",
+                  title: "Fund share token",
+                  summary: "Represents your share of the fund",
                   details:
-                    "FSFT is a fund share token. Issue price may start near €1 at settlement, then value follows NAV per FSFT.",
+                    "You receive FSFT after approved proposals are executed.",
                 },
                 {
                   symbol: "FSP",
                   color: "bg-amber-100 text-amber-700",
                   title: "Protocol Token",
-                  summary: "Distributed over 10 years",
+                  summary: "Participation rewards",
                   details:
-                    "Protocol token emissions reward active participation (deposits, FSFT holder attestations, and governance voting).",
+                    "FSP rewards deposits, FSFT participation, and voting activity.",
                 },
               ].map((t) => (
                 <div key={t.symbol} className="flex gap-3">
@@ -151,15 +155,15 @@ export default function InvestPage() {
 
           <div className="rounded-2xl bg-card border border-border p-5">
             <div className="flex items-center gap-1.5 mb-3">
-              <h3 className="font-semibold text-sm">What happens to your EUR deposit?</h3>
-              <InfoTooltip text="This flow explains when your private deposit becomes FSFT after governance decisions." />
+              <h3 className="font-semibold text-sm">What happens after you deposit?</h3>
+              <InfoTooltip text="Simple timeline from deposit to FSFT distribution." />
             </div>
             <div className="space-y-2 text-xs text-text-2">
               {[
-                ["1", "Sent to the housing fund", "Your amount is recorded privately as a deposit ticket."],
-                ["2", "Idle capital is parked by protocol", "A managed allocation can be lent out in DeFi (Aave-like) while waiting for acquisitions."],
-                ["3", "Governance decides on assets", "FSFT is not minted at deposit time."],
-                ["4", "FSFT minting happens later", "Only after a proposal passes and the asset purchase is executed."],
+                ["1", "Deposit is recorded", "Your EURs is added to your fund position."],
+                ["2", "Some idle EUR may earn", "Unused EUR can be parked in lending while waiting."],
+                ["3", "Investors vote", "Proposals decide which properties to buy."],
+                ["4", "FSFT is distributed", "Once approved and executed, FSFT is distributed."],
               ].map(([step, label, sub]) => (
                 <div key={label} className="flex items-start gap-2">
                   <span className="font-bold text-fs-teal shrink-0 w-8">{step}</span>

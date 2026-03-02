@@ -34,7 +34,7 @@ export default function InvestForm({
     try {
       await onDeposit(amount);
       setSuccess(
-        `Deposited ${formatEURDecimals(Number(amount))}. Your private deposit ticket was updated. FSFT is minted only after governance-approved asset acquisition.`
+        `Added ${formatEURDecimals(Number(amount))} to your fund position. FSFT is minted after a proposal is approved and executed.`
       );
       setAmount("");
     } catch (e: unknown) {
@@ -54,7 +54,7 @@ export default function InvestForm({
         </div>
         <p className="font-semibold mb-1">Connect your wallet to invest</p>
         <p className="text-sm text-text-3">
-          Deposits are tracked privately as tickets. FSFT is minted only after governance-approved asset investments.
+          Add EURs to the fund first. FSFT is distributed later after approved purchases.
         </p>
       </div>
     );
@@ -70,7 +70,7 @@ export default function InvestForm({
         </div>
         <p className="font-semibold mb-2">Investor role required</p>
         <p className="text-sm text-text-3 mb-4">
-          Complete KYC to unlock the investor role before making deposits.
+          Complete KYC before you can deposit.
         </p>
         <a href="/kyc" className="inline-flex items-center gap-1.5 text-fs-teal hover:text-fs-teal-dark font-medium text-sm">
           Verify with zkPassport
@@ -89,17 +89,17 @@ export default function InvestForm({
         <div className="rounded-lg bg-bg p-3 border border-border">
           <p className="text-[11px] text-text-3 font-medium uppercase tracking-wide mb-1">Wallet balance</p>
           <p className="text-lg font-bold">{formatEURDecimals(eurBalance)}</p>
-          <p className="text-xs text-text-3 mt-0.5">EURs stablecoin</p>
+          <p className="text-xs text-text-3 mt-0.5">EURs in your wallet</p>
         </div>
         <div className="rounded-lg bg-fs-mint p-3 border border-transparent">
           <p className="text-[11px] text-fs-teal-dark font-medium uppercase tracking-wide mb-1 inline-flex items-center gap-1.5">
-            Deposit model
+            Deposit flow
             <InfoTooltip
-              text="Deposits are recorded as private tickets first. FSFT is minted only after governance executes an approved acquisition."
+              text="Your deposit is recorded first. FSFT is distributed after approved purchases."
             />
           </p>
-          <p className="text-sm font-bold text-fs-teal-dark">Private deposit tickets</p>
-          <p className="text-xs text-fs-teal-dark/60 mt-0.5">FSFT is not minted on deposit</p>
+          <p className="text-sm font-bold text-fs-teal-dark">Deposit ticket created</p>
+          <p className="text-xs text-fs-teal-dark/60 mt-0.5">FSFT is not minted at deposit time</p>
         </div>
       </div>
 
@@ -108,7 +108,7 @@ export default function InvestForm({
         <div className="flex items-center justify-between mb-2">
           <div className="inline-flex items-center gap-1.5">
             <label className="text-xs text-text-3 font-medium">EUR amount</label>
-            <InfoTooltip text="Amount to move from your private EURs wallet into the housing fund ticket." />
+            <InfoTooltip text="How much EURs to move into the fund." />
           </div>
           <button
             onClick={() => setAmount(String(maxAmount))}
@@ -147,8 +147,8 @@ export default function InvestForm({
       {/* Exchange rate note */}
       {amount && Number(amount) > 0 && (
         <div className="rounded-lg bg-fs-mint/50 p-3 text-xs text-fs-teal-dark">
-          You are depositing <strong>{formatEURDecimals(Number(amount))}</strong> into the housing fund.
-          Your deposit ticket is kept private on Aztec. FSFT will only be minted after governance approves and executes an asset acquisition.
+          You are adding <strong>{formatEURDecimals(Number(amount))}</strong> to the fund.
+          FSFT will be distributed after a proposal is approved and executed.
         </div>
       )}
 
@@ -164,11 +164,11 @@ export default function InvestForm({
         disabled={loading || !amount || Number(amount) <= 0 || Number(amount) > maxAmount}
         className="w-full py-3 rounded-lg bg-fs-teal hover:bg-fs-teal-dark text-white font-semibold disabled:opacity-40 disabled:cursor-not-allowed text-sm transition-colors"
       >
-        {loading ? "Processing…" : `Deposit ${amount ? formatEURDecimals(Number(amount)) : ""} to Housing Fund`}
+        {loading ? "Processing…" : `Deposit ${amount ? formatEURDecimals(Number(amount)) : ""}`}
       </button>
 
       <p className="text-xs text-text-3 text-center">
-        Deposits are private on Aztec. FSFT is minted only when governance-approved asset purchases are executed.
+        EURs = cash balance, FSFT = fund shares, FSP = reward token.
       </p>
     </div>
   );

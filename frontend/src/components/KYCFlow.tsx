@@ -134,15 +134,15 @@ export default function KYCFlow({ userAddress, isVerified, isInvestor, onVerifie
       <div>
         <h2 className="text-lg font-semibold text-text-1">Identity verification</h2>
         <p className="text-sm text-text-2 mt-1">
-          Verify privately with zkPassport to unlock investor actions.
+          Complete this once to unlock investor actions.
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {[
-          ["1", "Open verification", "Start a zkPassport request linked to your wallet."],
-          ["2", "Prove eligibility", "Your phone generates a zero-knowledge proof."],
-          ["3", "Role activation", "The protocol grants your investor role on success."],
+          ["1", "Start request", "Create a zkPassport request linked to your wallet."],
+          ["2", "Approve on phone", "Confirm in the zkPassport app."],
+          ["3", "Role enabled", "Investor role is granted after verification."],
         ].map(([step, title, desc]) => (
           <div key={step} className="rounded-xl border border-border bg-bg p-4">
             <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-fs-mint text-xs font-bold text-fs-teal-dark">{step}</span>
@@ -159,7 +159,7 @@ export default function KYCFlow({ userAddress, isVerified, isInvestor, onVerifie
             {qrUrl}
           </div>
           <p className="text-xs text-text-3 mt-2">
-            In production, render this as a QR and scan with the zkPassport app.
+            In production this is shown as a QR code for the zkPassport app.
           </p>
         </div>
       )}
@@ -186,11 +186,11 @@ export default function KYCFlow({ userAddress, isVerified, isInvestor, onVerifie
 
       <div className="rounded-xl border border-border bg-bg p-4 text-xs text-text-2 space-y-1">
         <p className="inline-flex items-center gap-1.5">
-          Privacy model
-          <InfoTooltip text="Only proof validity and role state are recorded. Identity document details stay off-chain." />
+          Data handling
+          <InfoTooltip text="Only verification status and role are saved." />
         </p>
         <p>
-          The protocol stores role state only (`verified`, `investor`). Personal passport data is not written on-chain.
+          Only role status (`verified`, `investor`) is stored. Passport details are not stored.
         </p>
         {phase !== "idle" && <p className="text-text-3">Current phase: {phase}</p>}
       </div>

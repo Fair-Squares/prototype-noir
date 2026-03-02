@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import ProposalCard from "@/components/ProposalCard";
+import SimulationModeBadge from "@/components/SimulationModeBadge";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   fetchProposals,
@@ -100,7 +101,7 @@ export default function GovernancePage() {
       if (!result.success) {
         notify("error", result.error ?? "Attestation failed");
       } else {
-        notify("success", "FSFT voting attestation recorded.");
+        notify("success", "FSFT voting access enabled.");
         const next = await fetchGovernanceEligibility(address, accountIndex);
         setEligibility(next);
       }
@@ -178,8 +179,11 @@ export default function GovernancePage() {
     <div className="space-y-8">
       <div className="rounded-2xl bg-card border border-border p-6 flex items-start justify-between">
         <div>
+          <div className="mb-2">
+            <SimulationModeBadge />
+          </div>
           <h1 className="text-2xl font-brand-black mb-1">Proposals</h1>
-          <p className="text-text-2 text-sm">Vote on property acquisitions. Quorum is enforced on-chain, execution is permissionless, and executed proposals open investor claim distributions.</p>
+          <p className="text-text-2 text-sm">Vote on property purchases. Passed proposals can be finalized and executed, then investors can claim FSFT.</p>
         </div>
         {address && isInvestor && (
           <button
@@ -193,12 +197,12 @@ export default function GovernancePage() {
 
       {address && !isInvestor && (
         <div className="rounded-lg border border-border bg-bg p-3 text-sm text-text-2">
-          Investor role not found for this account. You can still review/finalize/execute/claim, but creating and voting require investor status.
+          This account is not an investor yet. You can review proposals, but creating and voting require investor status.
         </div>
       )}
       {address && isInvestor && !canVote && (
         <div className="rounded-lg border border-border bg-bg p-3 text-sm text-text-2 flex flex-wrap items-center justify-between gap-2">
-          <span>{eligibility?.reason ?? "Voting requires fund exposure."}</span>
+          <span>{eligibility?.reason ?? "Voting needs investor status plus an active fund position."}</span>
           <button
             type="button"
             onClick={handleAttestFsft}
@@ -213,12 +217,12 @@ export default function GovernancePage() {
       {/* Create proposal form */}
       {showCreate && (
         <form onSubmit={handleCreate} className="rounded-xl border border-fs-magenta/20 bg-card p-6 space-y-4">
-          <h2 className="font-semibold text-text-1">New Property Proposal</h2>
+          <h2 className="font-semibold text-text-1">New property proposal</h2>
           <div>
             <label className="block text-sm text-text-2 mb-1">Title</label>
             <input
               type="text"
-              placeholder="e.g. Acqusition of 3 flats in Amsterdam Noord"
+              placeholder="e.g. Acquisition of 3 flats in Amsterdam Noord"
               value={form.title}
               onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
               className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text-1 placeholder:text-text-3 focus:outline-none focus:ring-1 focus:ring-fs-magenta"
@@ -283,7 +287,7 @@ export default function GovernancePage() {
         <div className="rounded-xl bg-card p-14 text-center">
           <p className="font-semibold text-text-1 text-lg mb-2">No proposals yet</p>
           <p className="text-sm text-text-3 mb-4">
-            Create a proposal to acquire a property. When it passes and executes, FSFT is distributed pro-rata from on-chain deposit tickets.
+            Create a proposal to acquire a property. After approval and execution, FSFT can be claimed by investors.
           </p>
           {!address && (
             <p className="text-xs text-text-3">Connect your wallet (top right) to create proposals.</p>

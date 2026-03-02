@@ -7,6 +7,10 @@ The format is based on Keep a Changelog.
 ## [Unreleased] - v3 Protocol Expansion
 
 ### Added
+- Added browser-local dev account generation in wallet UI (`dev-1000+`) with persistent `fs_generated_accounts` storage and auto-select on create.
+- Added simulation disclosure components:
+  - Global `SimulationBanner`
+  - Per-page `Simulation` mode badges on Overview/Invest/Trade/Proposals/Portfolio/KYC
 - Added simulation-backed FSFT/EUR DEX APIs:
   - `GET/POST /api/dex/orders`
   - `POST /api/dex/match`
@@ -28,6 +32,16 @@ The format is based on Keep a Changelog.
 - Added parked-capital policy storage/view/setters to `contracts/housing_fund/src/main.nr`.
 
 ### Changed
+- Expanded simulation seeding to a more active default state:
+  - 5 test accounts (`test0..test4`) with mixed investor/KYC profiles
+  - pre-seeded FSFT holdings and rewards flags
+  - 3 active proposals with 5-minute deadlines and initial voting activity
+  - non-empty DEX orderbook + recent trade history
+- Updated unknown/generated simulation account defaults to low-friction onboarding (KYC+investor enabled, 25k EUR preload, zero FSFT/FSP).
+- Extended rewards stats payloads (simulation + live) with `eligibility` breakdown and actionable `nextSteps`.
+- Updated portfolio rewards UX to show bucket-by-bucket FSP eligibility and guided actions.
+- Set local Anvil mining cadence to 1-second blocks by default and aligned governance window default to 300 blocks (~5 minutes).
+- Rewrote major user-facing copy/tooltips into plain language and switched NAV wording to “estimated share price” in the frontend.
 - Expanded `frontend/src/lib/simulationStore.ts` with:
   - Voting eligibility model (investor role + economic fund exposure)
   - FSFT voting/rewards attestations

@@ -4,6 +4,7 @@ import Image from "next/image";
 import "./globals.css";
 import { WalletProvider } from "@/contexts/WalletContext";
 import HeaderWalletButton from "@/components/HeaderWalletButton";
+import SimulationBanner from "@/components/SimulationBanner";
 
 export const metadata: Metadata = {
   title: "Fair Squares - Affordable Housing Fund",
@@ -53,6 +54,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
             </div>
           </header>
+          <SimulationBanner />
 
           <main className="max-w-7xl mx-auto px-6 py-10">{children}</main>
 

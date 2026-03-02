@@ -173,7 +173,7 @@ export default function ProposalCard({
 
       {isExecuted && (
         <div className="mb-4 rounded-lg bg-purple-50 border border-purple-100 px-3 py-2 text-xs text-purple-700 font-medium">
-          Proposal executed. Distribution is permissionless and each investor claims FSFT pro-rata.
+          Proposal executed. Investors can now claim their FSFT share.
         </div>
       )}
 
@@ -212,7 +212,7 @@ export default function ProposalCard({
       {canExecute && (
         <div className="space-y-2">
           <p className="text-xs text-text-3">
-            Proposal passed. Execute to mark it on-chain and open investor claim distribution.
+            Proposal passed. Execute it to open FSFT claims for investors.
           </p>
           <button
             onClick={() => onExecute!(proposal.id, proposal.amount)}
@@ -244,7 +244,7 @@ export default function ProposalCard({
             </button>
           )}
           {!hasClaimed && !canClaim && !!userAddress && (
-            <p className="text-xs text-text-3">No claimable amount for your current deposit ticket.</p>
+            <p className="text-xs text-text-3">No claimable amount for this account right now.</p>
           )}
         </div>
       )}

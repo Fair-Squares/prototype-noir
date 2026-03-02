@@ -5,7 +5,7 @@ import { useWallet } from "@/contexts/WalletContext";
 import { fetchKYCProfile } from "@/lib/contracts";
 
 export default function HeaderWalletButton() {
-  const { status, activeAccount, accounts, connect, disconnect, switchAccount } =
+  const { status, activeAccount, accounts, connect, disconnect, switchAccount, generateDevAccount } =
     useWallet();
   const [showDropdown, setShowDropdown] = useState(false);
   const [isInvestor, setIsInvestor] = useState(false);
@@ -58,7 +58,7 @@ export default function HeaderWalletButton() {
               <div className="absolute right-0 mt-1.5 w-64 rounded-xl bg-white border border-border shadow-lg z-50 overflow-hidden">
                 <div className="px-4 py-2.5 border-b border-border">
                   <p className="text-[12px] text-text-3 font-medium uppercase tracking-wide">
-                    Devnet test accounts
+                    Accounts
                   </p>
                 </div>
                 {accounts.map((acc) => (
@@ -74,11 +74,23 @@ export default function HeaderWalletButton() {
                       <p className="text-[13px] font-semibold text-text-1">
                         {acc.alias}
                         {acc.isAdmin && <span className="ml-1.5 text-[11px] font-bold text-fs-teal bg-fs-mint px-1.5 py-0.5 rounded-full">admin</span>}
+                        {acc.isGenerated && <span className="ml-1.5 text-[11px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full">dev</span>}
                       </p>
                       <p className="text-[12px] text-text-3 font-mono truncate">{acc.address.slice(0, 16)}…{acc.address.slice(-6)}</p>
                     </div>
                   </button>
                 ))}
+                <div className="p-2 border-t border-border">
+                  <button
+                    onClick={() => {
+                      generateDevAccount();
+                      setShowDropdown(false);
+                    }}
+                    className="w-full rounded-lg border border-border px-3 py-2 text-left text-[12px] font-semibold text-text-2 hover:bg-bg"
+                  >
+                    Generate dev account
+                  </button>
+                </div>
               </div>
             </>
           )}
@@ -113,6 +125,9 @@ export default function HeaderWalletButton() {
         {alias}
         {isAdmin && (
           <span className="text-[9px] font-bold text-fs-teal bg-white/60 px-1 py-0.5 rounded">admin</span>
+        )}
+        {activeAccount.isGenerated && (
+          <span className="text-[9px] font-bold text-amber-700 bg-white/70 px-1 py-0.5 rounded">dev</span>
         )}
         {isInvestor && (
           <span className="text-[9px] font-bold text-blue-700 bg-white/70 px-1 py-0.5 rounded">investor</span>
@@ -149,12 +164,30 @@ export default function HeaderWalletButton() {
                     >
                       <span className={`w-1.5 h-1.5 rounded-full ${acc.index === activeAccount.index ? "bg-fs-teal" : "bg-gray-300"}`} />
                       {acc.alias}
+                      {acc.isGenerated && (
+                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-700">dev</span>
+                      )}
                       <span className="ml-auto font-mono opacity-50">…{acc.address.slice(-6)}</span>
                     </button>
                   ))}
                 </div>
               </div>
             )}
+
+            <div className="px-4 py-2 border-b border-border">
+              <button
+                onClick={() => {
+                  generateDevAccount();
+                  setShowDropdown(false);
+                }}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-text-2 hover:bg-bg hover:text-text-1 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                Generate dev account
+              </button>
+            </div>
 
             {/* Disconnect */}
             <div className="px-4 py-2">

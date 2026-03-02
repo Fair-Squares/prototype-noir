@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import KYCFlow from "@/components/KYCFlow";
+import SimulationModeBadge from "@/components/SimulationModeBadge";
 import { useWallet } from "@/contexts/WalletContext";
 import { fetchKYCProfile, type KYCProfile } from "@/lib/contracts";
 
@@ -24,9 +25,12 @@ export default function KYCPage() {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div className="rounded-2xl border border-border bg-card p-6">
+        <div className="mb-2">
+          <SimulationModeBadge />
+        </div>
         <h1 className="text-2xl mb-1">KYC Verification</h1>
         <p className="text-text-2 text-sm">
-          Verify privately with zkPassport. Successful verification grants investor role access.
+          Verify your identity with zkPassport to unlock investor features.
         </p>
       </div>
 

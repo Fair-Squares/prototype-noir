@@ -21,6 +21,7 @@ interface WalletContextValue extends WalletState {
   connect: (accountIndex?: number) => Promise<void>;
   disconnect: () => Promise<void>;
   switchAccount: (index: number) => void;
+  generateDevAccount: () => void;
   isConnected: boolean;   // true when activeAccount is set
   isConnecting: boolean;  // true while loading accounts
 }

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useWallet } from "@/contexts/WalletContext";
 import InfoTooltip from "@/components/InfoTooltip";
+import SimulationModeBadge from "@/components/SimulationModeBadge";
 import {
   cancelDexOrder,
   fetchDexOrderbook,
@@ -108,9 +109,12 @@ export default function DexPage() {
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-border bg-card p-6">
+        <div className="mb-2">
+          <SimulationModeBadge />
+        </div>
         <h1 className="text-2xl mb-1">FSFT / EUR DEX</h1>
         <p className="text-sm text-text-2">
-          Investor-only secondary trading with guardrails. Prices stay within NAV ±2% to avoid speculation.
+          Investor-only trading. Orders must stay within an estimated share price band (±2%).
         </p>
       </section>
 
@@ -136,7 +140,7 @@ export default function DexPage() {
         <section className="rounded-2xl border border-border bg-card p-5 space-y-4">
           <div className="flex items-center gap-2">
             <h2 className="font-semibold">Place order</h2>
-            <InfoTooltip text="Orders are restricted to NAV ±2%. This keeps price discovery tied to fund value, not speculation." />
+            <InfoTooltip text="Orders outside the ±2% guardrail are rejected." />
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -187,7 +191,7 @@ export default function DexPage() {
 
           {orderbook && (
             <div className="rounded-lg border border-border bg-bg p-3 text-xs text-text-2">
-              <p>Reference NAV price: <strong>€{orderbook.priceReferenceEur.toFixed(4)}</strong></p>
+              <p>Estimated share price: <strong>€{orderbook.priceReferenceEur.toFixed(4)}</strong></p>
               <p>
                 Allowed band: €{orderbook.priceBandMinEur.toFixed(4)} - €{orderbook.priceBandMaxEur.toFixed(4)}
               </p>

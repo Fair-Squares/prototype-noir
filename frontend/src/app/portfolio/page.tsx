@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import PrivateBalance from "@/components/PrivateBalance";
+import SimulationModeBadge from "@/components/SimulationModeBadge";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   attestFsftForRewards,
@@ -80,7 +81,7 @@ export default function PortfolioPage() {
       setTimeout(() => setRewardMsg(null), 5000);
       return;
     }
-    setRewardMsg(`Claimed ${(result.claimed ?? 0).toLocaleString()} ${rewards?.token.symbol ?? "tokens"} ✓`);
+    setRewardMsg(`Claimed ${(result.claimed ?? 0).toLocaleString()} ${rewards?.token.symbol ?? "FSP"} ✓`);
     setTimeout(() => setRewardMsg(null), 5000);
     await loadPortfolio(address);
     fetchRewardsStats(address, accountIndex).then(setRewards).catch(() => undefined);
@@ -94,7 +95,7 @@ export default function PortfolioPage() {
       setTimeout(() => setRewardMsg(null), 5000);
       return;
     }
-    setRewardMsg("FSFT rewards attestation recorded ✓");
+    setRewardMsg("FSFT rewards enabled ✓");
     setTimeout(() => setRewardMsg(null), 5000);
     fetchRewardsStats(address, accountIndex).then(setRewards).catch(() => undefined);
   };
@@ -102,8 +103,11 @@ export default function PortfolioPage() {
   return (
     <div className="space-y-8">
       <div className="rounded-2xl bg-card border border-border p-6">
+        <div className="mb-2">
+          <SimulationModeBadge />
+        </div>
         <h1 className="text-2xl mb-1">My Account</h1>
-        <p className="text-text-2 text-sm">Your EUR wallet, on-chain deposit ticket, and FSFT distribution/valuation state.</p>
+        <p className="text-text-2 text-sm">Track your EURs wallet, FSFT shares, and FSP rewards in one place.</p>
         {address && (
           <div className="mt-3 flex flex-wrap gap-2">
             {activeAccount?.isAdmin && (
@@ -135,7 +139,7 @@ export default function PortfolioPage() {
               <h2 className="font-semibold text-text-1 mb-4">Transactions</h2>
               <div className="text-sm text-text-3 text-center py-6">
                 <p>Your deposit and withdrawal history will appear here.</p>
-                <p className="mt-1 text-xs">All transactions are provably private — amounts visible only to you.</p>
+                <p className="mt-1 text-xs">This list updates as you invest, withdraw, and claim.</p>
               </div>
             </div>
           </div>
@@ -143,7 +147,7 @@ export default function PortfolioPage() {
           <aside className="rounded-xl bg-card p-5 border border-border xl:sticky xl:top-24 space-y-4">
             <div>
               <p className="text-xs text-text-3 uppercase tracking-wide font-medium mb-1">Quick actions</p>
-              <p className="text-sm text-text-2">Top up demo EURs or continue to investment and governance flows.</p>
+              <p className="text-sm text-text-2">Top up demo EURs and continue with investing, trading, and voting.</p>
             </div>
 
             {isDevOrSimulation ? (
@@ -186,9 +190,9 @@ export default function PortfolioPage() {
             </a>
 
             <div className="rounded-lg bg-bg border border-border p-4 space-y-3">
-              <p className="text-sm font-semibold text-text-1">Protocol token distribution</p>
+              <p className="text-sm font-semibold text-text-1">FSP rewards</p>
               <p className="text-xs text-text-3">
-                8M tokens are emitted over 10 years (40% deposit, 40% FSFT holder bucket, 20% governance participation).
+                FSP is distributed monthly: 40% deposits, 40% FSFT participation, 20% voting participation.
               </p>
               <div className="text-xs text-text-2 space-y-1">
                 <p>
@@ -198,20 +202,56 @@ export default function PortfolioPage() {
                   Claimable: <strong>{(rewards?.claimable ?? 0).toLocaleString()} {rewards?.token.symbol ?? "FSP"}</strong>
                 </p>
               </div>
-              <div className="flex gap-2">
+
+              <div className="space-y-2 rounded-md border border-border bg-white px-3 py-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span>Deposit bucket</span>
+                  <span className={rewards?.eligibility?.depositBucketEligible ? "text-fs-teal font-semibold" : "text-text-3"}>
+                    {rewards?.eligibility?.depositBucketEligible ? "Eligible" : "Not eligible"}
+                  </span>
+                </div>
+                {!rewards?.eligibility?.depositBucketEligible && (
+                  <a href="/invest" className="inline-flex text-xs font-semibold text-fs-teal hover:text-fs-teal-dark">
+                    Add a deposit
+                  </a>
+                )}
+              </div>
+
+              <div className="space-y-2 rounded-md border border-border bg-white px-3 py-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span>FSFT bucket</span>
+                  <span className={rewards?.eligibility?.fsftBucketEligible ? "text-fs-teal font-semibold" : "text-text-3"}>
+                    {rewards?.eligibility?.fsftBucketEligible ? "Eligible" : "Not eligible"}
+                  </span>
+                </div>
                 <button
                   onClick={handleAttestRewards}
-                  className="flex-1 rounded-md border border-border px-2 py-1.5 text-xs font-semibold hover:bg-white"
+                  className="w-full rounded-md border border-border px-2 py-1.5 text-xs font-semibold hover:bg-white disabled:opacity-50"
+                  disabled={Boolean(rewards?.eligibility?.fsftBucketEligible)}
                 >
-                  Attest FSFT
-                </button>
-                <button
-                  onClick={handleClaimRewards}
-                  className="flex-1 rounded-md bg-fs-teal text-white px-2 py-1.5 text-xs font-semibold hover:bg-fs-teal-dark"
-                >
-                  Claim
+                  {rewards?.eligibility?.fsftBucketEligible ? "FSFT rewards enabled" : "Enable FSFT rewards"}
                 </button>
               </div>
+
+              <div className="space-y-2 rounded-md border border-border bg-white px-3 py-2">
+                <div className="text-xs text-text-2">Governance bucket</div>
+                <p className="text-[11px] text-text-3">{rewards?.eligibility?.governanceBucketHint ?? "Vote to become eligible."}</p>
+                <a href="/governance" className="inline-flex text-xs font-semibold text-fs-teal hover:text-fs-teal-dark">
+                  Go vote
+                </a>
+              </div>
+
+              <button
+                onClick={handleClaimRewards}
+                className="w-full rounded-md bg-fs-teal text-white px-2 py-2 text-xs font-semibold hover:bg-fs-teal-dark disabled:opacity-50"
+                disabled={!rewards?.eligibility?.canClaimNow}
+              >
+                Claim
+              </button>
+              <p className="text-[11px] text-text-3">Claim minimum: {(rewards?.claimMin ?? 1).toLocaleString()} FSP.</p>
+              {rewards?.eligibility?.nextSteps?.length ? (
+                <p className="text-[11px] text-text-3">Next: {rewards.eligibility.nextSteps[0]}</p>
+              ) : null}
               {rewardMsg && <p className="text-xs text-fs-teal font-medium">{rewardMsg}</p>}
             </div>
           </aside>

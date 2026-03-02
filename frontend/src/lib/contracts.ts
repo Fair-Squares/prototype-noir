@@ -377,6 +377,15 @@ export interface RewardsStats {
   totalUserClaimed?: number;
   balance: number;
   fsftRewardsAttested: boolean;
+  eligibility: {
+    investorRole: boolean;
+    depositBucketEligible: boolean;
+    fsftBucketEligible: boolean;
+    governanceBucketHint: string;
+    fsftRewardsAttested: boolean;
+    canClaimNow: boolean;
+    nextSteps: string[];
+  };
   source?: string;
   nextEpochAt: number;
 }
