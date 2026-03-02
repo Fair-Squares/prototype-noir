@@ -95,7 +95,7 @@ export default function PortfolioPage() {
       setTimeout(() => setRewardMsg(null), 5000);
       return;
     }
-    setRewardMsg("FSFT rewards enabled ✓");
+    setRewardMsg("Private FSFT proof and rewards eligibility updated ✓");
     setTimeout(() => setRewardMsg(null), 5000);
     fetchRewardsStats(address, accountIndex).then(setRewards).catch(() => undefined);
   };
@@ -188,12 +188,21 @@ export default function PortfolioPage() {
             >
               Review Proposals
             </a>
+            <a
+              href="/rewards"
+              className="w-full inline-flex items-center justify-center rounded-lg border border-border text-sm font-semibold py-2.5 text-text-2 hover:text-text-1 hover:bg-bg"
+            >
+              View FSP Distribution
+            </a>
 
             <div className="rounded-lg bg-bg border border-border p-4 space-y-3">
               <p className="text-sm font-semibold text-text-1">FSP rewards</p>
               <p className="text-xs text-text-3">
                 FSP is distributed monthly: 40% deposits, 40% FSFT participation, 20% voting participation.
               </p>
+              <div className="rounded-md border border-border bg-white px-3 py-2 text-[11px] text-text-2">
+                Private-proof path: we can prove you hold FSFT without revealing your private FSFT balance.
+              </div>
               <div className="text-xs text-text-2 space-y-1">
                 <p>
                   Balance: <strong>{(portfolio?.protocolTokenBalance ?? 0).toLocaleString()} {rewards?.token.symbol ?? "FSP"}</strong>
@@ -229,7 +238,7 @@ export default function PortfolioPage() {
                   className="w-full rounded-md border border-border px-2 py-1.5 text-xs font-semibold hover:bg-white disabled:opacity-50"
                   disabled={Boolean(rewards?.eligibility?.fsftBucketEligible)}
                 >
-                  {rewards?.eligibility?.fsftBucketEligible ? "FSFT rewards enabled" : "Enable FSFT rewards"}
+                  {rewards?.eligibility?.fsftBucketEligible ? "FSFT proof on file" : "Generate FSFT proof"}
                 </button>
               </div>
 

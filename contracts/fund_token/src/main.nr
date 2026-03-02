@@ -166,12 +166,18 @@ pub contract FundToken {
 
     // -- Private-holder proof path -----------------------------------------
 
-    #[external("public")]
+    #[external("private")]
     fn attest_private_holder() {
         let caller = self.msg_sender();
-        // Placeholder hook for proof verification path: attests private-holder status
-        // without disclosing amount. A full ZK proof verifier can gate this in v4.
-        self.storage.private_holder_proof.at(caller).write(true);
+        // Prove private ownership by doing a reversible 1-unit note roundtrip.
+        // If balance is zero, sub(1) reverts ("Balance too low").
+        self.storage.private_balances.at(caller).sub(1).deliver(
+            MessageDelivery.ONCHAIN_CONSTRAINED,
+        );
+        self.storage.private_balances.at(caller).add(1).deliver(
+            MessageDelivery.ONCHAIN_CONSTRAINED,
+        );
+        self.enqueue_self._set_private_holder_proof(caller, true);
     }
 
     #[external("public")]
@@ -239,6 +245,12 @@ pub contract FundToken {
     fn _assert_private_spender_approved(owner: AztecAddress, spender: AztecAddress) {
         let key = owner.to_field() + spender.to_field();
         assert(self.storage.delegated_private_spenders.at(key).read(), "spender not approved");
+    }
+
+    #[external("public")]
+    #[only_self]
+    fn _set_private_holder_proof(owner: AztecAddress, value: bool) {
+        self.storage.private_holder_proof.at(owner).write(value);
     }
 
     // -- View Functions ---------------------------------------------------

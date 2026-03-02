@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "FSFT private-holder attestation recorded",
+      message: "Private FSFT holder proof generated",
       txHash: receipt.txHash?.toString() ?? "unknown",
       source: "live",
     });

@@ -11,6 +11,10 @@ The format is based on Keep a Changelog.
 - Added simulation disclosure components:
   - Global `SimulationBanner`
   - Per-page `Simulation` mode badges on Overview/Invest/Trade/Proposals/Portfolio/KYC
+- Added housing-fund transparency pages:
+  - `GET /fund` with estimated share-price formula + fund activity views
+  - `GET /rewards` with FSP distribution progress, yearly curve, and eligibility status
+- Added `GET /api/rewards/overview` for global protocol-token distribution progress without requiring a user address.
 - Added simulation-backed FSFT/EUR DEX APIs:
   - `GET/POST /api/dex/orders`
   - `POST /api/dex/match`
@@ -32,6 +36,9 @@ The format is based on Keep a Changelog.
 - Added parked-capital policy storage/view/setters to `contracts/housing_fund/src/main.nr`.
 
 ### Changed
+- Replaced placeholder private-holder attestation with a private proof-gated flow in `FundToken.attest_private_holder` (requires non-zero private FSFT balance before setting eligibility flag).
+- Updated rewards attestation route to attempt private-holder proof generation before recording FSFT rewards eligibility.
+- Expanded Fund/Rewards/Governance/Portfolio copy to explain what private-holder proofs verify and why they improve trust without exposing balances.
 - Expanded simulation seeding to a more active default state:
   - 5 test accounts (`test0..test4`) with mixed investor/KYC profiles
   - pre-seeded FSFT holdings and rewards flags

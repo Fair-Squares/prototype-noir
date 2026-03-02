@@ -28,6 +28,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const rewardsAddr = process.env.NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS ?? "";
+    const fundTokenAddr = process.env.NEXT_PUBLIC_FUND_TOKEN_ADDRESS ?? "";
     if (!rewardsAddr) {
       return NextResponse.json({ error: "NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS not set" }, { status: 500 });
     }
@@ -44,6 +45,20 @@ export async function POST(request: NextRequest) {
     }
 
     const actorAddress = AztecAddress.fromString(actor.address);
+    let holderProofGenerated = false;
+
+    if (fundTokenAddr) {
+      try {
+        const FtJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
+        const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);
+        const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, actor.wallet);
+        await ftContract.methods.attest_private_holder().send({ from: actorAddress });
+        holderProofGenerated = true;
+      } catch {
+        // Public FSFT holders can still attest rewards eligibility without this private-holder proof.
+      }
+    }
+
     const RewardsJson = await loadGeneratedArtifactJson("protocol_rewards-ProtocolRewards.json");
     const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
     const rewardsContract = await Contract.at(AztecAddress.fromString(rewardsAddr), rewardsArtifact, actor.wallet);
@@ -51,8 +66,11 @@ export async function POST(request: NextRequest) {
     const receipt = await rewardsContract.methods.attest_private_fsft_for_rewards().send({ from: actorAddress });
     return NextResponse.json({
       success: true,
-      message: "FSFT rewards attestation recorded",
+      message: holderProofGenerated
+        ? "Private FSFT proof generated and rewards eligibility recorded"
+        : "FSFT rewards eligibility recorded",
       txHash: receipt.txHash?.toString() ?? "unknown",
+      holderProofGenerated,
       source: "live",
     });
   } catch (error: unknown) {

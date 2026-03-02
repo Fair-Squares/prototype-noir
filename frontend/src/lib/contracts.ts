@@ -26,6 +26,7 @@ export interface FundStats {
   parkedAllocationBps?: number;
   parkedMinBps?: number;
   parkedMaxBps?: number;
+  source?: string;
 }
 
 export async function fetchFundStats(): Promise<FundStats> {
@@ -390,6 +391,35 @@ export interface RewardsStats {
   nextEpochAt: number;
 }
 
+export interface RewardsOverview {
+  token: {
+    symbol: string;
+    totalSupply: number;
+    distributionPool: number;
+    years: number;
+    totalEpochs: number;
+  };
+  weighting: {
+    deposit: number;
+    fsft: number;
+    governance: number;
+  };
+  curveYearlyPercents: number[];
+  yearlySchedule: Array<{
+    year: number;
+    percent: number;
+    tokens: number;
+  }>;
+  currentEpoch: number;
+  claimMin: number;
+  emittedToDate: number;
+  totalClaimed: number;
+  remainingPool: number;
+  epochsRemaining: number;
+  nextEpochAt: number;
+  source?: string;
+}
+
 export interface RewardsEpoch {
   epoch: number;
   open: boolean;
@@ -462,6 +492,12 @@ export async function fetchRewardsStats(address: string, accountIndex = 0): Prom
   const query = new URLSearchParams({ address, accountIndex: String(accountIndex) });
   const res = await fetch(`/api/rewards/stats?${query.toString()}`);
   if (!res.ok) throw new Error("Failed to fetch rewards stats");
+  return res.json();
+}
+
+export async function fetchRewardsOverview(): Promise<RewardsOverview> {
+  const res = await fetch("/api/rewards/overview");
+  if (!res.ok) throw new Error("Failed to fetch rewards overview");
   return res.json();
 }
 

@@ -101,7 +101,7 @@ export default function GovernancePage() {
       if (!result.success) {
         notify("error", result.error ?? "Attestation failed");
       } else {
-        notify("success", "FSFT voting access enabled.");
+        notify("success", "Private FSFT proof generated. Voting access updated.");
         const next = await fetchGovernanceEligibility(address, accountIndex);
         setEligibility(next);
       }
@@ -209,8 +209,13 @@ export default function GovernancePage() {
             disabled={loading}
             className="px-3 py-1.5 rounded-md border border-border text-xs font-semibold hover:bg-white disabled:opacity-50"
           >
-            Attest FSFT eligibility
+            Generate private FSFT proof
           </button>
+        </div>
+      )}
+      {address && (
+        <div className="rounded-lg border border-border bg-bg p-3 text-xs text-text-2">
+          Proof note: when you generate a private FSFT proof, Aztec verifies you hold private FSFT without exposing your balance.
         </div>
       )}
 

@@ -63,8 +63,8 @@ Good for UI work and demos.
                     │ REST API calls
 ┌───────────────────▼──────────────────────────────────────┐
 │              Next.js Frontend  (port 3000)                │
-│  Pages: Dashboard | Invest | Governance | Portfolio | KYC │
-│  API Routes: /api/fund/* | /api/governance/* | /api/kyc/* │
+│  Pages: Dashboard | Fund | Invest | Trade | Governance | Rewards | Portfolio | KYC │
+│  API Routes: /api/fund/* | /api/governance/* | /api/rewards/* | /api/kyc/* │
 │  Mode: simulation (default) or live (AZTEC_LIVE=true)     │
 └───────────────────┬──────────────────────────────────────┘
                     │ AztecNode JSON-RPC
@@ -88,9 +88,16 @@ Good for UI work and demos.
 | Who invested | **Private** — only you know |
 | How much you invested | **Private** — only you know |
 | Total fund size | Public |
+| NAV / estimated FSFT price inputs | Public (contract totals + FSFT supply) |
 | Total yield | Public |
 | Governance votes | Public results, private voting (planned) |
+| Private FSFT eligibility proof | Public boolean result, private balance stays hidden |
 | KYC status | Public on-chain, document details stay private via zkPassport |
+
+Private-holder proof model:
+- A private contract call checks your private FSFT balance.
+- The chain stores only a yes/no eligibility flag (`has_private_holder_proof`).
+- The actual private FSFT amount is not published.
 
 ---
 
@@ -616,7 +623,9 @@ fair-squares-noir/
     └── src/
         ├── app/
         │   ├── page.tsx              # Dashboard (fund stats)
+        │   ├── fund/page.tsx         # Housing fund activity + share price formation
         │   ├── invest/page.tsx       # Deposit / withdraw
+        │   ├── rewards/page.tsx      # Protocol token distribution progress
         │   ├── governance/page.tsx   # Proposals list
         │   ├── governance/[id]/page.tsx  # Proposal detail + vote
         │   ├── portfolio/page.tsx    # Your balance + share
@@ -629,6 +638,7 @@ fair-squares-noir/
         │       ├── kyc/register/     # POST register
         │       ├── governance/proposals/  # GET proposals
         │       ├── governance/vote/  # POST vote
+        │       ├── rewards/overview/ # GET global FSP distribution status
         │       ├── portfolio/        # GET portfolio
         │       └── wallet/accounts/  # GET registered accounts
         │

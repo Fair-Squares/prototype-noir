@@ -34,6 +34,9 @@ export default function Dashboard() {
               <a href="/invest" className="px-5 py-2.5 rounded-lg bg-fs-teal text-white text-sm font-semibold hover:bg-fs-teal-dark">
                 Start investing
               </a>
+              <a href="/fund" className="px-5 py-2.5 rounded-lg bg-white border border-border text-text-2 text-sm font-semibold hover:text-text-1 hover:border-text-3">
+                Fund activity
+              </a>
               <a href="/governance" className="px-5 py-2.5 rounded-lg bg-white border border-border text-text-2 text-sm font-semibold hover:text-text-1 hover:border-text-3">
                 View proposals
               </a>

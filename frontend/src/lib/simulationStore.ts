@@ -1239,6 +1239,42 @@ export function simGetRewardsStatus(address: string) {
   };
 }
 
+export function simGetRewardsOverview() {
+  const state = getState();
+  const current = currentRewardEpoch();
+  const emittedToDate = REWARD_EMISSION_SCHEDULE.slice(0, Math.min(current, TOTAL_REWARD_EPOCHS)).reduce((a, b) => a + b, 0);
+  const yearlySchedule = YEAR_SPLITS_BPS.map((bps, index) => ({
+    year: index + 1,
+    percent: bps / 100,
+    tokens: Math.floor((REWARD_DISTRIBUTION_POOL * bps) / 10_000),
+  }));
+
+  return {
+    token: {
+      symbol: REWARD_TOKEN_SYMBOL,
+      totalSupply: REWARD_TOKEN_TOTAL_SUPPLY,
+      distributionPool: REWARD_DISTRIBUTION_POOL,
+      years: REWARD_YEARS,
+      totalEpochs: TOTAL_REWARD_EPOCHS,
+    },
+    weighting: {
+      deposit: 40,
+      fsft: 40,
+      governance: 20,
+    },
+    curveYearlyPercents: YEAR_SPLITS_BPS.map((bps) => bps / 100),
+    yearlySchedule,
+    currentEpoch: current,
+    claimMin: 1,
+    emittedToDate,
+    totalClaimed: state.rewards.totalClaimed,
+    remainingPool: Math.max(0, REWARD_DISTRIBUTION_POOL - emittedToDate),
+    epochsRemaining: Math.max(0, TOTAL_REWARD_EPOCHS - current),
+    nextEpochAt: rewardEpochStartMs(Math.min(current + 1, TOTAL_REWARD_EPOCHS)),
+    source: "simulation" as const,
+  };
+}
+
 export function simClaimRewards(address: string): { success: boolean; error?: string; claimed?: number } {
   const state = getState();
   const acct = getOrCreateAccount(address);
