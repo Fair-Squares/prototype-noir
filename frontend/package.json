@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "next typegen && tsc --noEmit --incremental false"
   },
   "dependencies": {
     "@aztec/accounts": "4.0.0-devnet.2-patch.1",

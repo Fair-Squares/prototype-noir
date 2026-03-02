@@ -15,6 +15,8 @@ interface FundStatsProps {
   tokenPriceBps?: number;
   navEur?: number;
   navPerFsftEur?: number;
+  valuationProofMode?: "public-accounting" | "recursive-verified-path-configured";
+  valuationRecursiveVkConfigured?: boolean;
   fundTokenSymbol?: string;
   eurTokenSymbol?: string;
 }
@@ -106,6 +108,13 @@ export default function FundStats(props: FundStatsProps) {
 
       <div className="rounded-xl border border-border bg-bg px-4 py-3 text-xs text-text-2">
         When no purchase is active, the fund may place part of unused EUR in lending to avoid idle cash.
+      </div>
+
+      <div className="rounded-xl border border-border bg-bg px-4 py-3 text-xs text-text-2">
+        Verification status:{" "}
+        {props.valuationRecursiveVkConfigured
+          ? "advanced proof checks are enabled for valuation updates."
+          : "valuation is based on transparent on-chain totals."}
       </div>
 
       {props.isPaused && (

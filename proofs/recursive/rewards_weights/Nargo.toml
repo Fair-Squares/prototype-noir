@@ -1,0 +1,7 @@
+[package]
+name = "rewards_weights_recursive"
+type = "bin"
+authors = ["Fair Squares"]
+compiler_version = ">=0.18.0"
+
+[dependencies]

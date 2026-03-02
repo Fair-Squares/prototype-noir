@@ -33,7 +33,7 @@ export default function ProposalDetailPage({ params }: { params: Promise<{ id: s
     try {
       const result = await castVote(address, pid, voteYes, accountIndex);
       if (result.success) {
-        setMessage({ type: "success", text: "✅ Vote cast — ZK proof verified" });
+        setMessage({ type: "success", text: "Vote cast successfully." });
         const proposals = await fetchProposals(address, accountIndex);
         setProposal(proposals.find((p) => p.id === pid) ?? null);
       } else {

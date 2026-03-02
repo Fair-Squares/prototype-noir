@@ -94,10 +94,20 @@ Good for UI work and demos.
 | Private FSFT eligibility proof | Public boolean result, private balance stays hidden |
 | KYC status | Public on-chain, document details stay private via zkPassport |
 
-Private-holder proof model:
+Private-holder proof model (today):
 - A private contract call checks your private FSFT balance.
 - The chain stores only a yes/no eligibility flag (`has_private_holder_proof`).
 - The actual private FSFT amount is not published.
+
+Recursive-verification model (v3.1 rollout path):
+- `FundToken.attest_private_holder_recursive(...)` verifies a recursive proof before setting private-holder eligibility.
+- `HousingFund.record_asset_sale_recursive(...)` verifies a recursive proof before writing valuation snapshot fields.
+- `ProtocolRewards.set_user_epoch_weights_recursive(...)` verifies a recursive proof before writing per-user epoch weights.
+
+Why this matters:
+- Private values stay private, but correctness can still be verified on-chain.
+- Users can trust eligibility and valuation updates without trusting a backend operator.
+- The UI can show whether a recursive verifier key is configured for each proof path.
 
 ---
 
@@ -209,6 +219,75 @@ docker compose --profile aztec up aztec-bootstrap
 # Wait for exit 0, then restart frontend
 docker compose --profile aztec restart frontend
 ```
+
+---
+
+### Recursive Verification Configuration (Optional)
+
+You can keep default behavior or enable stricter recursive-proof flows.
+
+Set these env vars before bootstrap:
+
+```bash
+FUND_TOKEN_PRIVATE_HOLDER_VK_HASH=<field hash or 0>
+HOUSING_FUND_VALUATION_VK_HASH=<field hash or 0>
+PROTOCOL_REWARDS_WEIGHTS_VK_HASH=<field hash or 0>
+REQUIRE_RECURSIVE_PROOFS=false
+```
+
+Notes:
+- `0` means "not configured" (default).
+- When a VK hash is configured, contracts expose recursive-proof entrypoints for that path.
+- `REQUIRE_RECURSIVE_PROOFS=true` makes attest API routes reject requests that do not include a recursive proof bundle.
+
+### End-to-end local bundle flow (Docker + live API)
+
+Generate a bundle first (host machine with `nargo` + `bb` installed):
+
+```bash
+node scripts/generate-recursive-proof-bundle.mjs fsft-holder \
+  --address 0x<your_aztec_account_address> \
+  --out proofs/output/fsft-holder.json
+```
+
+If those binaries are not in `PATH`, set:
+
+```bash
+export NARGO_BIN=/usr/src/noir/noir-repo/target/release/nargo
+export BB_BIN=/usr/src/barretenberg/cpp/build/bin/bb-avm
+```
+
+Use the generated VK hash for bootstrap:
+
+```bash
+export FUND_TOKEN_PRIVATE_HOLDER_VK_HASH="$(jq -r '.vkHashDecimal' proofs/output/fsft-holder.json)"
+export REQUIRE_RECURSIVE_PROOFS=true
+docker compose --profile aztec up
+```
+
+Submit the recursive bundle to the live route:
+
+```bash
+node scripts/submit-recursive-bundle.mjs governance \
+  --bundle proofs/output/fsft-holder.json \
+  --address 0x<your_aztec_account_address> \
+  --account-index 0
+```
+
+Expected result: HTTP 200 with `privateFsftProofMode: "recursive-verified"`.
+
+Other bundle kinds:
+- `valuation` -> `HOUSING_FUND_VALUATION_VK_HASH`
+- `rewards` -> `PROTOCOL_REWARDS_WEIGHTS_VK_HASH`
+
+Implementation note:
+- The circuits in `proofs/recursive/*` are integration/demo circuits for recursive wiring.
+- They prove input consistency and shape, but do not yet bind to live private note state.
+
+What each proof does in simple terms:
+- FSFT holder proof: proves "I hold private FSFT" without revealing how much.
+- Valuation proof: proves the valuation update follows the agreed calculation rules.
+- Rewards weight proof: proves epoch reward weights were computed from valid inputs.
 
 ---
 

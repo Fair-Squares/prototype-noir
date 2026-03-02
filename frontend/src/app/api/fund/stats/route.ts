@@ -12,6 +12,16 @@ function toNumberSafe(value: unknown): number {
   return 0;
 }
 
+function isNonZeroField(value: unknown): boolean {
+  if (typeof value === "bigint") return value !== 0n;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") return value !== "0";
+  if (value && typeof value === "object" && "toString" in value) {
+    return (value as { toString: () => string }).toString() !== "0";
+  }
+  return false;
+}
+
 function buildV3FeatureMeta() {
   return {
     dex: {
@@ -32,7 +42,12 @@ function buildV3FeatureMeta() {
 
 export async function GET() {
   if (!isLiveModeEnabled() && isVercelSimulationMode()) {
-    return NextResponse.json({ ...simGetFundStats(), ...buildV3FeatureMeta() });
+    return NextResponse.json({
+      ...simGetFundStats(),
+      valuationProofMode: "public-accounting",
+      valuationRecursiveVkConfigured: false,
+      ...buildV3FeatureMeta(),
+    });
   }
   if (!isLiveModeEnabled()) {
     return NextResponse.json(
@@ -79,6 +94,8 @@ export async function GET() {
       .simulate({ from })
       .catch(() => [3000, 2000, 5000] as const);
     const parkedPolicy = Array.isArray(parkedPolicyRaw) ? parkedPolicyRaw : [3000, 2000, 5000];
+    const valuationVkHashRaw = await hfContract.methods.get_valuation_vk_hash().simulate({ from }).catch(() => 0);
+    const valuationRecursiveVkConfigured = isNonZeroField(valuationVkHashRaw);
 
     const investorCount = Number(await hfContract.methods.get_investor_count().simulate({ from }));
     const isPaused = Boolean(await hfContract.methods.is_paused().simulate({ from }));
@@ -104,6 +121,8 @@ export async function GET() {
       lastFsftMinted: toNumberSafe(valuation[1]),
       tokenPriceBps: toNumberSafe(valuation[2]),
       valuationBlock: toNumberSafe(valuation[3]),
+      valuationProofMode: valuationRecursiveVkConfigured ? "recursive-verified-path-configured" : "public-accounting",
+      valuationRecursiveVkConfigured,
       navEur,
       navPerFsftEur,
       parkedAllocationBps: toNumberSafe(parkedPolicy[0]),

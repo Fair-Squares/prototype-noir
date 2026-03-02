@@ -17,7 +17,7 @@ pub contract HousingFund {
     use kyc_verifier::KYCVerifier;
     use aztec::{
         macros::{
-            functions::{external, initializer, view},
+            functions::{external, initializer, only_self, view},
             storage::storage,
         },
         protocol::{
@@ -26,6 +26,7 @@ pub contract HousingFund {
         },
         state_vars::{Map, PublicMutable},
     };
+    use bb_proof_verification::{UltraHonkVerificationKey, UltraHonkZKProof, verify_honk_proof};
 
     #[storage]
     struct Storage<Context> {
@@ -50,6 +51,8 @@ pub contract HousingFund {
         // EUR per FSFT in basis points (10000 = 1.0000 EUR/FSFT)
         last_token_price_bps: PublicMutable<u64, Context>,
         last_valuation_block: PublicMutable<u32, Context>,
+        // Recursive verifier key hash for valuation proof checks.
+        valuation_vk_hash: PublicMutable<Field, Context>,
         // Parked-capital policy for idle EUR allocations (basis points)
         parked_target_bps: PublicMutable<u32, Context>,
         parked_min_bps: PublicMutable<u32, Context>,
@@ -77,6 +80,7 @@ pub contract HousingFund {
         self.storage.last_fsft_minted.write(0);
         self.storage.last_token_price_bps.write(0);
         self.storage.last_valuation_block.write(0);
+        self.storage.valuation_vk_hash.write(0 as Field);
         self.storage.parked_target_bps.write(3000);
         self.storage.parked_min_bps.write(2000);
         self.storage.parked_max_bps.write(5000);
@@ -202,6 +206,15 @@ pub contract HousingFund {
         self.storage.parked_max_bps.write(max_bps);
     }
 
+    #[external("public")]
+    fn set_valuation_vk_hash(vk_hash: Field) {
+        let caller = self.msg_sender();
+        let admin = self.storage.admin.read();
+        let gov = self.storage.governance.read();
+        assert(admin.eq(caller) | gov.eq(caller), "not authorized");
+        self.storage.valuation_vk_hash.write(vk_hash);
+    }
+
     // -- Governance: Property reservation ---------------------------------
 
     #[external("public")]
@@ -296,6 +309,61 @@ pub contract HousingFund {
         assert(gov.eq(caller) | admin.eq(caller), "not authorized");
         assert(asset_sale_price > 0, "asset sale price must be positive");
         assert(minted_fsft > 0, "minted fsft must be positive");
+
+        let token_price_bps = (asset_sale_price * 10000) / minted_fsft;
+        self.storage.last_asset_sale_price.write(asset_sale_price);
+        self.storage.last_fsft_minted.write(minted_fsft);
+        self.storage.last_token_price_bps.write(token_price_bps);
+        self.storage.last_valuation_block.write(self.context.block_number());
+    }
+
+    #[external("private")]
+    fn record_asset_sale_recursive(
+        asset_sale_price: u64,
+        minted_fsft: u64,
+        vk_hash: Field,
+        verification_key: UltraHonkVerificationKey,
+        proof: UltraHonkZKProof,
+        public_inputs: [Field; 3],
+    ) {
+        let caller = self.msg_sender();
+        verify_honk_proof(verification_key, proof, public_inputs, vk_hash);
+
+        self.enqueue_self._record_asset_sale_recursive_public(
+            caller,
+            asset_sale_price,
+            minted_fsft,
+            vk_hash,
+            public_inputs[0],
+            public_inputs[1],
+            public_inputs[2],
+        );
+    }
+
+    #[external("public")]
+    #[only_self]
+    fn _record_asset_sale_recursive_public(
+        caller: AztecAddress,
+        asset_sale_price: u64,
+        minted_fsft: u64,
+        vk_hash: Field,
+        proof_caller: Field,
+        proof_asset_sale: Field,
+        proof_minted_fsft: Field,
+    ) {
+        let configured_vk_hash = self.storage.valuation_vk_hash.read();
+        assert(configured_vk_hash != 0 as Field, "valuation vk hash not configured");
+        assert(vk_hash == configured_vk_hash, "valuation vk hash mismatch");
+
+        let gov = self.storage.governance.read();
+        let admin = self.storage.admin.read();
+        assert(gov.eq(caller) | admin.eq(caller), "not authorized");
+        assert(asset_sale_price > 0, "asset sale price must be positive");
+        assert(minted_fsft > 0, "minted fsft must be positive");
+
+        assert(proof_caller == caller.to_field(), "proof caller mismatch");
+        assert(proof_asset_sale == asset_sale_price as Field, "proof asset sale mismatch");
+        assert(proof_minted_fsft == minted_fsft as Field, "proof minted mismatch");
 
         let token_price_bps = (asset_sale_price * 10000) / minted_fsft;
         self.storage.last_asset_sale_price.write(asset_sale_price);
@@ -420,6 +488,12 @@ pub contract HousingFund {
             self.storage.parked_min_bps.read(),
             self.storage.parked_max_bps.read(),
         )
+    }
+
+    #[external("public")]
+    #[view]
+    fn get_valuation_vk_hash() -> pub Field {
+        self.storage.valuation_vk_hash.read()
     }
 
     #[external("utility")]

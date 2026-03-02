@@ -157,7 +157,8 @@ export default function FundPage() {
               </div>
             </div>
             <div className="mt-3 rounded-lg border border-border bg-bg p-3 text-xs text-text-2">
-              Trust model: NAV inputs (fund totals and FSFT supply) are public contract values. Private FSFT holder proofs are separate and only used for eligibility checks without exposing balances.
+              Trust model: estimated share price is calculated from public fund totals and FSFT supply.
+              Private balance checks are only used for eligibility and do not expose amounts.
             </div>
           </section>
 

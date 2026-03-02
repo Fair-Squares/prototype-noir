@@ -10,3 +10,4 @@ fund_token = { path = "../fund_token" }
 housing_fund = { path = "../housing_fund" }
 governance = { path = "../governance" }
 kyc_verifier = { path = "../kyc_verifier" }
+bb_proof_verification = { git = "https://github.com/AztecProtocol/aztec-packages/", tag = "v4.0.0-devnet.2-patch.1", directory = "barretenberg/noir/bb_proof_verification" }

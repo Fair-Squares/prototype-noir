@@ -119,6 +119,8 @@ export interface SimVotingEligibility {
   hasDepositTicket: boolean;
   hasFsftExposure: boolean;
   hasFsftVotingAttestation: boolean;
+  privateFsftProofMode: "none" | "aztec-private-proven" | "recursive-verified";
+  recursiveVkConfigured: boolean;
   canVote: boolean;
   reason: string;
 }
@@ -168,6 +170,8 @@ interface SimRewardsEligibility {
   fsftBucketEligible: boolean;
   governanceBucketHint: string;
   fsftRewardsAttested: boolean;
+  fsftProofMode: "none" | "aztec-private-proven" | "recursive-verified";
+  recursiveVkConfigured: boolean;
   canClaimNow: boolean;
   nextSteps: string[];
 }
@@ -514,6 +518,8 @@ export function simGetVotingEligibility(address: string): SimVotingEligibility {
   const hasDepositTicket = acct.depositedAmount > 0;
   const hasFsftExposure = acct.fsftBalance > 0 || acct.fsftVotingAttested;
   const canVote = acct.investorRole && (hasDepositTicket || hasFsftExposure);
+  const privateFsftProofMode = acct.fsftVotingAttested ? "aztec-private-proven" : "none";
+  const recursiveVkConfigured = false;
 
   if (!acct.investorRole) {
     return {
@@ -521,6 +527,8 @@ export function simGetVotingEligibility(address: string): SimVotingEligibility {
       hasDepositTicket,
       hasFsftExposure,
       hasFsftVotingAttestation: acct.fsftVotingAttested,
+      privateFsftProofMode,
+      recursiveVkConfigured,
       canVote: false,
       reason: "Investor role required. Complete KYC first.",
     };
@@ -531,6 +539,8 @@ export function simGetVotingEligibility(address: string): SimVotingEligibility {
       hasDepositTicket,
       hasFsftExposure,
       hasFsftVotingAttestation: acct.fsftVotingAttested,
+      privateFsftProofMode,
+      recursiveVkConfigured,
       canVote: true,
       reason: "Eligible to vote.",
     };
@@ -540,6 +550,8 @@ export function simGetVotingEligibility(address: string): SimVotingEligibility {
     hasDepositTicket,
     hasFsftExposure,
     hasFsftVotingAttestation: acct.fsftVotingAttested,
+    privateFsftProofMode,
+    recursiveVkConfigured,
     canVote: false,
     reason: "Voting requires a fund position: a deposit or FSFT exposure.",
   };
@@ -1197,6 +1209,8 @@ function buildRewardsEligibility(
     fsftBucketEligible,
     governanceBucketHint,
     fsftRewardsAttested,
+    fsftProofMode: account.fsftVotingAttested ? "aztec-private-proven" : "none",
+    recursiveVkConfigured: false,
     canClaimNow: claimable >= 1,
     nextSteps,
   };

@@ -35,3 +35,6 @@ pnpm-debug.log*
 contracts/*/target/
 artifacts/
 frontend/src/artifacts/
+proofs/output/
+proofs/recursive/*/target/
+proofs/recursive/*/Prover.toml

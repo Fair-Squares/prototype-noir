@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simAttestFsftForVoting, simGetVotingEligibility } from "@/lib/simulationStore";
 
+function isNonZeroField(value: unknown): boolean {
+  if (typeof value === "bigint") return value !== 0n;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") return value !== "0";
+  if (value && typeof value === "object" && "toString" in value) {
+    return (value as { toString: () => string }).toString() !== "0";
+  }
+  return false;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const address = searchParams.get("address") ?? "";
@@ -69,22 +79,34 @@ export async function GET(request: NextRequest) {
       actor.wallet
     );
 
-    const [isInvestor, depositTicket, fsftBalance, hasPrivateHolderProof] = await Promise.all([
+    const [isInvestor, depositTicket, fsftBalance, hasPrivateHolderProof, privateHolderVkHash] = await Promise.all([
       kycContract.methods.is_investor(userAddress).simulate({ from: actorAddress }),
       hfContract.methods.get_user_deposit_ticket(userAddress).simulate({ from: actorAddress }),
       ftContract.methods.public_balance_of(userAddress).simulate({ from: actorAddress }),
       ftContract.methods.has_private_holder_proof(userAddress).simulate({ from: actorAddress }),
+      ftContract.methods
+        .get_private_holder_vk_hash()
+        .simulate({ from: actorAddress })
+        .catch(() => 0),
     ]);
 
     const hasDepositTicket = Number(depositTicket) > 0;
     const hasFsftExposure = Number(fsftBalance) > 0 || Boolean(hasPrivateHolderProof);
     const canVote = Boolean(isInvestor) && (hasDepositTicket || hasFsftExposure);
+    const recursiveVkConfigured = isNonZeroField(privateHolderVkHash);
+    const privateFsftProofMode = Boolean(hasPrivateHolderProof)
+      ? recursiveVkConfigured
+        ? "recursive-verified"
+        : "aztec-private-proven"
+      : "none";
 
     return NextResponse.json({
       investorRole: Boolean(isInvestor),
       hasDepositTicket,
       hasFsftExposure,
       hasFsftVotingAttestation: Boolean(hasPrivateHolderProof),
+      privateFsftProofMode,
+      recursiveVkConfigured,
       canVote,
       reason: !Boolean(isInvestor)
         ? "Investor role required. Complete KYC first."
@@ -102,10 +124,15 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
-  const { action, address, accountIndex = 0 } = body as {
+  const { action, address, accountIndex = 0, recursiveProof } = body as {
     action?: string;
     address?: string;
     accountIndex?: number;
+    recursiveProof?: {
+      verificationKey?: unknown;
+      proof?: unknown;
+      publicInputs?: unknown;
+    };
   };
 
   if (!address) {
@@ -118,7 +145,12 @@ export async function POST(request: NextRequest) {
   if (!isLiveModeEnabled() && isVercelSimulationMode()) {
     const result = simAttestFsftForVoting(address);
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
-    return NextResponse.json({ success: true, message: "FSFT voting attestation recorded", source: "simulation" });
+    return NextResponse.json({
+      success: true,
+      message: "FSFT voting attestation recorded",
+      privateFsftProofMode: "aztec-private-proven",
+      source: "simulation",
+    });
   }
   if (!isLiveModeEnabled()) {
     return NextResponse.json(
@@ -149,12 +181,48 @@ export async function POST(request: NextRequest) {
     const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, actor.wallet);
 
     const actorAddress = AztecAddress.fromString(actor.address);
-    const receipt = await ftContract.methods.attest_private_holder().send({ from: actorAddress });
+    const privateHolderVkHash = await ftContract.methods
+      .get_private_holder_vk_hash()
+      .simulate({ from: actorAddress })
+      .catch(() => 0);
+    const recursiveVkConfigured = isNonZeroField(privateHolderVkHash);
+    const requireRecursive = process.env.REQUIRE_RECURSIVE_PROOFS === "true";
+    const hasRecursivePayload =
+      Boolean(recursiveProof?.verificationKey) &&
+      Boolean(recursiveProof?.proof) &&
+      Array.isArray(recursiveProof?.publicInputs);
+
+    if (requireRecursive && recursiveVkConfigured && !hasRecursivePayload) {
+      return NextResponse.json(
+        {
+          error:
+            "Recursive proof bundle required. Send recursiveProof={verificationKey, proof, publicInputs} in this request.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const receipt = hasRecursivePayload
+      ? await ftContract.methods
+          .attest_private_holder_recursive(
+            privateHolderVkHash,
+            recursiveProof!.verificationKey,
+            recursiveProof!.proof,
+            recursiveProof!.publicInputs
+          )
+          .send({ from: actorAddress })
+      : await ftContract.methods.attest_private_holder().send({ from: actorAddress });
 
     return NextResponse.json({
       success: true,
-      message: "Private FSFT holder proof generated",
+      message: hasRecursivePayload
+        ? "Private FSFT holder proof generated with recursive verification"
+        : recursiveVkConfigured
+        ? "Private FSFT holder proof generated (recursive verifier is configured)"
+        : "Private FSFT holder proof generated",
       txHash: receipt.txHash?.toString() ?? "unknown",
+      privateFsftProofMode: hasRecursivePayload ? "recursive-verified" : "aztec-private-proven",
+      recursiveVkConfigured,
       source: "live",
     });
   } catch (error: unknown) {

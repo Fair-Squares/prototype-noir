@@ -24,6 +24,7 @@ pub contract FundToken {
         state_vars::{Map, Owned, PublicMutable},
     };
     use balance_set::BalanceSet;
+    use bb_proof_verification::{UltraHonkVerificationKey, UltraHonkZKProof, verify_honk_proof};
 
     #[storage]
     struct Storage<Context> {
@@ -37,6 +38,8 @@ pub contract FundToken {
         delegated_private_spenders: Map<Field, PublicMutable<bool, Context>, Context>,
         // privacy-preserving holder attestation flag (no balance disclosure)
         private_holder_proof: Map<AztecAddress, PublicMutable<bool, Context>, Context>,
+        // Recursive verifier key hash for off-chain private-holder proofs.
+        private_holder_vk_hash: PublicMutable<Field, Context>,
     }
 
     #[initializer]
@@ -45,6 +48,7 @@ pub contract FundToken {
         assert(!admin.is_zero(), "invalid admin");
         self.storage.admin.write(admin);
         self.storage.total_supply.write(0);
+        self.storage.private_holder_vk_hash.write(0 as Field);
     }
 
     // -- Public Minting --------------------------------------------------
@@ -180,6 +184,23 @@ pub contract FundToken {
         self.enqueue_self._set_private_holder_proof(caller, true);
     }
 
+    #[external("private")]
+    fn attest_private_holder_recursive(
+        vk_hash: Field,
+        verification_key: UltraHonkVerificationKey,
+        proof: UltraHonkZKProof,
+        public_inputs: [Field; 2],
+    ) {
+        let caller = self.msg_sender();
+        verify_honk_proof(verification_key, proof, public_inputs, vk_hash);
+        self.enqueue_self._set_private_holder_proof_recursive(
+            caller,
+            vk_hash,
+            public_inputs[0],
+            public_inputs[1],
+        );
+    }
+
     #[external("public")]
     fn clear_private_holder_proof() {
         let caller = self.msg_sender();
@@ -208,6 +229,12 @@ pub contract FundToken {
         assert_eq(self.msg_sender(), self.storage.admin.read(), "only admin can transfer ownership");
         assert(!new_admin.is_zero(), "invalid new admin");
         self.storage.admin.write(new_admin);
+    }
+
+    #[external("public")]
+    fn set_private_holder_vk_hash(vk_hash: Field) {
+        assert_eq(self.msg_sender(), self.storage.admin.read(), "only admin can set vk hash");
+        self.storage.private_holder_vk_hash.write(vk_hash);
     }
 
     // -- Internal helpers (called via enqueue from private functions) ------
@@ -251,6 +278,22 @@ pub contract FundToken {
     #[only_self]
     fn _set_private_holder_proof(owner: AztecAddress, value: bool) {
         self.storage.private_holder_proof.at(owner).write(value);
+    }
+
+    #[external("public")]
+    #[only_self]
+    fn _set_private_holder_proof_recursive(
+        owner: AztecAddress,
+        vk_hash: Field,
+        proof_owner: Field,
+        proof_signal: Field,
+    ) {
+        let configured_vk_hash = self.storage.private_holder_vk_hash.read();
+        assert(configured_vk_hash != 0 as Field, "recursive vk hash not configured");
+        assert(vk_hash == configured_vk_hash, "recursive vk hash mismatch");
+        assert(proof_owner == owner.to_field(), "proof owner mismatch");
+        assert(proof_signal == 1 as Field, "invalid private holder signal");
+        self.storage.private_holder_proof.at(owner).write(true);
     }
 
     // -- View Functions ---------------------------------------------------
@@ -297,5 +340,11 @@ pub contract FundToken {
     #[view]
     fn has_private_holder_proof(owner: AztecAddress) -> pub bool {
         self.storage.private_holder_proof.at(owner).read()
+    }
+
+    #[external("public")]
+    #[view]
+    fn get_private_holder_vk_hash() -> pub Field {
+        self.storage.private_holder_vk_hash.read()
     }
 }

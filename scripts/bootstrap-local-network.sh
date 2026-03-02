@@ -18,6 +18,10 @@ GOVERNANCE_MIN_QUORUM_VOTES="${GOVERNANCE_MIN_QUORUM_VOTES:-2}"
 DEX_PRICE_BAND_BPS="${DEX_PRICE_BAND_BPS:-200}"
 DEX_MAX_TTL_BLOCKS="${DEX_MAX_TTL_BLOCKS:-120}"
 PROTOCOL_REWARDS_CLAIM_MIN="${PROTOCOL_REWARDS_CLAIM_MIN:-1}"
+FUND_TOKEN_PRIVATE_HOLDER_VK_HASH="${FUND_TOKEN_PRIVATE_HOLDER_VK_HASH:-0}"
+HOUSING_FUND_VALUATION_VK_HASH="${HOUSING_FUND_VALUATION_VK_HASH:-0}"
+PROTOCOL_REWARDS_WEIGHTS_VK_HASH="${PROTOCOL_REWARDS_WEIGHTS_VK_HASH:-0}"
+REQUIRE_RECURSIVE_PROOFS="${REQUIRE_RECURSIVE_PROOFS:-false}"
 
 CONTRACTS="kyc_verifier fund_token defi_vault housing_fund governance fsft_dex protocol_rewards"
 # eur_token / protocol_token reuse the fund_token artifact with separate deployments
@@ -259,6 +263,33 @@ wire_contracts() {
 
   # Transfer FSFT admin to HousingFund so claim_distribution can mint
   # permissionlessly via contract logic.
+  if [ "${FUND_TOKEN_PRIVATE_HOLDER_VK_HASH}" != "0" ]; then
+    log "Setting FundToken private-holder recursive VK hash..."
+    $AZTEC_WALLET_BIN send set_private_holder_vk_hash \
+      --from accounts:test0 \
+      --contract-address "${TOKEN_ADDR}" \
+      --args "${FUND_TOKEN_PRIVATE_HOLDER_VK_HASH}" \
+      2>&1 >&2 || log "WARN: FundToken.set_private_holder_vk_hash failed"
+  fi
+
+  if [ "${HOUSING_FUND_VALUATION_VK_HASH}" != "0" ]; then
+    log "Setting HousingFund valuation recursive VK hash..."
+    $AZTEC_WALLET_BIN send set_valuation_vk_hash \
+      --from accounts:test0 \
+      --contract-address "${FUND_ADDR}" \
+      --args "${HOUSING_FUND_VALUATION_VK_HASH}" \
+      2>&1 >&2 || log "WARN: HousingFund.set_valuation_vk_hash failed"
+  fi
+
+  if [ "${PROTOCOL_REWARDS_WEIGHTS_VK_HASH}" != "0" ]; then
+    log "Setting ProtocolRewards weights recursive VK hash..."
+    $AZTEC_WALLET_BIN send set_rewards_weights_vk_hash \
+      --from accounts:test0 \
+      --contract-address "${REWARDS_ADDR}" \
+      --args "${PROTOCOL_REWARDS_WEIGHTS_VK_HASH}" \
+      2>&1 >&2 || log "WARN: ProtocolRewards.set_rewards_weights_vk_hash failed"
+  fi
+
   log "Transferring FSFT admin to housing fund..."
   $AZTEC_WALLET_BIN send set_admin \
     --from accounts:test0 \
@@ -356,6 +387,10 @@ GOVERNANCE_MIN_QUORUM_VOTES=${GOVERNANCE_MIN_QUORUM_VOTES}
 DEX_PRICE_BAND_BPS=${DEX_PRICE_BAND_BPS}
 DEX_MAX_TTL_BLOCKS=${DEX_MAX_TTL_BLOCKS}
 PROTOCOL_REWARDS_CLAIM_MIN=${PROTOCOL_REWARDS_CLAIM_MIN}
+FUND_TOKEN_PRIVATE_HOLDER_VK_HASH=${FUND_TOKEN_PRIVATE_HOLDER_VK_HASH}
+HOUSING_FUND_VALUATION_VK_HASH=${HOUSING_FUND_VALUATION_VK_HASH}
+PROTOCOL_REWARDS_WEIGHTS_VK_HASH=${PROTOCOL_REWARDS_WEIGHTS_VK_HASH}
+REQUIRE_RECURSIVE_PROOFS=${REQUIRE_RECURSIVE_PROOFS}
 
 # Contract addresses
 NEXT_PUBLIC_KYC_VERIFIER_ADDRESS=${kyc_addr}

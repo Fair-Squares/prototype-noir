@@ -150,7 +150,7 @@ export default function RewardsPage() {
                 <p>3. Gradual release lowers supply shock and keeps governance incentives steady.</p>
               </div>
               <div className="mt-3 rounded-lg border border-border bg-bg p-3 text-xs text-text-2">
-                Privacy and proof flow: eligibility is computed from Aztec-backed account state, while private holdings remain private.
+                Privacy model: eligibility is checked from contract state while your private holdings stay private.
               </div>
             </div>
           </section>
@@ -169,7 +169,7 @@ export default function RewardsPage() {
           </section>
 
           <section className="rounded-2xl border border-border bg-card p-5">
-            <h2 className="text-lg font-semibold mb-3">What the private FSFT proof does</h2>
+            <h2 className="text-lg font-semibold mb-3">How the private FSFT check works</h2>
             <div className="grid md:grid-cols-3 gap-3 text-xs">
               <div className="rounded-lg border border-border bg-bg p-3">
                 <p className="font-semibold text-text-1 mb-1">1. Verify privately</p>
@@ -212,6 +212,21 @@ export default function RewardsPage() {
                   Next step: {stats.eligibility.nextSteps[0]}
                 </div>
               )}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {!stats.eligibility.depositBucketEligible && (
+                  <a href="/invest" className="rounded-md border border-border px-2.5 py-1 text-xs font-semibold hover:bg-bg">
+                    Add deposit
+                  </a>
+                )}
+                {!stats.eligibility.fsftBucketEligible && (
+                  <a href="/dex" className="rounded-md border border-border px-2.5 py-1 text-xs font-semibold hover:bg-bg">
+                    Hold FSFT
+                  </a>
+                )}
+                <a href="/governance" className="rounded-md border border-border px-2.5 py-1 text-xs font-semibold hover:bg-bg">
+                  Vote on proposals
+                </a>
+              </div>
             </section>
           )}
 

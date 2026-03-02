@@ -10,7 +10,7 @@ pub contract ProtocolRewards {
     use kyc_verifier::KYCVerifier;
     use aztec::{
         macros::{
-            functions::{external, initializer, view},
+            functions::{external, initializer, only_self, view},
             storage::storage,
         },
         protocol::{
@@ -19,6 +19,7 @@ pub contract ProtocolRewards {
         },
         state_vars::{Map, PublicMutable},
     };
+    use bb_proof_verification::{UltraHonkVerificationKey, UltraHonkZKProof, verify_honk_proof};
 
     #[storage]
     struct Storage<Context> {
@@ -55,6 +56,7 @@ pub contract ProtocolRewards {
         user_last_claimed_epoch: Map<AztecAddress, PublicMutable<u32, Context>, Context>,
 
         fsft_rewards_attested: Map<AztecAddress, PublicMutable<bool, Context>, Context>,
+        rewards_weights_vk_hash: PublicMutable<Field, Context>,
     }
 
     #[initializer]
@@ -90,6 +92,7 @@ pub contract ProtocolRewards {
         self.storage.claim_min.write(claim_min);
         self.storage.total_epochs.write(120);
         self.storage.current_epoch.write(0);
+        self.storage.rewards_weights_vk_hash.write(0 as Field);
     }
 
     /// Opens/checkpoints an epoch and records total weighting denominators.
@@ -146,6 +149,12 @@ pub contract ProtocolRewards {
         self.storage.current_epoch.write(epoch);
     }
 
+    #[external("public")]
+    fn set_rewards_weights_vk_hash(vk_hash: Field) {
+        assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
+        self.storage.rewards_weights_vk_hash.write(vk_hash);
+    }
+
     /// Records per-user epoch weights and accrues claimable rewards.
     /// This function can be called once per user per epoch.
     #[external("public")]
@@ -158,6 +167,121 @@ pub contract ProtocolRewards {
     ) {
         assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
         assert(!user.is_zero(), "invalid user");
+
+        let eid = epoch as Field;
+        assert(self.storage.epoch_open.at(eid).read(), "epoch not open");
+
+        let key = user.to_field() + eid;
+        assert(!self.storage.user_epoch_allocated.at(key).read(), "already allocated");
+
+        self.storage.user_epoch_deposit_weight.at(key).write(deposit_weight);
+        self.storage.user_epoch_fsft_weight.at(key).write(fsft_weight);
+        self.storage.user_epoch_vote_weight.at(key).write(vote_weight);
+
+        let emission = self.storage.epoch_emission.at(eid).read();
+        let deposit_total = self.storage.epoch_deposit_total_weight.at(eid).read();
+        let fsft_total = self.storage.epoch_fsft_total_weight.at(eid).read();
+        let vote_total = self.storage.epoch_vote_total_weight.at(eid).read();
+
+        let deposit_pool = (emission * 40) / 100;
+        let fsft_pool = (emission * 40) / 100;
+        let governance_pool = emission - deposit_pool - fsft_pool;
+
+        let fsft = FundToken::at(self.storage.fsft_token.read());
+        let public_balance = self.view(fsft.public_balance_of_public(user));
+        let private_holder_proof = self.view(fsft.has_private_holder_proof(user));
+        let attested = self.storage.fsft_rewards_attested.at(user).read();
+        let fsft_eligible = (public_balance > 0) | private_holder_proof | attested;
+
+        let deposit_share = if (deposit_pool > 0) & (deposit_total > 0) & (deposit_weight > 0) {
+            (deposit_pool * deposit_weight) / deposit_total
+        } else {
+            0
+        };
+
+        let fsft_share = if (fsft_pool > 0) & (fsft_total > 0) & (fsft_weight > 0) {
+            if fsft_eligible {
+                (fsft_pool * fsft_weight) / fsft_total
+            } else {
+                0
+            }
+        } else {
+            0
+        };
+
+        let governance_share = if (governance_pool > 0) & (vote_total > 0) & (vote_weight > 0) {
+            (governance_pool * vote_weight) / vote_total
+        } else {
+            0
+        };
+
+        let reward = deposit_share + fsft_share + governance_share;
+
+        if reward > 0 {
+            let current = self.storage.user_claimable.at(user).read();
+            self.storage.user_claimable.at(user).write(current + reward);
+
+            let allocated = self.storage.epoch_allocated.at(eid).read();
+            self.storage.epoch_allocated.at(eid).write(allocated + reward);
+        }
+
+        self.storage.user_epoch_allocated.at(key).write(true);
+    }
+
+    /// Proof-backed variant of user epoch weighting.
+    /// public_inputs schema:
+    /// [0]=user, [1]=epoch, [2]=deposit_weight, [3]=fsft_weight, [4]=vote_weight
+    #[external("private")]
+    fn set_user_epoch_weights_recursive(
+        epoch: u32,
+        user: AztecAddress,
+        deposit_weight: u64,
+        fsft_weight: u64,
+        vote_weight: u64,
+        vk_hash: Field,
+        verification_key: UltraHonkVerificationKey,
+        proof: UltraHonkZKProof,
+        public_inputs: [Field; 5],
+    ) {
+        let caller = self.msg_sender();
+        assert(!user.is_zero(), "invalid user");
+
+        verify_honk_proof(verification_key, proof, public_inputs, vk_hash);
+
+        assert(public_inputs[0] == user.to_field(), "proof user mismatch");
+        assert(public_inputs[1] == epoch as Field, "proof epoch mismatch");
+        assert(public_inputs[2] == deposit_weight as Field, "proof deposit weight mismatch");
+        assert(public_inputs[3] == fsft_weight as Field, "proof fsft weight mismatch");
+        assert(public_inputs[4] == vote_weight as Field, "proof governance weight mismatch");
+
+        self.enqueue_self._set_user_epoch_weights_recursive_public(
+            caller,
+            epoch,
+            user,
+            deposit_weight,
+            fsft_weight,
+            vote_weight,
+            vk_hash,
+        );
+    }
+
+    #[external("public")]
+    #[only_self]
+    fn _set_user_epoch_weights_recursive_public(
+        caller: AztecAddress,
+        epoch: u32,
+        user: AztecAddress,
+        deposit_weight: u64,
+        fsft_weight: u64,
+        vote_weight: u64,
+        vk_hash: Field,
+    ) {
+        assert_eq(caller, self.storage.admin.read(), "not admin");
+        assert(!user.is_zero(), "invalid user");
+
+        let configured_vk_hash = self.storage.rewards_weights_vk_hash.read();
+        assert(configured_vk_hash != 0 as Field, "rewards vk hash not configured");
+        assert(vk_hash == configured_vk_hash, "rewards vk hash mismatch");
 
         let eid = epoch as Field;
         assert(self.storage.epoch_open.at(eid).read(), "epoch not open");
@@ -343,5 +467,11 @@ pub contract ProtocolRewards {
         let attested = self.storage.fsft_rewards_attested.at(user).read();
 
         (public_balance > 0) | private_holder_proof | attested
+    }
+
+    #[external("public")]
+    #[view]
+    fn get_rewards_weights_vk_hash() -> pub Field {
+        self.storage.rewards_weights_vk_hash.read()
     }
 }

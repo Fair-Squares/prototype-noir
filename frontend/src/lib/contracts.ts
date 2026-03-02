@@ -23,6 +23,8 @@ export interface FundStats {
   tokenPriceBps?: number;
   navEur?: number;
   navPerFsftEur?: number;
+  valuationProofMode?: "public-accounting" | "recursive-verified-path-configured";
+  valuationRecursiveVkConfigured?: boolean;
   parkedAllocationBps?: number;
   parkedMinBps?: number;
   parkedMaxBps?: number;
@@ -139,6 +141,8 @@ export interface GovernanceEligibility {
   hasDepositTicket: boolean;
   hasFsftExposure: boolean;
   hasFsftVotingAttestation: boolean;
+  privateFsftProofMode?: "none" | "aztec-private-proven" | "recursive-verified";
+  recursiveVkConfigured?: boolean;
   canVote: boolean;
   reason: string;
   source?: string;
@@ -201,12 +205,20 @@ export async function fetchGovernanceEligibility(
 
 export async function attestFsftForVoting(
   address: string,
-  accountIndex = 0
-): Promise<{ success: boolean; message?: string; error?: string; txHash?: string }> {
+  accountIndex = 0,
+  recursiveProof?: { verificationKey: unknown; proof: unknown; publicInputs: unknown[] }
+): Promise<{
+  success: boolean;
+  message?: string;
+  error?: string;
+  txHash?: string;
+  privateFsftProofMode?: "none" | "aztec-private-proven" | "recursive-verified";
+  recursiveVkConfigured?: boolean;
+}> {
   const res = await fetch("/api/governance/eligibility", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "attestFsftForVoting", address, accountIndex }),
+    body: JSON.stringify({ action: "attestFsftForVoting", address, accountIndex, recursiveProof }),
   });
   return res.json();
 }
@@ -384,6 +396,9 @@ export interface RewardsStats {
     fsftBucketEligible: boolean;
     governanceBucketHint: string;
     fsftRewardsAttested: boolean;
+    fsftProofMode?: "none" | "aztec-private-proven" | "recursive-verified";
+    recursiveVkConfigured?: boolean;
+    proofGuidance?: string;
     canClaimNow: boolean;
     nextSteps: string[];
   };
@@ -510,11 +525,22 @@ export async function claimRewards(address: string, accountIndex = 0): Promise<R
   return res.json();
 }
 
-export async function attestFsftForRewards(address: string, accountIndex = 0): Promise<{ success: boolean; message?: string; error?: string; txHash?: string }> {
+export async function attestFsftForRewards(
+  address: string,
+  accountIndex = 0,
+  recursiveProof?: { verificationKey: unknown; proof: unknown; publicInputs: unknown[] }
+): Promise<{
+  success: boolean;
+  message?: string;
+  error?: string;
+  txHash?: string;
+  fsftProofMode?: "none" | "aztec-private-proven" | "recursive-verified";
+  recursiveVkConfigured?: boolean;
+}> {
   const res = await fetch("/api/rewards/attest", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, accountIndex }),
+    body: JSON.stringify({ address, accountIndex, recursiveProof }),
   });
   return res.json();
 }

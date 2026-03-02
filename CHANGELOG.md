@@ -7,6 +7,14 @@ The format is based on Keep a Changelog.
 ## [Unreleased] - v3 Protocol Expansion
 
 ### Added
+- Added recursive-verification contract primitives (v3.1 rollout path):
+  - `FundToken.attest_private_holder_recursive(...)` + VK hash config/getter
+  - `HousingFund.record_asset_sale_recursive(...)` + valuation VK hash config/getter
+  - `ProtocolRewards.set_user_epoch_weights_recursive(...)` + rewards-weight VK hash config/getter
+- Added local recursive bundle tooling:
+  - `scripts/generate-recursive-proof-bundle.mjs` (builds VK/proof/public-input arrays + VK hash)
+  - `scripts/submit-recursive-bundle.mjs` (submits generated bundle to live governance/rewards attest routes)
+  - `proofs/recursive/*` demo Noir circuits for FSFT holder, valuation, and rewards-weight recursive paths
 - Added browser-local dev account generation in wallet UI (`dev-1000+`) with persistent `fs_generated_accounts` storage and auto-select on create.
 - Added simulation disclosure components:
   - Global `SimulationBanner`
@@ -26,6 +34,10 @@ The format is based on Keep a Changelog.
   - `GET /api/rewards/stats`
   - `POST /api/rewards/claim`
   - `POST /api/rewards/attest`
+- Added proof-assurance metadata to API payloads:
+  - Governance eligibility now returns `privateFsftProofMode` and `recursiveVkConfigured`
+  - Rewards stats now returns FSFT proof guidance/mode fields
+  - Fund stats now returns valuation proof mode fields
 - Added `frontend/src/app/dex/page.tsx` with investor-only DEX UI, NAV-band messaging, and user order controls.
 - Added protocol rewards client types and helper calls in `frontend/src/lib/contracts.ts`.
 - Added governance eligibility client helpers and FSFT voting attestation helpers in `frontend/src/lib/contracts.ts`.
@@ -36,6 +48,11 @@ The format is based on Keep a Changelog.
 - Added parked-capital policy storage/view/setters to `contracts/housing_fund/src/main.nr`.
 
 ### Changed
+- Added `frontend` npm script `typecheck` (`next typegen && tsc --noEmit --incremental false`) for reliable local TS checks.
+- Updated bootstrap/env flow to support recursive verifier VK hashes:
+  - `FUND_TOKEN_PRIVATE_HOLDER_VK_HASH`
+  - `HOUSING_FUND_VALUATION_VK_HASH`
+  - `PROTOCOL_REWARDS_WEIGHTS_VK_HASH`
 - Replaced placeholder private-holder attestation with a private proof-gated flow in `FundToken.attest_private_holder` (requires non-zero private FSFT balance before setting eligibility flag).
 - Updated rewards attestation route to attempt private-holder proof generation before recording FSFT rewards eligibility.
 - Expanded Fund/Rewards/Governance/Portfolio copy to explain what private-holder proofs verify and why they improve trust without exposing balances.

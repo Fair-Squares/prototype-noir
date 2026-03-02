@@ -67,6 +67,7 @@ export async function GET(request: NextRequest) {
     let rewardsClaimable = 0;
     let investorRole = false;
     let hasPrivateHolderProof = false;
+    let privateHolderVkConfigured = false;
 
     if (kycAddr) {
       try {
@@ -116,6 +117,21 @@ export async function GET(request: NextRequest) {
       totalSupply = Number(await ftContract.methods.total_supply().simulate({ from: selectedAddr }));
       hasPrivateHolderProof = Boolean(
         await ftContract.methods.has_private_holder_proof(ownerAddr).simulate({ from: selectedAddr })
+      );
+      privateHolderVkConfigured = Boolean(
+        await ftContract.methods
+          .get_private_holder_vk_hash()
+          .simulate({ from: selectedAddr })
+          .then((value: unknown) => {
+            if (typeof value === "bigint") return value !== 0n;
+            if (typeof value === "number") return value !== 0;
+            if (typeof value === "string") return value !== "0";
+            if (value && typeof value === "object" && "toString" in value) {
+              return (value as { toString: () => string }).toString() !== "0";
+            }
+            return false;
+          })
+          .catch(() => false)
       );
     }
 
@@ -184,6 +200,11 @@ export async function GET(request: NextRequest) {
     const hasDepositTicket = depositTicket > 0;
     const hasFsftExposure = fsftBalance > 0 || hasPrivateHolderProof;
     const canVote = investorRole && (hasDepositTicket || hasFsftExposure);
+    const privateFsftProofMode = hasPrivateHolderProof
+      ? privateHolderVkConfigured
+        ? "recursive-verified"
+        : "aztec-private-proven"
+      : "none";
     const governanceReason = !investorRole
       ? "Investor role required. Complete KYC first."
       : canVote
@@ -219,6 +240,8 @@ export async function GET(request: NextRequest) {
         hasDepositTicket,
         hasFsftExposure,
         hasFsftVotingAttestation: hasPrivateHolderProof,
+        privateFsftProofMode,
+        recursiveVkConfigured: privateHolderVkConfigured,
         canVote,
         reason: governanceReason,
       },

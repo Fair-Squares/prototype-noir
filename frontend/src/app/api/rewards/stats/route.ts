@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simGetRewardsStatus } from "@/lib/simulationStore";
 
+function isNonZeroField(value: unknown): boolean {
+  if (typeof value === "bigint") return value !== 0n;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") return value !== "0";
+  if (value && typeof value === "object" && "toString" in value) {
+    return (value as { toString: () => string }).toString() !== "0";
+  }
+  return false;
+}
+
 async function fetchJsonSafe(url: string): Promise<Record<string, unknown> | null> {
   try {
     const res = await fetch(url, { cache: "no-store" });
@@ -18,7 +28,9 @@ function buildEligibility(
   fsftBalance: number,
   fsftRewardsAttested: boolean,
   claimable: number,
-  claimMin: number
+  claimMin: number,
+  fsftProofMode: "none" | "aztec-private-proven" | "recursive-verified",
+  recursiveVkConfigured: boolean
 ) {
   const fsftBucketEligible = investorRole && fsftBalance > 0 && fsftRewardsAttested;
   const canClaimNow = claimable >= claimMin;
@@ -50,6 +62,11 @@ function buildEligibility(
       ? "Governance rewards are based on participation each epoch. Keep voting in active proposals."
       : "Complete KYC first to unlock governance rewards.",
     fsftRewardsAttested,
+    fsftProofMode,
+    recursiveVkConfigured,
+    proofGuidance: recursiveVkConfigured
+      ? "Recursive verifier is configured for FSFT holder eligibility."
+      : "FSFT eligibility currently uses Aztec private execution proof flow.",
     canClaimNow,
     nextSteps,
   };
@@ -95,9 +112,13 @@ export async function GET(request: NextRequest) {
     const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
     const rewardsContract = await Contract.at(AztecAddress.fromString(rewardsAddr), rewardsArtifact, actor.wallet);
 
-    const [configRaw, userRaw] = await Promise.all([
+    const [configRaw, userRaw, weightsVkHashRaw] = await Promise.all([
       rewardsContract.methods.get_rewards_config().simulate({ from: actorAddress }),
       rewardsContract.methods.get_user_stats(userAddress).simulate({ from: actorAddress }),
+      rewardsContract.methods
+        .get_rewards_weights_vk_hash()
+        .simulate({ from: actorAddress })
+        .catch(() => 0),
     ]);
 
     const cfg = Array.isArray(configRaw) ? configRaw : [8_000_000, 0, 0, 0, 120, 1];
@@ -153,13 +174,19 @@ export async function GET(request: NextRequest) {
     const portfolioGovernance =
       (portfolio?.governanceEligibility as { investorRole?: boolean } | undefined)?.investorRole ?? false;
     const investorRole = Boolean(governance?.investorRole ?? portfolioGovernance ?? false);
+    const fsftProofMode = (governance?.privateFsftProofMode ??
+      "none") as "none" | "aztec-private-proven" | "recursive-verified";
+    const recursiveVkConfigured =
+      Boolean(governance?.recursiveVkConfigured ?? false) || isNonZeroField(weightsVkHashRaw);
     const eligibility = buildEligibility(
       investorRole,
       depositBucketEligible,
       fsftBalance,
       fsftRewardsAttested,
       claimable,
-      claimMin
+      claimMin,
+      fsftProofMode,
+      recursiveVkConfigured
     );
 
     return NextResponse.json({

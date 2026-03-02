@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simCastVote } from "@/lib/simulationStore";
 
+function isNonZeroField(value: unknown): boolean {
+  if (typeof value === "bigint") return value !== 0n;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") return value !== "0";
+  if (value && typeof value === "object" && "toString" in value) {
+    return (value as { toString: () => string }).toString() !== "0";
+  }
+  return false;
+}
+
 export async function POST(request: NextRequest) {
   const { address, accountIndex = 0, proposalId, voteYes } = await request.json().catch(() => ({}));
 
@@ -71,6 +81,8 @@ export async function POST(request: NextRequest) {
             hasDepositTicket: false,
             hasFsftExposure: false,
             hasPrivateHolderProof: false,
+            privateFsftProofMode: "none",
+            recursiveVkConfigured: false,
             reason: "Complete KYC investor verification first.",
           },
         },
@@ -78,13 +90,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const [depositTicket, fsftBalance, hasPrivateHolderProof] = await Promise.all([
+    const [depositTicket, fsftBalance, hasPrivateHolderProof, privateHolderVkHash] = await Promise.all([
       hfContract.methods.get_user_deposit_ticket(userAddress).simulate({ from: accountAddress }),
       ftContract.methods.public_balance_of(userAddress).simulate({ from: accountAddress }),
       ftContract.methods.has_private_holder_proof(userAddress).simulate({ from: accountAddress }),
+      ftContract.methods
+        .get_private_holder_vk_hash()
+        .simulate({ from: accountAddress })
+        .catch(() => 0),
     ]);
     const hasDepositTicket = Number(depositTicket) > 0;
     const hasFsftExposure = Number(fsftBalance) > 0 || Boolean(hasPrivateHolderProof);
+    const recursiveVkConfigured = isNonZeroField(privateHolderVkHash);
+    const privateFsftProofMode = Boolean(hasPrivateHolderProof)
+      ? recursiveVkConfigured
+        ? "recursive-verified"
+        : "aztec-private-proven"
+      : "none";
     if (!hasDepositTicket && !hasFsftExposure) {
       return NextResponse.json(
         {
@@ -94,6 +116,8 @@ export async function POST(request: NextRequest) {
             hasDepositTicket,
             hasFsftExposure,
             hasPrivateHolderProof: Boolean(hasPrivateHolderProof),
+            privateFsftProofMode,
+            recursiveVkConfigured,
             reason: "No deposit or FSFT position found for this account.",
           },
         },
