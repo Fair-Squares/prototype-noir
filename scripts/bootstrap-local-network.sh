@@ -22,6 +22,9 @@ FUND_TOKEN_PRIVATE_HOLDER_VK_HASH="${FUND_TOKEN_PRIVATE_HOLDER_VK_HASH:-0}"
 HOUSING_FUND_VALUATION_VK_HASH="${HOUSING_FUND_VALUATION_VK_HASH:-0}"
 PROTOCOL_REWARDS_WEIGHTS_VK_HASH="${PROTOCOL_REWARDS_WEIGHTS_VK_HASH:-0}"
 REQUIRE_RECURSIVE_PROOFS="${REQUIRE_RECURSIVE_PROOFS:-false}"
+BOOTSTRAP_RETRY_ATTEMPTS="${BOOTSTRAP_RETRY_ATTEMPTS:-8}"
+BOOTSTRAP_RETRY_DELAY_SECONDS="${BOOTSTRAP_RETRY_DELAY_SECONDS:-6}"
+WALLET_MIN_FEE_PADDING="${WALLET_MIN_FEE_PADDING:-30}"
 
 CONTRACTS="kyc_verifier fund_token defi_vault housing_fund governance fsft_dex protocol_rewards"
 # eur_token / protocol_token reuse the fund_token artifact with separate deployments
@@ -50,6 +53,47 @@ log() { printf '\n[bootstrap] %s\n' "$1" >&2; }
 
 die() { log "FATAL: $1"; exit 1; }
 
+is_retryable_wallet_error() {
+  printf '%s' "$1" | grep -qE \
+    'maxFeesPerGas\.feePerL2Gas|Timeout awaiting isMined|ECONNREFUSED|fetch failed|socket hang up|429|503|temporarily unavailable'
+}
+
+wallet_send_with_retries() {
+  local mode=$1
+  local label=$2
+  shift 2
+
+  local attempt=1
+  local output=""
+  local rc=0
+  while [ "$attempt" -le "$BOOTSTRAP_RETRY_ATTEMPTS" ]; do
+    log "${label} (attempt ${attempt}/${BOOTSTRAP_RETRY_ATTEMPTS})..."
+    set +e
+    output=$("$@" 2>&1)
+    rc=$?
+    set -e
+    printf '%s\n' "$output" >&2
+
+    if [ "$rc" -eq 0 ]; then
+      return 0
+    fi
+
+    if [ "$attempt" -lt "$BOOTSTRAP_RETRY_ATTEMPTS" ] && is_retryable_wallet_error "$output"; then
+      log "Retryable wallet error for ${label}; sleeping ${BOOTSTRAP_RETRY_DELAY_SECONDS}s"
+      sleep "$BOOTSTRAP_RETRY_DELAY_SECONDS"
+      attempt=$((attempt + 1))
+      continue
+    fi
+    break
+  done
+
+  if [ "$mode" = "required" ]; then
+    die "${label} failed after ${BOOTSTRAP_RETRY_ATTEMPTS} attempts"
+  fi
+  log "WARN: ${label} failed after ${BOOTSTRAP_RETRY_ATTEMPTS} attempts"
+  return 1
+}
+
 # Aztec's cli-wallet doesn't ship with 'inquirer' in the Docker image.
 # Create a minimal ESM shim so the module resolves without error.
 fix_inquirer() {
@@ -63,6 +107,26 @@ fix_inquirer() {
       > "$INQDIR/index.js"
     log "inquirer shim installed"
   fi
+}
+
+# In this Aztec image version, cli-wallet computes max fees from current min fees
+# using a fixed padding constant. During bootstrap that can be too low and cause
+# "maxFeesPerGas.feePerL2Gas ... must be >= gasFees.feePerL2Gas" failures.
+# Patch the runtime constant to provide enough headroom for local-network spikes.
+fix_wallet_fee_padding() {
+  fee_file="/usr/src/yarn-project/cli-wallet/dest/utils/constants.js"
+  if [ ! -f "$fee_file" ]; then
+    log "WARN: cli-wallet fee constants file not found at ${fee_file}"
+    return
+  fi
+
+  if ! grep -q 'export const MIN_FEE_PADDING' "$fee_file"; then
+    log "WARN: MIN_FEE_PADDING constant not found in cli-wallet constants"
+    return
+  fi
+
+  sed -i -E "s/export const MIN_FEE_PADDING = [0-9.]+;/export const MIN_FEE_PADDING = ${WALLET_MIN_FEE_PADDING};/" "$fee_file"
+  log "Set cli-wallet MIN_FEE_PADDING=${WALLET_MIN_FEE_PADDING}"
 }
 
 # -- 1. Wait for PXE ----------------------------------------------------------
@@ -164,18 +228,38 @@ deploy_contracts() {
   _deploy() {
     local label=$1 artifact=$2
     shift 2
-    log "Deploying ${label}..."
-    # tee /dev/stderr: streams all wallet output to stderr for visibility
-    # grep then captures just the address line on stdout for $() capture
-    $AZTEC_WALLET_BIN deploy \
-      "${ROOT_DIR}/contracts/${artifact}" \
-      --init constructor \
-      --from accounts:test0 \
-      "$@" \
-      -a "${label}" 2>&1 \
-      | tee /dev/stderr \
-      | grep -oP '(?i)contract\s+deployed\s+at\s+\K0x[0-9a-fA-F]+' \
-      | tail -1
+    local attempt=1
+    local output=""
+    local rc=0
+    local address=""
+    while [ "$attempt" -le "$BOOTSTRAP_RETRY_ATTEMPTS" ]; do
+      log "Deploying ${label} (attempt ${attempt}/${BOOTSTRAP_RETRY_ATTEMPTS})..."
+      set +e
+      output=$($AZTEC_WALLET_BIN deploy \
+        "${ROOT_DIR}/contracts/${artifact}" \
+        --init constructor \
+        --from accounts:test0 \
+        "$@" \
+        -a "${label}" 2>&1)
+      rc=$?
+      set -e
+      printf '%s\n' "$output" >&2
+      address=$(printf '%s\n' "$output" | grep -oP '(?i)contract\s+deployed\s+at\s+\K0x[0-9a-fA-F]+' | tail -1 || true)
+
+      if [ "$rc" -eq 0 ] && [ -n "$address" ]; then
+        printf '%s\n' "$address"
+        return 0
+      fi
+
+      if [ "$attempt" -lt "$BOOTSTRAP_RETRY_ATTEMPTS" ] && is_retryable_wallet_error "$output"; then
+        log "Retryable deploy error for ${label}; sleeping ${BOOTSTRAP_RETRY_DELAY_SECONDS}s"
+        sleep "$BOOTSTRAP_RETRY_DELAY_SECONDS"
+        attempt=$((attempt + 1))
+        continue
+      fi
+      break
+    done
+    return 1
   }
 
   KYC_ADDR=$(_deploy "kyc_verifier" \
@@ -248,108 +332,130 @@ wire_contracts() {
   # aztec-wallet send: no --artifact flag; wallet resolves ABI from deployed
   # contract DB (populated during deploy via -a alias).
   log "Wiring HousingFund.set_contracts(kyc, token, vault, gov)..."
-  $AZTEC_WALLET_BIN send set_contracts \
+  wallet_send_with_retries required "HousingFund.set_contracts" \
+    $AZTEC_WALLET_BIN send set_contracts \
     --from accounts:test0 \
     --contract-address "${FUND_ADDR}" \
-    --args "${KYC_ADDR}" "${TOKEN_ADDR}" "${VAULT_ADDR}" "${GOV_ADDR}" \
-    2>&1 >&2 || log "WARN: set_contracts failed"
+    --args "${KYC_ADDR}" "${TOKEN_ADDR}" "${VAULT_ADDR}" "${GOV_ADDR}"
 
   log "Wiring DeFiVault.set_housing_fund(housing_fund)..."
-  $AZTEC_WALLET_BIN send set_housing_fund \
+  wallet_send_with_retries required "DeFiVault.set_housing_fund" \
+    $AZTEC_WALLET_BIN send set_housing_fund \
     --from accounts:test0 \
     --contract-address "${VAULT_ADDR}" \
-    --args "${FUND_ADDR}" \
-    2>&1 >&2 || log "WARN: set_housing_fund failed"
+    --args "${FUND_ADDR}"
 
   # Transfer FSFT admin to HousingFund so claim_distribution can mint
   # permissionlessly via contract logic.
   if [ "${FUND_TOKEN_PRIVATE_HOLDER_VK_HASH}" != "0" ]; then
-    log "Setting FundToken private-holder recursive VK hash..."
-    $AZTEC_WALLET_BIN send set_private_holder_vk_hash \
+    wallet_send_with_retries required "FundToken.set_private_holder_vk_hash" \
+      $AZTEC_WALLET_BIN send set_private_holder_vk_hash \
       --from accounts:test0 \
       --contract-address "${TOKEN_ADDR}" \
-      --args "${FUND_TOKEN_PRIVATE_HOLDER_VK_HASH}" \
-      2>&1 >&2 || log "WARN: FundToken.set_private_holder_vk_hash failed"
+      --args "${FUND_TOKEN_PRIVATE_HOLDER_VK_HASH}"
   fi
 
   if [ "${HOUSING_FUND_VALUATION_VK_HASH}" != "0" ]; then
-    log "Setting HousingFund valuation recursive VK hash..."
-    $AZTEC_WALLET_BIN send set_valuation_vk_hash \
+    wallet_send_with_retries required "HousingFund.set_valuation_vk_hash" \
+      $AZTEC_WALLET_BIN send set_valuation_vk_hash \
       --from accounts:test0 \
       --contract-address "${FUND_ADDR}" \
-      --args "${HOUSING_FUND_VALUATION_VK_HASH}" \
-      2>&1 >&2 || log "WARN: HousingFund.set_valuation_vk_hash failed"
+      --args "${HOUSING_FUND_VALUATION_VK_HASH}"
   fi
 
   if [ "${PROTOCOL_REWARDS_WEIGHTS_VK_HASH}" != "0" ]; then
-    log "Setting ProtocolRewards weights recursive VK hash..."
-    $AZTEC_WALLET_BIN send set_rewards_weights_vk_hash \
+    wallet_send_with_retries required "ProtocolRewards.set_rewards_weights_vk_hash" \
+      $AZTEC_WALLET_BIN send set_rewards_weights_vk_hash \
       --from accounts:test0 \
       --contract-address "${REWARDS_ADDR}" \
-      --args "${PROTOCOL_REWARDS_WEIGHTS_VK_HASH}" \
-      2>&1 >&2 || log "WARN: ProtocolRewards.set_rewards_weights_vk_hash failed"
+      --args "${PROTOCOL_REWARDS_WEIGHTS_VK_HASH}"
   fi
 
   log "Transferring FSFT admin to housing fund..."
-  $AZTEC_WALLET_BIN send set_admin \
+  wallet_send_with_retries required "FundToken.set_admin(housing_fund)" \
+    $AZTEC_WALLET_BIN send set_admin \
     --from accounts:test0 \
     --contract-address "${TOKEN_ADDR}" \
-    --args "${FUND_ADDR}" \
-    2>&1 >&2 || log "WARN: FundToken.set_admin(housing_fund) failed"
+    --args "${FUND_ADDR}"
 
   log "Transferring protocol token admin to protocol rewards..."
-  $AZTEC_WALLET_BIN send set_admin \
+  wallet_send_with_retries required "ProtocolToken.set_admin(protocol_rewards)" \
+    $AZTEC_WALLET_BIN send set_admin \
     --from accounts:test0 \
     --contract-address "${PROTOCOL_TOKEN_ADDR}" \
-    --args "${REWARDS_ADDR}" \
-    2>&1 >&2 || log "WARN: ProtocolToken.set_admin(protocol_rewards) failed"
+    --args "${REWARDS_ADDR}"
+
+  # Seed KYC roles for local demo accounts so HousingFund.deposit passes its
+  # investor-role gate checks.
+  log "Registering KYC investor roles for test accounts..."
+  wallet_send_with_retries required "KYCVerifier.register_kyc(test0)" \
+    $AZTEC_WALLET_BIN send register_kyc \
+    --from accounts:test0 \
+    --contract-address "${KYC_ADDR}" \
+    --args "${ADMIN_ADDR}"
+
+  if [ -n "${TEST1_ADDR:-}" ]; then
+    wallet_send_with_retries required "KYCVerifier.register_kyc(test1)" \
+      $AZTEC_WALLET_BIN send register_kyc \
+      --from accounts:test0 \
+      --contract-address "${KYC_ADDR}" \
+      --args "${TEST1_ADDR}"
+  fi
+
+  if [ -n "${TEST2_ADDR:-}" ]; then
+    wallet_send_with_retries required "KYCVerifier.register_kyc(test2)" \
+      $AZTEC_WALLET_BIN send register_kyc \
+      --from accounts:test0 \
+      --contract-address "${KYC_ADDR}" \
+      --args "${TEST2_ADDR}"
+  fi
 
   # -- Mint EUR stablecoin to all test accounts (public balances) ---------------
   log "Minting EUR to test accounts..."
   log "  mint test0 -> ${ADMIN_ADDR} amount=600000"
   # test0 gets 600 000 EUR (will deposit 500 000, keeps 100 000 for demo)
-  $AZTEC_WALLET_BIN send mint_public \
+  wallet_send_with_retries required "EUR.mint_public(test0)" \
+    $AZTEC_WALLET_BIN send mint_public \
     --from accounts:test0 \
     --contract-address "${EUR_ADDR}" \
-    --args "${ADMIN_ADDR}" 600000 \
-    2>&1 >&2 || log "WARN: mint EUR test0 failed"
+    --args "${ADMIN_ADDR}" 600000
 
   # test1 gets 50 000 EUR
   if [ -n "${TEST1_ADDR:-}" ]; then
     log "  mint test1 -> ${TEST1_ADDR} amount=50000"
-    $AZTEC_WALLET_BIN send mint_public \
+    wallet_send_with_retries required "EUR.mint_public(test1)" \
+      $AZTEC_WALLET_BIN send mint_public \
       --from accounts:test0 \
       --contract-address "${EUR_ADDR}" \
-      --args "${TEST1_ADDR}" 50000 \
-      2>&1 >&2 || log "WARN: mint EUR test1 failed"
+      --args "${TEST1_ADDR}" 50000
   fi
 
   # test2 gets 50 000 EUR
   if [ -n "${TEST2_ADDR:-}" ]; then
     log "  mint test2 -> ${TEST2_ADDR} amount=50000"
-    $AZTEC_WALLET_BIN send mint_public \
+    wallet_send_with_retries required "EUR.mint_public(test2)" \
+      $AZTEC_WALLET_BIN send mint_public \
       --from accounts:test0 \
       --contract-address "${EUR_ADDR}" \
-      --args "${TEST2_ADDR}" 50000 \
-      2>&1 >&2 || log "WARN: mint EUR test2 failed"
+      --args "${TEST2_ADDR}" 50000
   fi
 
   # -- Initial housing fund deposit from test0 (500 000 EUR) -------------------
   # First transfer EUR to housing fund (test0 → housing_fund)
   log "Transferring 500000 EUR from test0 to housing fund..."
-  $AZTEC_WALLET_BIN send transfer_public \
+  wallet_send_with_retries required "EUR.transfer_public(test0->housing_fund)" \
+    $AZTEC_WALLET_BIN send transfer_public \
     --from accounts:test0 \
     --contract-address "${EUR_ADDR}" \
-    --args "${FUND_ADDR}" 500000 \
-    2>&1 >&2 || log "WARN: EUR transfer to housing fund failed"
+    --args "${FUND_ADDR}" 500000
 
   # Then record the deposit in housing fund counter
   log "Recording initial deposit in housing fund..."
-  $AZTEC_WALLET_BIN send deposit \
+  wallet_send_with_retries required "HousingFund.deposit(500000)" \
+    $AZTEC_WALLET_BIN send deposit \
     --from accounts:test0 \
     --contract-address "${FUND_ADDR}" \
-    --args 500000 \
-    2>&1 >&2 || log "WARN: housing fund initial deposit failed"
+    --args 500000
 
   log "Initial housing fund balance: 500 000 EUR (deposited by test0)"
 }
@@ -449,6 +555,7 @@ main() {
   compile_contracts
   generate_typescript
   fix_inquirer
+  fix_wallet_fee_padding
   deploy_contracts
   wire_contracts
   save_addresses

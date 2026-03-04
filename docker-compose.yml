@@ -24,9 +24,11 @@ services:
         condition: service_completed_successfully
     environment:
       - NEXT_PUBLIC_DEV_MODE=true
-      # AZTEC_LIVE and NEXT_PUBLIC_SIMULATION are written by bootstrap to
-      # /env/.env.contracts (copied to /app/.env.local at startup).
-      # Do NOT set them here — container env vars override .env.local.
+      # Force live mode for the aztec profile. The frontend Docker image sets
+      # NEXT_PUBLIC_SIMULATION=true by default, so we must override it here.
+      - NEXT_PUBLIC_SIMULATION=false
+      - AZTEC_LIVE=true
+      # Contract addresses are still loaded from /env/.env.contracts.
       - NEXT_PUBLIC_AZTEC_PXE_URL=http://aztec:8080
       - NEXT_TELEMETRY_DISABLED=1
     volumes:
@@ -77,7 +79,12 @@ services:
     # Anvil ships inside the Aztec image at /opt/foundry/bin/anvil — no
     # separate foundry image needed.
     # Keep Anvil quiet by default. Override with e.g. ANVIL_LOG_ARG=-v when debugging.
-    entrypoint: ["/opt/foundry/bin/anvil", "--host", "0.0.0.0", "--port", "8545", "--chain-id", "31337", "--block-time", "${ANVIL_BLOCK_TIME:-1}", "${ANVIL_LOG_ARG:---quiet}"]
+    #
+    # IMPORTANT:
+    # Aztec local-network sets L1 timestamp interval to 12s. If Anvil mines every 1s,
+    # L1 time advances too quickly and sequencer slot checks can stall startup.
+    # Default to 12s to keep L1 time progression aligned.
+    entrypoint: ["/opt/foundry/bin/anvil", "--host", "0.0.0.0", "--port", "8545", "--chain-id", "31337", "--block-time", "${ANVIL_BLOCK_TIME:-12}", "${ANVIL_LOG_ARG:---quiet}"]
     ports:
       - "8545:8545"
     healthcheck:
@@ -102,6 +109,8 @@ services:
       LOG_LEVEL: ${AZTEC_LOG_LEVEL:-info}
       ETHEREUM_HOSTS: http://anvil:8545
       L1_CHAIN_ID: "31337"
+      # Forge L1 deployment can take longer with 12s block times; keep retries resilient.
+      FORGE_BROADCAST_TIMEOUT: ${FORGE_BROADCAST_TIMEOUT:-180}
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/status"]
       interval: 15s
