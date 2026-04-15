@@ -13,7 +13,7 @@ function isNonZeroField(value: unknown): boolean {
 }
 
 export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => ({}));
+  const body = await request.json();
   const { address, accountIndex = 0, recursiveProof } = body as {
     address?: string;
     accountIndex?: number;
@@ -75,8 +75,7 @@ export async function POST(request: NextRequest) {
         const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, actor.wallet);
         const privateHolderVkHash = await ftContract.methods
           .get_private_holder_vk_hash()
-          .simulate({ from: actorAddress })
-          .catch(() => 0);
+          .simulate({ from: actorAddress });
         recursiveVkConfigured = isNonZeroField(privateHolderVkHash);
         const requireRecursive = process.env.REQUIRE_RECURSIVE_PROOFS === "true";
         const hasRecursivePayload =
@@ -128,7 +127,7 @@ export async function POST(request: NextRequest) {
           ? "Private FSFT proof generated (recursive verifier configured) and rewards eligibility recorded"
           : "Private FSFT proof generated and rewards eligibility recorded"
         : "FSFT rewards eligibility recorded",
-      txHash: receipt.txHash?.toString() ?? "unknown",
+      txHash: (() => { const txHash = receipt.txHash?.toString(); if (!txHash) { throw new Error("Transaction receipt missing txHash"); } return txHash; })(),
       holderProofGenerated,
       fsftProofMode: holderProofMode,
       recursiveVkConfigured,

@@ -3,7 +3,7 @@ import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simClaimDistribution } from "@/lib/simulationStore";
 
 export async function POST(request: NextRequest) {
-  const { proposalId, accountIndex = 0, address } = await request.json().catch(() => ({}));
+  const { proposalId, accountIndex = 0, address } = await request.json();
 
   if (proposalId === undefined) {
     return NextResponse.json({ error: "proposalId required" }, { status: 400 });
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       claimedAmount: claimableAmount,
-      txHash: receipt.txHash?.toString() ?? "unknown",
+      txHash: (() => { const txHash = receipt.txHash?.toString(); if (!txHash) { throw new Error("Transaction receipt missing txHash"); } return txHash; })(),
       message: "Distribution claimed",
     });
   } catch (error: unknown) {

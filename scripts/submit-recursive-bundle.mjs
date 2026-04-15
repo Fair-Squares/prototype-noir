@@ -112,7 +112,7 @@ async function main() {
     body: JSON.stringify(body),
   });
 
-  const data = await res.json().catch(() => ({}));
+  const data = await res.json();
   console.log(`HTTP ${res.status}`);
   console.log(JSON.stringify(data, null, 2));
 

@@ -20,6 +20,7 @@ pub contract Governance {
         },
         protocol::{
             address::AztecAddress,
+            hash::poseidon2_hash,
             traits::ToField,
         },
         state_vars::{Map, PublicMutable},
@@ -137,9 +138,8 @@ pub contract Governance {
             "proposal is not active",
         );
 
-        // Simple double-vote prevention using voter address + proposal_id as key
-        // We use the voter's field representation XOR'd with pid as a simple hash
-        let vote_key = voter.to_field() + pid;
+        // Simple double-vote prevention using a collision-resistant voter+proposal key.
+        let vote_key = poseidon2_hash([voter.to_field(), pid]);
         assert(!self.storage.has_voted.at(vote_key).read(), "already voted");
         self.storage.has_voted.at(vote_key).write(true);
 

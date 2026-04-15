@@ -13,7 +13,7 @@ function isNonZeroField(value: unknown): boolean {
 }
 
 export async function POST(request: NextRequest) {
-  const { address, accountIndex = 0, proposalId, voteYes } = await request.json().catch(() => ({}));
+  const { address, accountIndex = 0, proposalId, voteYes } = await request.json();
 
   if (!address || proposalId === undefined || voteYes === undefined) {
     return NextResponse.json({ error: "address, proposalId and voteYes required" }, { status: 400 });
@@ -96,8 +96,7 @@ export async function POST(request: NextRequest) {
       ftContract.methods.has_private_holder_proof(userAddress).simulate({ from: accountAddress }),
       ftContract.methods
         .get_private_holder_vk_hash()
-        .simulate({ from: accountAddress })
-        .catch(() => 0),
+        .simulate({ from: accountAddress }),
     ]);
     const hasDepositTicket = Number(depositTicket) > 0;
     const hasFsftExposure = Number(fsftBalance) > 0 || Boolean(hasPrivateHolderProof);
@@ -136,7 +135,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: `Vote on proposal #${proposalId} recorded`,
-      txHash: receipt.txHash?.toString() ?? "unknown",
+      txHash: (() => { const txHash = receipt.txHash?.toString(); if (!txHash) { throw new Error("Transaction receipt missing txHash"); } return txHash; })(),
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);

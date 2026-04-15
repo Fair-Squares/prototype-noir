@@ -34,6 +34,8 @@ CONTRACTS="kyc_verifier fund_token defi_vault housing_fund governance fsft_dex p
 AZTEC_BIN="node --no-warnings /usr/src/yarn-project/aztec/dest/bin/index.js"
 # aztec-wallet: separate package for deploying/sending txs
 AZTEC_WALLET_BIN="node --no-warnings /usr/src/yarn-project/cli-wallet/dest/bin/index.js"
+# aztec-nargo: Aztec wrapper for Noir compile/test flows (preferred over raw nargo)
+AZTEC_NARGO_BIN="$(command -v aztec-nargo 2>/dev/null || true)"
 # nargo: Noir compiler (aztec fork)
 NARGO_BIN="/usr/src/noir/noir-repo/target/release/nargo"
 # bb: barretenberg binary — handles AVM transpilation + VK generation
@@ -52,6 +54,12 @@ fi
 log() { printf '\n[bootstrap] %s\n' "$1" >&2; }
 
 die() { log "FATAL: $1"; exit 1; }
+
+require_value() {
+  local label=$1
+  local value=${2:-}
+  [ -n "$value" ] || die "Missing required value: ${label}"
+}
 
 is_retryable_wallet_error() {
   printf '%s' "$1" | grep -qE \
@@ -153,8 +161,15 @@ compile_contracts() {
     artifact_dir="${ROOT_DIR}/contracts/${c}/target"
     cd "${ROOT_DIR}/contracts/${c}"
 
-    # Step 1: compile Noir to ACIR (nargo not in PATH, use full binary path)
-    $NARGO_BIN compile --silence-warnings 2>&1 || die "Could not compile ${c}"
+    # Step 1: compile Noir to ACIR.
+    # Prefer Aztec wrapper commands; fall back to raw nargo only if wrapper is unavailable.
+    if $AZTEC_BIN help compile >/dev/null 2>&1; then
+      $AZTEC_BIN compile 2>&1 || die "Could not compile ${c} with aztec compile"
+    elif [ -n "$AZTEC_NARGO_BIN" ]; then
+      "$AZTEC_NARGO_BIN" compile --silence-warnings 2>&1 || die "Could not compile ${c} with aztec-nargo"
+    else
+      $NARGO_BIN compile --silence-warnings 2>&1 || die "Could not compile ${c} with nargo fallback"
+    fi
 
     # Verify artifact was produced
     if [ ! -d "$artifact_dir" ] || [ -z "$(ls "$artifact_dir"/*.json 2>/dev/null)" ]; then
@@ -195,15 +210,13 @@ generate_typescript() {
   for c in $CONTRACTS; do
     target_dir="${ROOT_DIR}/contracts/${c}/target"
     log "Generating TypeScript for ${c}..."
-    $AZTEC_BIN codegen "${target_dir}" --outdir "${artifacts_dir}" 2>&1 || {
-      log "WARN: codegen failed for ${c}, frontend will use simulation fallback"
-    }
+    $AZTEC_BIN codegen "${target_dir}" --outdir "${artifacts_dir}" 2>&1 || die "TypeScript codegen failed for ${c}"
   done
 
-  # Copy raw JSON artifacts too (for loadContractArtifact fallback)
+  # Copy raw JSON artifacts too (for loadContractArtifact usage).
   for c in $CONTRACTS; do
     target_dir="${ROOT_DIR}/contracts/${c}/target"
-    cp "${target_dir}"/*.json "${artifacts_dir}/" 2>/dev/null || true
+    cp "${target_dir}"/*.json "${artifacts_dir}/" 2>/dev/null || die "Failed to copy artifacts for ${c}"
   done
 
   log "TypeScript artifacts generated in ${artifacts_dir}"
@@ -217,11 +230,14 @@ deploy_contracts() {
   mkdir -p "$TMPDIR"
 
   log "Importing test accounts..."
-  $AZTEC_WALLET_BIN import-test-accounts 2>&1 | tee "$TMPDIR/import.log" >&2 || log "WARN: Could not import test accounts"
+  $AZTEC_WALLET_BIN import-test-accounts 2>&1 | tee "$TMPDIR/import.log" >&2 || die "Could not import test accounts"
   ADMIN_ADDR=$(grep -oP 'Address:\s+\K0x[0-9a-fA-F]+' "$TMPDIR/import.log" | sed -n '1p')
   TEST1_ADDR=$(grep -oP 'Address:\s+\K0x[0-9a-fA-F]+' "$TMPDIR/import.log" | sed -n '2p')
   TEST2_ADDR=$(grep -oP 'Address:\s+\K0x[0-9a-fA-F]+' "$TMPDIR/import.log" | sed -n '3p')
-  log "Accounts: test0=${ADMIN_ADDR:-unknown} test1=${TEST1_ADDR:-unknown} test2=${TEST2_ADDR:-unknown}"
+  require_value "test0 account address" "$ADMIN_ADDR"
+  require_value "test1 account address" "$TEST1_ADDR"
+  require_value "test2 account address" "$TEST2_ADDR"
+  log "Accounts: test0=${ADMIN_ADDR} test1=${TEST1_ADDR} test2=${TEST2_ADDR}"
 
   # Deploy a contract; echoes full wallet output to stderr (visible in docker logs)
   # and returns the deployed address on stdout for capture via $().
@@ -465,19 +481,32 @@ wire_contracts() {
 save_addresses() {
   log "Extracting deployed contract addresses..."
 
-  # Addresses are captured during deploy_contracts and exported
-  admin_addr="${ADMIN_ADDR:-UNKNOWN}"
-  test1_addr="${TEST1_ADDR:-UNKNOWN}"
-  test2_addr="${TEST2_ADDR:-UNKNOWN}"
-  kyc_addr="${KYC_ADDR:-DEPLOY_FAILED}"
-  token_addr="${TOKEN_ADDR:-DEPLOY_FAILED}"
-  vault_addr="${VAULT_ADDR:-DEPLOY_FAILED}"
-  fund_addr="${FUND_ADDR:-DEPLOY_FAILED}"
-  gov_addr="${GOV_ADDR:-DEPLOY_FAILED}"
-  dex_addr="${DEX_ADDR:-DEPLOY_FAILED}"
-  eur_addr="${EUR_ADDR:-DEPLOY_FAILED}"
-  protocol_token_addr="${PROTOCOL_TOKEN_ADDR:-DEPLOY_FAILED}"
-  rewards_addr="${REWARDS_ADDR:-DEPLOY_FAILED}"
+  # Addresses are captured during deploy_contracts and exported.
+  require_value "ADMIN_ADDR" "${ADMIN_ADDR:-}"
+  require_value "TEST1_ADDR" "${TEST1_ADDR:-}"
+  require_value "TEST2_ADDR" "${TEST2_ADDR:-}"
+  require_value "KYC_ADDR" "${KYC_ADDR:-}"
+  require_value "TOKEN_ADDR" "${TOKEN_ADDR:-}"
+  require_value "VAULT_ADDR" "${VAULT_ADDR:-}"
+  require_value "FUND_ADDR" "${FUND_ADDR:-}"
+  require_value "GOV_ADDR" "${GOV_ADDR:-}"
+  require_value "DEX_ADDR" "${DEX_ADDR:-}"
+  require_value "EUR_ADDR" "${EUR_ADDR:-}"
+  require_value "PROTOCOL_TOKEN_ADDR" "${PROTOCOL_TOKEN_ADDR:-}"
+  require_value "REWARDS_ADDR" "${REWARDS_ADDR:-}"
+
+  admin_addr="${ADMIN_ADDR}"
+  test1_addr="${TEST1_ADDR}"
+  test2_addr="${TEST2_ADDR}"
+  kyc_addr="${KYC_ADDR}"
+  token_addr="${TOKEN_ADDR}"
+  vault_addr="${VAULT_ADDR}"
+  fund_addr="${FUND_ADDR}"
+  gov_addr="${GOV_ADDR}"
+  dex_addr="${DEX_ADDR}"
+  eur_addr="${EUR_ADDR}"
+  protocol_token_addr="${PROTOCOL_TOKEN_ADDR}"
+  rewards_addr="${REWARDS_ADDR}"
 
   env_content="# Auto-generated by bootstrap-local-network.sh
 # $(date -u +%Y-%m-%dT%H:%M:%SZ)

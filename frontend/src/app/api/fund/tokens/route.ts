@@ -148,7 +148,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const { address, accountIndex = 0, amount = 50_000 } = await request.json().catch(() => ({}));
+  const { address, accountIndex = 0, amount = 50_000 } = await request.json();
 
   if (!address) {
     return NextResponse.json({ error: "address required" }, { status: 400 });
@@ -202,7 +202,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: `Topped up ${Number(amount).toLocaleString()} EURs to ${address}`,
-      txHash: receipt.txHash?.toString() ?? "unknown",
+      txHash: (() => { const txHash = receipt.txHash?.toString(); if (!txHash) { throw new Error("Transaction receipt missing txHash"); } return txHash; })(),
       source: "live",
     });
   } catch (error: unknown) {

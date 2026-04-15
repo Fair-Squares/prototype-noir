@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => ({}));
+  const body = await request.json();
   const { address, side, amount, limitPriceEur, accountIndex = 0, ttlBlocks } = body as {
     address?: string;
     side?: "buy" | "sell";
@@ -194,7 +194,7 @@ export async function POST(request: NextRequest) {
       success: true,
       orderId: newOrderId,
       message: "Order placed",
-      txHash: receipt.txHash?.toString() ?? "unknown",
+      txHash: (() => { const txHash = receipt.txHash?.toString(); if (!txHash) { throw new Error("Transaction receipt missing txHash"); } return txHash; })(),
       source: "live",
     });
   } catch (error: unknown) {

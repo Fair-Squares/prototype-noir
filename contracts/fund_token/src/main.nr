@@ -19,6 +19,7 @@ pub contract FundToken {
         messages::message_delivery::MessageDelivery,
         protocol::{
             address::AztecAddress,
+            hash::poseidon2_hash,
             traits::ToField,
         },
         state_vars::{Map, Owned, PublicMutable},
@@ -147,7 +148,7 @@ pub contract FundToken {
     fn set_private_spender(spender: AztecAddress, allowed: bool) {
         assert(!spender.is_zero(), "invalid spender");
         let owner = self.msg_sender();
-        let key = owner.to_field() + spender.to_field();
+        let key = poseidon2_hash([owner.to_field(), spender.to_field()]);
         self.storage.delegated_private_spenders.at(key).write(allowed);
     }
 
@@ -270,7 +271,7 @@ pub contract FundToken {
     #[external("public")]
     #[only_self]
     fn _assert_private_spender_approved(owner: AztecAddress, spender: AztecAddress) {
-        let key = owner.to_field() + spender.to_field();
+        let key = poseidon2_hash([owner.to_field(), spender.to_field()]);
         assert(self.storage.delegated_private_spenders.at(key).read(), "spender not approved");
     }
 
@@ -332,7 +333,7 @@ pub contract FundToken {
 
     #[external("utility")]
     unconstrained fn is_private_spender_approved(owner: AztecAddress, spender: AztecAddress) -> pub bool {
-        let key = owner.to_field() + spender.to_field();
+        let key = poseidon2_hash([owner.to_field(), spender.to_field()]);
         self.storage.delegated_private_spenders.at(key).read()
     }
 

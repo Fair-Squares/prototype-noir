@@ -86,8 +86,7 @@ export async function GET(request: NextRequest) {
       ftContract.methods.has_private_holder_proof(userAddress).simulate({ from: actorAddress }),
       ftContract.methods
         .get_private_holder_vk_hash()
-        .simulate({ from: actorAddress })
-        .catch(() => 0),
+        .simulate({ from: actorAddress }),
     ]);
 
     const hasDepositTicket = Number(depositTicket) > 0;
@@ -123,7 +122,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => ({}));
+  const body = await request.json();
   const { action, address, accountIndex = 0, recursiveProof } = body as {
     action?: string;
     address?: string;
@@ -183,8 +182,7 @@ export async function POST(request: NextRequest) {
     const actorAddress = AztecAddress.fromString(actor.address);
     const privateHolderVkHash = await ftContract.methods
       .get_private_holder_vk_hash()
-      .simulate({ from: actorAddress })
-      .catch(() => 0);
+      .simulate({ from: actorAddress });
     const recursiveVkConfigured = isNonZeroField(privateHolderVkHash);
     const requireRecursive = process.env.REQUIRE_RECURSIVE_PROOFS === "true";
     const hasRecursivePayload =
@@ -220,7 +218,7 @@ export async function POST(request: NextRequest) {
         : recursiveVkConfigured
         ? "Private FSFT holder proof generated (recursive verifier is configured)"
         : "Private FSFT holder proof generated",
-      txHash: receipt.txHash?.toString() ?? "unknown",
+      txHash: (() => { const txHash = receipt.txHash?.toString(); if (!txHash) { throw new Error("Transaction receipt missing txHash"); } return txHash; })(),
       privateFsftProofMode: hasRecursivePayload ? "recursive-verified" : "aztec-private-proven",
       recursiveVkConfigured,
       source: "live",

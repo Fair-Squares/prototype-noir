@@ -3,7 +3,7 @@ import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simClaimRewards } from "@/lib/simulationStore";
 
 export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => ({}));
+  const body = await request.json();
   const { address, accountIndex = 0 } = body as { address?: string; accountIndex?: number };
 
   if (!address) {
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
       success: true,
       claimed: claimableBefore,
       message: "Protocol rewards claimed",
-      txHash: receipt.txHash?.toString() ?? "unknown",
+      txHash: (() => { const txHash = receipt.txHash?.toString(); if (!txHash) { throw new Error("Transaction receipt missing txHash"); } return txHash; })(),
       source: "live",
     });
   } catch (error: unknown) {

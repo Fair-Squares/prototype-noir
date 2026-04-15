@@ -22,6 +22,7 @@ pub contract HousingFund {
         },
         protocol::{
             address::AztecAddress,
+            hash::poseidon2_hash,
             traits::ToField,
         },
         state_vars::{Map, PublicMutable},
@@ -272,7 +273,7 @@ pub contract HousingFund {
         assert(self.storage.d_open.at(pid).read(), "distribution is not open");
 
         let caller = self.msg_sender();
-        let claim_key = caller.to_field() + pid;
+        let claim_key = poseidon2_hash([caller.to_field(), pid]);
         assert(!self.storage.d_has_claimed.at(claim_key).read(), "already claimed");
 
         let snapshot_total = self.storage.d_total_deposits_snapshot.at(pid).read();
@@ -441,7 +442,7 @@ pub contract HousingFund {
     #[external("utility")]
     unconstrained fn get_claimable_amount(proposal_id: u32, user: AztecAddress) -> pub u64 {
         let pid = proposal_id as Field;
-        let claim_key = user.to_field() + pid;
+        let claim_key = poseidon2_hash([user.to_field(), pid]);
         let is_open = self.storage.d_open.at(pid).read();
         let has_claimed = self.storage.d_has_claimed.at(claim_key).read();
         let snapshot_total = self.storage.d_total_deposits_snapshot.at(pid).read();
@@ -461,7 +462,7 @@ pub contract HousingFund {
     #[external("utility")]
     unconstrained fn has_claimed(proposal_id: u32, user: AztecAddress) -> pub bool {
         let pid = proposal_id as Field;
-        let claim_key = user.to_field() + pid;
+        let claim_key = poseidon2_hash([user.to_field(), pid]);
         self.storage.d_has_claimed.at(claim_key).read()
     }
 

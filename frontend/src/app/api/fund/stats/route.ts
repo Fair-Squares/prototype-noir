@@ -91,10 +91,9 @@ export async function GET() {
     const valuation = Array.isArray(valuationRaw) ? valuationRaw : [0, 0, 0, 0];
     const parkedPolicyRaw = await hfContract.methods
       .get_parked_capital_policy()
-      .simulate({ from })
-      .catch(() => [3000, 2000, 5000] as const);
+      .simulate({ from });
     const parkedPolicy = Array.isArray(parkedPolicyRaw) ? parkedPolicyRaw : [3000, 2000, 5000];
-    const valuationVkHashRaw = await hfContract.methods.get_valuation_vk_hash().simulate({ from }).catch(() => 0);
+    const valuationVkHashRaw = await hfContract.methods.get_valuation_vk_hash().simulate({ from });
     const valuationRecursiveVkConfigured = isNonZeroField(valuationVkHashRaw);
 
     const investorCount = Number(await hfContract.methods.get_investor_count().simulate({ from }));

@@ -15,6 +15,7 @@ pub contract ProtocolRewards {
         },
         protocol::{
             address::AztecAddress,
+            hash::poseidon2_hash,
             traits::ToField,
         },
         state_vars::{Map, PublicMutable},
@@ -171,7 +172,7 @@ pub contract ProtocolRewards {
         let eid = epoch as Field;
         assert(self.storage.epoch_open.at(eid).read(), "epoch not open");
 
-        let key = user.to_field() + eid;
+        let key = poseidon2_hash([user.to_field(), eid]);
         assert(!self.storage.user_epoch_allocated.at(key).read(), "already allocated");
 
         self.storage.user_epoch_deposit_weight.at(key).write(deposit_weight);
@@ -286,7 +287,7 @@ pub contract ProtocolRewards {
         let eid = epoch as Field;
         assert(self.storage.epoch_open.at(eid).read(), "epoch not open");
 
-        let key = user.to_field() + eid;
+        let key = poseidon2_hash([user.to_field(), eid]);
         assert(!self.storage.user_epoch_allocated.at(key).read(), "already allocated");
 
         self.storage.user_epoch_deposit_weight.at(key).write(deposit_weight);

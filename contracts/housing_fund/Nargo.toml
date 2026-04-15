@@ -5,8 +5,8 @@ authors = ["Fair Squares"]
 compiler_version = ">=0.18.0"
 
 [dependencies]
-aztec = { git = "https://github.com/AztecProtocol/aztec-nr/", tag = "v4.0.0-devnet.2-patch.1", directory = "aztec" }
+aztec = { git = "https://github.com/AztecProtocol/aztec-nr/", tag = "v4.2.0-aztecnr-rc.2", directory = "aztec" }
 fund_token = { path = "../fund_token" }
 governance = { path = "../governance" }
 kyc_verifier = { path = "../kyc_verifier" }
-bb_proof_verification = { git = "https://github.com/AztecProtocol/aztec-packages/", tag = "v4.0.0-devnet.2-patch.1", directory = "barretenberg/noir/bb_proof_verification" }
+bb_proof_verification = { git = "https://github.com/AztecProtocol/aztec-packages/", tag = "v4.2.0-aztecnr-rc.2", directory = "barretenberg/noir/bb_proof_verification" }

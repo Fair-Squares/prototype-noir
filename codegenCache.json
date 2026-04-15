@@ -5,7 +5,7 @@
   },
   "fund_token-FundToken.json": {
     "contractName": "FundToken",
-    "hash": "0755e3666599b55d9a802ea0dac73268d0de99a8de64c95b7c4057e55399c27b"
+    "hash": "ecc87d8c570a8cbb87eca36cb48a246d1c47d0531d8f72a1aa09ac82925d3244"
   },
   "defi_vault-DeFiVault.json": {
     "contractName": "DeFiVault",
@@ -13,11 +13,11 @@
   },
   "housing_fund-HousingFund.json": {
     "contractName": "HousingFund",
-    "hash": "d7aece031764ff0670f4f9b0de503526d98c66d224f44dc2603f5c8bf8941f87"
+    "hash": "cdbe9ab0c7bd36c0f5b637093de23713177c3cdc0df24e3bc5ed16426adf86a9"
   },
   "governance-Governance.json": {
     "contractName": "Governance",
-    "hash": "fb14ad0268d8152539ad6524b59a9a5a921a3af465f23fc4101b06e80aa6eb38"
+    "hash": "9344125f99779c9b145930c47fcb4881f542db36994f5b5a09704d7a40072dda"
   },
   "fsft_dex-FSFTDex.json": {
     "contractName": "FSFTDex",
@@ -25,6 +25,6 @@
   },
   "protocol_rewards-ProtocolRewards.json": {
     "contractName": "ProtocolRewards",
-    "hash": "2ec4ff27def1a8ef156bbfacaae283cf4d1a187e4972676a0aaa41646fcb6028"
+    "hash": "f72837ade5c38f5f926c30cdb3e3f31a6f15a3b6adc8b82c7ed63e550be6003a"
   }
 }

@@ -190,14 +190,14 @@ export async function fetchGovernanceEligibility(
   });
   const res = await fetch(`/api/governance/eligibility?${params.toString()}`);
   if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
+    const data = (await res.json()) as { error?: unknown };
     return {
       investorRole: false,
       hasDepositTicket: false,
       hasFsftExposure: false,
       hasFsftVotingAttestation: false,
       canVote: false,
-      reason: data?.error ?? "Could not fetch voting eligibility",
+      reason: typeof data.error === "string" ? data.error : "Could not fetch voting eligibility",
     };
   }
   return res.json();

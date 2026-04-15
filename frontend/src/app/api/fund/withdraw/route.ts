@@ -3,7 +3,7 @@ import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simWithdraw } from "@/lib/simulationStore";
 
 export async function POST(request: NextRequest) {
-  const { address, accountIndex = 0, amount } = await request.json().catch(() => ({}));
+  const { address, accountIndex = 0, amount } = await request.json();
 
   if (!address || !amount || amount <= 0) {
     return NextResponse.json({ error: "address and positive amount required" }, { status: 400 });
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: `Withdrew €${amount.toLocaleString()} from housing fund`,
-      txHash: receipt.txHash?.toString() ?? "unknown",
+      txHash: (() => { const txHash = receipt.txHash?.toString(); if (!txHash) { throw new Error("Transaction receipt missing txHash"); } return txHash; })(),
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);

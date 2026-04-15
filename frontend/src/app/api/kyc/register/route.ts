@@ -3,7 +3,7 @@ import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simSetKYCVerified } from "@/lib/simulationStore";
 
 export async function POST(request: NextRequest) {
-  const { userAddress, accountIndex = 0, devMode = false } = await request.json().catch(() => ({}));
+  const { userAddress, accountIndex = 0, devMode = false } = await request.json();
 
   if (!userAddress) {
     return NextResponse.json({ error: "userAddress required" }, { status: 400 });
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: devMode ? "KYC verified instantly (dev mode). Investor role granted." : "KYC verified on-chain. Investor role granted.",
-      txHash: receipt.txHash?.toString() ?? "unknown",
+      txHash: (() => { const txHash = receipt.txHash?.toString(); if (!txHash) { throw new Error("Transaction receipt missing txHash"); } return txHash; })(),
       verified: true,
       isInvestor: true,
       roles: ["investor"],

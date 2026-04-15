@@ -67,11 +67,11 @@
 - [x] **DeFiVault** — yield stub with time-based 3% APY calculation, deposit/withdraw/accrue
 - [x] **HousingFund** — core fund: private deposit/withdraw, KYC gate, DeFi allocation, property reservation, pause/unpause
 - [x] **Governance** — private voting with nullifiers, proposal creation, finalization, public results
-- [x] **Nargo.toml** for all 5 contracts with pinned aztec-packages v4.0.0-devnet.2-patch.1 dependencies
+- [x] **Nargo.toml** for all 5 contracts with pinned aztec-packages v4.2.0-aztecnr-rc.2 dependencies
 
 ### Deployment
 - [x] **deploy.ts** — deploys all 5 contracts in dependency order, saves addresses to frontend/.env.local
-- [x] **docker-compose.yml** — Aztec local network (Docker image v4.0.0-devnet.2-patch.1) + local Anvil L1 (`ETHEREUM_HOSTS`) + healthchecks
+- [x] **docker-compose.yml** — Aztec local network (Docker image v4.2.0-aztecnr-rc.2) + local Anvil L1 (`ETHEREUM_HOSTS`) + healthchecks
 - [x] **bootstrap-local-network.sh** — waits for PXE, compiles contracts, runs deploy script in Docker profile `aztec`
 
 ### Frontend (Next.js)
@@ -116,7 +116,7 @@
 
 ## ❌ Known Issues / TODOs
 
-1. **Contracts need compilation** — `aztec compile` required; some import paths and API calls may need adjustment for exact v4.0.0-devnet.2-patch.1 compatibility
+1. **Contracts need compilation** — `aztec compile` required; some import paths and API calls may need adjustment for exact v4.2.0-aztecnr-rc.2 compatibility
 2. **MessageDelivery import path** — the `.deliver(MessageDelivery.ONCHAIN_CONSTRAINED)` pattern may have changed between Aztec versions
 3. **Cross-contract calls** — `KYCVerifier::at(addr).is_verified(sender).call(&mut self.context)` syntax needs verification
 4. **Block timestamp access** — `BlockHeader::get_timestamp(self.context)` may use a different API

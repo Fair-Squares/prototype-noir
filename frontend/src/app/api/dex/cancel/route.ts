@@ -3,7 +3,7 @@ import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simCancelDexOrder } from "@/lib/simulationStore";
 
 export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => ({}));
+  const body = await request.json();
   const { address, orderId, accountIndex = 0 } = body as {
     address?: string;
     orderId?: number;
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: "Order cancelled",
-      txHash: receipt.txHash?.toString() ?? "unknown",
+      txHash: (() => { const txHash = receipt.txHash?.toString(); if (!txHash) { throw new Error("Transaction receipt missing txHash"); } return txHash; })(),
       source: "live",
     });
   } catch (error: unknown) {

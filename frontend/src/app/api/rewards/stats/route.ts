@@ -117,8 +117,7 @@ export async function GET(request: NextRequest) {
       rewardsContract.methods.get_user_stats(userAddress).simulate({ from: actorAddress }),
       rewardsContract.methods
         .get_rewards_weights_vk_hash()
-        .simulate({ from: actorAddress })
-        .catch(() => 0),
+        .simulate({ from: actorAddress }),
     ]);
 
     const cfg = Array.isArray(configRaw) ? configRaw : [8_000_000, 0, 0, 0, 120, 1];

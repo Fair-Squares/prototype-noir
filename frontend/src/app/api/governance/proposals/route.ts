@@ -173,7 +173,7 @@ export async function GET(request: NextRequest) {
 // -- POST: create, finalize, execute -----------------------------------------
 
 export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => ({}));
+  const body = await request.json();
   const { action = "create", title, description, amount, proposalId, accountIndex = 0, address } = body;
 
   if (!isLiveModeEnabled() && isVercelSimulationMode()) {
