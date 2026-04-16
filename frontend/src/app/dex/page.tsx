@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { AdvancedDetails, PageHero, PrimaryCard } from "@/components/SimplePage";
+import { ActionPanel, MetricRow, PageHero } from "@/components/SimplePage";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   cancelDexOrder,
@@ -34,7 +35,7 @@ export default function DexPage() {
       setOrderbook(book);
       setLoadError(null);
     } catch (error: unknown) {
-      setLoadError(error instanceof Error ? error.message : "Could not load DEX orderbook.");
+      setLoadError(error instanceof Error ? error.message : "Could not load trade data.");
     }
   }, [address]);
 
@@ -76,7 +77,7 @@ export default function DexPage() {
         accountIndex
       );
       if (!result.success) {
-        notify("error", result.error ?? "Order failed");
+        notify("error", result.error ?? "Order failed.");
         return;
       }
       notify("success", "Order placed.");
@@ -93,7 +94,7 @@ export default function DexPage() {
     try {
       const result = await cancelDexOrder(address, orderId, accountIndex);
       if (!result.success) {
-        notify("error", result.error ?? "Cancel failed");
+        notify("error", result.error ?? "Cancel failed.");
         return;
       }
       notify("success", "Order cancelled.");
@@ -110,7 +111,7 @@ export default function DexPage() {
     try {
       const result = await matchDexOrder(address, orderId, undefined, accountIndex);
       if (!result.success) {
-        notify("error", result.error ?? "Match failed");
+        notify("error", result.error ?? "Match failed.");
         return;
       }
       notify("success", "Match attempted.");
@@ -120,13 +121,29 @@ export default function DexPage() {
     }
   };
 
+  const metrics = [
+    { label: "Investor Status", value: profile.isInvestor ? "Ready" : "Required" },
+    {
+      label: "Reference Price",
+      value: orderbook ? `€${orderbook.priceReferenceEur.toFixed(4)}` : "n/a",
+      accent: true,
+    },
+    {
+      label: "Price Band",
+      value: orderbook
+        ? `€${orderbook.priceBandMinEur.toFixed(4)} - €${orderbook.priceBandMaxEur.toFixed(4)}`
+        : "n/a",
+    },
+    { label: "Open Orders", value: String(orderbook?.userOrders.length ?? 0) },
+  ];
+
   return (
     <div className="space-y-6">
       <PageHero
-        title="FSFT / EUR DEX"
-        subtitle="Simple flow: place an order, then manage it from your order list."
+        title="Trade"
+        subtitle="Place and manage Fund Shares orders."
         ctaHref="/portfolio"
-        ctaLabel="Open My Account"
+        ctaLabel="Open Account"
       />
 
       {loadError && (
@@ -136,62 +153,42 @@ export default function DexPage() {
       )}
 
       {msg && (
-        <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${
-          msg.type === "success"
-            ? "border-fs-teal/20 bg-fs-teal/10 text-fs-teal-dark"
-            : "border-red-100 bg-red-50 text-red-700"
-        }`}>
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm ${
+            msg.type === "success"
+              ? "border-fs-teal/20 bg-fs-teal/10 text-fs-teal-dark"
+              : "border-red-100 bg-red-50 text-red-700"
+          }`}
+        >
           {msg.text}
         </div>
       )}
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <PrimaryCard
-          title="Investor Status"
-          value={profile.isInvestor ? "Ready" : "Not Ready"}
-          hint="KYC investor role required for trading"
-        />
-        <PrimaryCard
-          title="Reference Price"
-          value={orderbook ? `€${orderbook.priceReferenceEur.toFixed(4)}` : "-"}
-          hint="Current estimated FSFT price"
-        />
-        <PrimaryCard
-          title="Allowed Price Band"
-          value={orderbook ? `€${orderbook.priceBandMinEur.toFixed(4)} - €${orderbook.priceBandMaxEur.toFixed(4)}` : "-"}
-          hint="Orders outside this range are rejected"
-          accent
-        />
-      </section>
+      <MetricRow items={metrics} />
 
-      {!profile.isInvestor && (
-        <div className="rounded-xl border border-border bg-card p-4 text-sm text-text-2">
-          Complete KYC investor onboarding first, then you can place DEX orders.
-        </div>
-      )}
-
-      <section className="grid gap-6 lg:grid-cols-[360px_1fr]">
-        <div className="rounded-2xl border border-border bg-card p-5">
-          <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Primary Action</p>
-          <h2 className="text-lg font-semibold mb-3">Place order</h2>
-
+      <section className="grid gap-6 lg:grid-cols-2">
+        <ActionPanel title="Primary Action" subtitle="Place Order">
           <div className="mb-3 grid grid-cols-2 gap-2">
             <button
               onClick={() => setSide("buy")}
-              className={`rounded-lg py-2 text-sm font-semibold ${side === "buy" ? "bg-fs-mint text-fs-teal-dark" : "bg-bg text-text-2"}`}
+              className={`rounded-lg py-2 text-sm font-semibold ${
+                side === "buy" ? "bg-fs-mint text-fs-teal-dark" : "bg-bg text-text-2"
+              }`}
             >
-              Buy FSFT
+              Buy
             </button>
             <button
               onClick={() => setSide("sell")}
-              className={`rounded-lg py-2 text-sm font-semibold ${side === "sell" ? "bg-pink-50 text-fs-magenta" : "bg-bg text-text-2"}`}
+              className={`rounded-lg py-2 text-sm font-semibold ${
+                side === "sell" ? "bg-pink-50 text-fs-magenta" : "bg-bg text-text-2"
+              }`}
             >
-              Sell FSFT
+              Sell
             </button>
           </div>
 
           <label className="block mb-3">
-            <p className="text-xs text-text-3 mb-1">Amount (FSFT)</p>
+            <p className="text-xs text-text-3 mb-1">Amount (Fund Shares)</p>
             <input
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
@@ -218,71 +215,57 @@ export default function DexPage() {
             onClick={submitOrder}
             className="w-full rounded-lg bg-fs-teal py-2.5 text-sm font-semibold text-white hover:bg-fs-teal-dark disabled:opacity-50"
           >
-            {busy ? "Submitting..." : "Submit Order"}
+            {busy ? "Submitting..." : "Place"}
           </button>
-        </div>
+        </ActionPanel>
 
-        <div className="rounded-2xl border border-border bg-card p-5">
-          <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Order Management</p>
-          <h2 className="text-lg font-semibold mb-3">Your orders</h2>
-
+        <ActionPanel title="Primary Action" subtitle="Manage Orders">
           <div className="space-y-2">
-            {orderbook?.userOrders.length ? orderbook.userOrders.map((order) => (
-              <div key={order.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-bg p-3">
-                <div className="text-xs">
-                  <p>#{order.id} • {order.side.toUpperCase()} • {order.remaining}/{order.amount} FSFT</p>
-                  <p>{formatEURDecimals(order.priceEur)} • {order.status}</p>
+            {orderbook?.userOrders.length ? (
+              orderbook.userOrders.map((order) => (
+                <div
+                  key={order.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-bg p-3"
+                >
+                  <div className="text-xs">
+                    <p>
+                      #{order.id} {order.side.toUpperCase()} {order.remaining}/{order.amount}
+                    </p>
+                    <p>{formatEURDecimals(order.priceEur)} · {order.status}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      disabled={busy || !["open", "partial"].includes(order.status)}
+                      onClick={() => matchOrder(order.id)}
+                      className="rounded-md border border-border px-2.5 py-1 text-xs"
+                    >
+                      Match
+                    </button>
+                    <button
+                      disabled={busy || !["open", "partial"].includes(order.status)}
+                      onClick={() => cancelOrder(order.id)}
+                      className="rounded-md bg-fs-anthracite px-2.5 py-1 text-xs text-white disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    disabled={busy || order.status === "cancelled" || order.status === "filled" || order.status === "expired"}
-                    onClick={() => matchOrder(order.id)}
-                    className="rounded-md border border-border px-2.5 py-1 text-xs"
-                  >
-                    Match
-                  </button>
-                  <button
-                    disabled={busy || order.status === "cancelled" || order.status === "filled" || order.status === "expired"}
-                    onClick={() => cancelOrder(order.id)}
-                    className="rounded-md bg-fs-anthracite px-2.5 py-1 text-xs text-white disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )) : (
-              <p className="rounded-lg border border-border bg-bg p-4 text-sm text-text-3">No active orders yet.</p>
+              ))
+            ) : (
+              <p className="rounded-lg border border-border bg-bg p-4 text-sm text-text-3">
+                No active orders.
+              </p>
             )}
           </div>
-        </div>
+          <p className="mt-3 text-xs text-text-3">
+            Need full market depth? See{" "}
+            <Link className="text-fs-teal hover:underline" href="/explain">
+              Explain
+            </Link>
+            .
+          </p>
+        </ActionPanel>
       </section>
-
-      <AdvancedDetails summary="Advanced market depth">
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <h3 className="font-semibold mb-2 text-sm">Buy orders</h3>
-            <div className="max-h-64 space-y-2 overflow-y-auto">
-              {orderbook?.buyOrders.length ? orderbook.buyOrders.map((order) => (
-                <div key={order.id} className="rounded-lg border border-border bg-bg p-2.5 text-xs">
-                  <p>#{order.id} • {order.remaining}/{order.amount} FSFT</p>
-                  <p>€{order.priceEur.toFixed(4)} • {order.status}</p>
-                </div>
-              )) : <p className="text-xs text-text-3">No buy orders</p>}
-            </div>
-          </div>
-          <div>
-            <h3 className="font-semibold mb-2 text-sm">Sell orders</h3>
-            <div className="max-h-64 space-y-2 overflow-y-auto">
-              {orderbook?.sellOrders.length ? orderbook.sellOrders.map((order) => (
-                <div key={order.id} className="rounded-lg border border-border bg-bg p-2.5 text-xs">
-                  <p>#{order.id} • {order.remaining}/{order.amount} FSFT</p>
-                  <p>€{order.priceEur.toFixed(4)} • {order.status}</p>
-                </div>
-              )) : <p className="text-xs text-text-3">No sell orders</p>}
-            </div>
-          </div>
-        </div>
-      </AdvancedDetails>
     </div>
   );
 }

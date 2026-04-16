@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import KYCFlow from "@/components/KYCFlow";
-import SimulationModeBadge from "@/components/SimulationModeBadge";
+import { ActionPanel, MetricRow, PageHero } from "@/components/SimplePage";
 import { useWallet } from "@/contexts/WalletContext";
 import { fetchKYCProfile, type KYCProfile } from "@/lib/contracts";
 
@@ -11,34 +11,48 @@ export default function KYCPage() {
   const address = activeAccount?.address ?? null;
 
   const [profile, setProfile] = useState<KYCProfile>({ verified: false, isInvestor: false, roles: [] });
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (address) {
-      fetchKYCProfile(address)
-        .then(setProfile)
-        .catch(() => setProfile({ verified: false, isInvestor: false, roles: [] }));
-    } else {
+    if (!address) {
       setProfile({ verified: false, isInvestor: false, roles: [] });
+      setError(null);
+      return;
     }
+
+    fetchKYCProfile(address)
+      .then((nextProfile) => {
+        setProfile(nextProfile);
+        setError(null);
+      })
+      .catch((loadError: unknown) => {
+        setError(loadError instanceof Error ? loadError.message : "Could not load KYC status.");
+      });
   }, [address]);
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div className="rounded-2xl border border-border bg-card p-6">
-        <div className="mb-2">
-          <SimulationModeBadge />
-        </div>
-        <h1 className="text-2xl mb-1">KYC Verification</h1>
-        <p className="text-text-2 text-sm">
-          Verify your identity with zkPassport to unlock investor features.
-        </p>
-      </div>
+    <div className="space-y-6">
+      <PageHero
+        title="KYC"
+        subtitle="Verify identity once to unlock investing and voting."
+        ctaHref="/invest"
+        ctaLabel="Go to Invest"
+      />
+
+      {error && <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+      <MetricRow
+        items={[
+          { label: "Status", value: profile.verified ? "Verified" : "Not Verified", accent: profile.verified },
+          { label: "Investor Role", value: profile.isInvestor ? "Ready" : "Pending" },
+          { label: "Wallet", value: address ? "Connected" : "Not Connected" },
+        ]}
+      />
 
       {!address ? (
-        <div className="rounded-2xl border border-border bg-card p-10 text-center">
-          <p className="font-medium text-text-1 text-lg mb-2">Connect your wallet first</p>
-          <p className="text-sm text-text-3">Use the wallet button in the top-right to begin verification.</p>
-        </div>
+        <ActionPanel title="What To Do Now" subtitle="Connect Wallet">
+          <p className="text-sm text-text-2">Use the top-right wallet button, then return here.</p>
+        </ActionPanel>
       ) : (
         <KYCFlow
           userAddress={address}

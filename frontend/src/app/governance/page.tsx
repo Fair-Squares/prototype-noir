@@ -1,19 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import ProposalCard from "@/components/ProposalCard";
-import { AdvancedDetails, PageHero, PrimaryCard } from "@/components/SimplePage";
+import { ActionPanel, MetricRow, PageHero } from "@/components/SimplePage";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   attestFsftForVoting,
-  castVote,
-  claimProposalDistribution,
   createProposal,
-  executeProposal,
   fetchGovernanceEligibility,
   fetchKYCProfile,
   fetchProposals,
-  finalizeProposal,
   type GovernanceEligibility,
   type KYCProfile,
   type Proposal,
@@ -26,24 +23,30 @@ export default function GovernancePage() {
 
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(null);
-  const [kycProfile, setKycProfile] = useState<KYCProfile | null>(null);
-  const [eligibility, setEligibility] = useState<GovernanceEligibility | null>(null);
   const [creating, setCreating] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [kycProfile, setKycProfile] = useState<KYCProfile>({ verified: false, isInvestor: false, roles: [] });
+  const [eligibility, setEligibility] = useState<GovernanceEligibility | null>(null);
   const [form, setForm] = useState({ title: "", description: "", amount: "" });
 
-  const isInvestor = Boolean(kycProfile?.isInvestor);
-  const canVote = Boolean(eligibility?.canVote);
+  const notify = (type: "success" | "error", text: string) => {
+    setMessage({ type, text });
+    setTimeout(() => setMessage(null), 5000);
+  };
 
   const refresh = async () => {
-    const nextProposals = await fetchProposals(address ?? undefined, accountIndex);
-    setProposals(nextProposals);
-    setSelectedProposal((current) => {
-      if (!current) return null;
-      return nextProposals.find((proposal) => proposal.id === current.id) ?? null;
-    });
+    setLoading(true);
+    try {
+      const nextProposals = await fetchProposals(address ?? undefined, accountIndex);
+      setProposals(nextProposals);
+      setLoadError(null);
+    } catch (error: unknown) {
+      setLoadError(error instanceof Error ? error.message : "Could not load proposals.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -52,7 +55,7 @@ export default function GovernancePage() {
 
   useEffect(() => {
     if (!address) {
-      setKycProfile(null);
+      setKycProfile({ verified: false, isInvestor: false, roles: [] });
       setEligibility(null);
       return;
     }
@@ -63,175 +66,50 @@ export default function GovernancePage() {
         setEligibility(nextEligibility);
       })
       .catch((error: unknown) => {
-        setKycProfile({ verified: false, isInvestor: false, roles: [] });
-        setEligibility({
-          investorRole: false,
-          hasDepositTicket: false,
-          hasFsftExposure: false,
-          hasFsftVotingAttestation: false,
-          canVote: false,
-          reason: error instanceof Error ? error.message : "Could not load governance eligibility.",
-        });
+        setLoadError(error instanceof Error ? error.message : "Could not load voting readiness.");
       });
   }, [address, accountIndex]);
 
-  useEffect(() => {
-    if (!selectedProposal) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setSelectedProposal(null);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedProposal]);
-
-  const counts = useMemo(() => {
-    return {
-      total: proposals.length,
+  const counts = useMemo(
+    () => ({
       active: proposals.filter((proposal) => proposal.status === 0).length,
       passed: proposals.filter((proposal) => proposal.status === 1).length,
       executed: proposals.filter((proposal) => proposal.status === 3).length,
-    };
-  }, [proposals]);
+    }),
+    [proposals]
+  );
 
-  const notify = (type: "success" | "error", text: string) => {
-    setMessage({ type, text });
-    setTimeout(() => setMessage(null), 6000);
-  };
+  const canCreate = Boolean(address && kycProfile.isInvestor);
+  const canVote = Boolean(eligibility?.canVote);
+  const activeProposal = proposals.find((proposal) => proposal.status === 0) ?? null;
 
-  const handleVote = async (proposalId: number, voteYes: boolean) => {
-    if (!address) {
-      notify("error", "Connect your wallet first.");
-      return;
-    }
-    if (!canVote) {
-      notify("error", eligibility?.reason ?? "Voting requirements are not met.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const result = await castVote(address, proposalId, voteYes, accountIndex);
-      if (!result.success) {
-        notify("error", result.error ?? "Vote failed");
-        return;
-      }
-      notify("success", `Vote on proposal #${proposalId} recorded.`);
-      await refresh();
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAttestFsft = async () => {
-    if (!address) return;
-
-    setLoading(true);
-    try {
-      const result = await attestFsftForVoting(address, accountIndex);
-      if (!result.success) {
-        notify("error", result.error ?? "Private FSFT check failed");
-        return;
-      }
-
-      notify(
-        "success",
-        result.privateFsftProofMode === "recursive-verified"
-          ? "Private FSFT check completed with advanced verification."
-          : "Private FSFT check completed."
-      );
-
-      const nextEligibility = await fetchGovernanceEligibility(address, accountIndex);
-      setEligibility(nextEligibility);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleFinalize = async (proposalId: number) => {
-    if (!address) {
-      notify("error", "Connect your wallet first.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const result = await finalizeProposal(proposalId, accountIndex);
-      if (!result.success) {
-        notify("error", result.error ?? "Finalize failed");
-        return;
-      }
-      notify("success", "Proposal finalized.");
-      await refresh();
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleExecute = async (proposalId: number, amount: number) => {
-    if (!address) {
-      notify("error", "Connect your wallet first.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const result = await executeProposal(proposalId, amount, accountIndex);
-      if (!result.success) {
-        notify("error", result.error ?? "Execute failed");
-        return;
-      }
-      notify("success", result.message ?? "Proposal executed and distribution opened.");
-      await refresh();
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleClaim = async (proposalId: number) => {
-    if (!address) {
-      notify("error", "Connect your wallet first.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const result = await claimProposalDistribution(proposalId, address, accountIndex);
-      if (!result.success) {
-        notify("error", result.error ?? "Claim failed");
-        return;
-      }
-
-      notify("success", result.claimedAmount ? `Claimed ${result.claimedAmount.toLocaleString()} FSFT.` : "Distribution claimed.");
-      await refresh();
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCreate = async (event: React.FormEvent) => {
+  const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!address) {
       notify("error", "Connect your wallet first.");
       return;
     }
-    if (!isInvestor) {
+    if (!canCreate) {
       notify("error", "Investor role required to create proposals.");
       return;
     }
-    if (!form.title || !form.amount) {
-      notify("error", "Title and amount are required.");
+
+    const amount = Number(form.amount);
+    if (!form.title.trim() || !Number.isFinite(amount) || amount <= 0) {
+      notify("error", "Title and valid amount are required.");
       return;
     }
 
     setCreating(true);
     try {
-      const result = await createProposal(address, form.title, form.description, Number(form.amount), accountIndex);
+      const result = await createProposal(address, form.title.trim(), form.description.trim(), amount, accountIndex);
       if (!result.success) {
-        notify("error", result.error ?? "Failed to create proposal");
+        notify("error", result.error ?? "Create failed.");
         return;
       }
-      notify("success", `Proposal "${form.title}" created.`);
+
+      notify("success", "Proposal created.");
       setForm({ title: "", description: "", amount: "" });
       setShowCreate(false);
       await refresh();
@@ -240,169 +118,178 @@ export default function GovernancePage() {
     }
   };
 
+  const handleAttestFsft = async () => {
+    if (!address) {
+      notify("error", "Connect your wallet first.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await attestFsftForVoting(address, accountIndex);
+      if (!result.success) {
+        notify("error", result.error ?? "Private check failed.");
+        return;
+      }
+
+      notify("success", "Private Fund Shares check completed.");
+      const nextEligibility = await fetchGovernanceEligibility(address, accountIndex);
+      setEligibility(nextEligibility);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const metrics = [
+    { label: "Active", value: counts.active.toLocaleString() },
+    { label: "Passed", value: counts.passed.toLocaleString() },
+    { label: "Executed", value: counts.executed.toLocaleString() },
+    { label: "Voting Readiness", value: canVote ? "Ready" : "Not Ready", accent: canVote },
+  ];
+
   return (
     <div className="space-y-6">
       <PageHero
-        title="Governance"
-        subtitle="Simple flow: review active proposals, vote, and track execution."
-        ctaHref="/fund"
-        ctaLabel="Back to Fund"
-        rightContent={
-          address && isInvestor ? (
-            <button
-              onClick={() => setShowCreate((current) => !current)}
-              className="inline-flex items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text-2 hover:bg-bg hover:text-text-1"
-            >
-              {showCreate ? "Hide Form" : "New Proposal"}
-            </button>
-          ) : undefined
-        }
+        title="Vote"
+        subtitle="Review proposals and choose your vote."
+        ctaHref="/explain"
+        ctaLabel="Explain Rules"
       />
 
+      {loadError && (
+        <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{loadError}</div>
+      )}
+
       {message && (
-        <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${
-          message.type === "success"
-            ? "border-fs-teal/20 bg-fs-teal/10 text-fs-teal-dark"
-            : "border-red-100 bg-red-50 text-red-700"
-        }`}>
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm ${
+            message.type === "success"
+              ? "border-fs-teal/20 bg-fs-teal/10 text-fs-teal-dark"
+              : "border-red-100 bg-red-50 text-red-700"
+          }`}
+        >
           {message.text}
         </div>
       )}
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <PrimaryCard title="Active Proposals" value={counts.active.toLocaleString()} hint="Open for voting" />
-        <PrimaryCard title="Passed" value={counts.passed.toLocaleString()} hint="Ready for execution" />
-        <PrimaryCard title="Executed" value={counts.executed.toLocaleString()} hint="Distribution opened" accent />
-      </section>
+      <MetricRow items={metrics} />
 
-      {address && isInvestor && !canVote && (
-        <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-sm text-text-2 mb-3">{eligibility?.reason ?? "Voting requirements are not met yet."}</p>
+      <ActionPanel title="What To Do Now" subtitle="Pick one">
+        <div className="grid gap-2 sm:grid-cols-2">
+          {activeProposal ? (
+            <Link
+              href={`/governance/${activeProposal.id}`}
+              className="rounded-lg bg-fs-teal px-3 py-2 text-center text-sm font-semibold text-white hover:bg-fs-teal-dark"
+            >
+              Vote
+            </Link>
+          ) : (
+            <span className="rounded-lg border border-border px-3 py-2 text-center text-sm font-semibold text-text-3">
+              No Active Vote
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setShowCreate((current) => !current)}
+            disabled={!canCreate}
+            className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-2 hover:bg-bg hover:text-text-1 disabled:opacity-50"
+          >
+            {showCreate ? "Hide Create" : "Create"}
+          </button>
+        </div>
+
+        <p className="mt-3 text-xs text-text-3">
+          {canVote ? "You are ready to vote." : eligibility?.reason ?? "Complete requirements to vote."}
+        </p>
+
+        {address && kycProfile.isInvestor && !canVote && (
           <button
             type="button"
             onClick={handleAttestFsft}
             disabled={loading}
-            className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-2 hover:bg-bg hover:text-text-1 disabled:opacity-50"
+            className="mt-2 text-xs font-semibold text-fs-teal hover:underline disabled:opacity-50"
           >
-            Run Private FSFT Check
+            Run private Fund Shares check
           </button>
-        </div>
-      )}
+        )}
+      </ActionPanel>
 
       {showCreate && (
         <section className="rounded-2xl border border-border bg-card p-5">
-          <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Primary Action</p>
-          <h2 className="text-lg font-semibold mb-3">Create proposal</h2>
+          <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Create Proposal</p>
           <form onSubmit={handleCreate} className="space-y-3">
-            <input
-              type="text"
-              placeholder="Title"
-              value={form.title}
-              onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
-              className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm"
-              required
-            />
-            <textarea
-              placeholder="Description"
-              value={form.description}
-              onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-              rows={3}
-              className="w-full resize-none rounded-lg border border-border bg-bg px-3 py-2 text-sm"
-            />
-            <input
-              type="number"
-              placeholder="Amount (EUR)"
-              value={form.amount}
-              onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))}
-              min="1"
-              className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm"
-              required
-            />
+            <label className="block">
+              <p className="mb-1 text-xs text-text-3">Title</p>
+              <input
+                type="text"
+                value={form.title}
+                onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+                className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm"
+                required
+              />
+            </label>
+            <label className="block">
+              <p className="mb-1 text-xs text-text-3">Budget (EURs)</p>
+              <input
+                type="number"
+                min="1"
+                value={form.amount}
+                onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))}
+                className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm"
+                required
+              />
+            </label>
+            <label className="block">
+              <p className="mb-1 text-xs text-text-3">Short note (optional)</p>
+              <textarea
+                rows={3}
+                value={form.description}
+                onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+                className="w-full resize-none rounded-lg border border-border bg-bg px-3 py-2 text-sm"
+              />
+            </label>
+
             <button
               type="submit"
               disabled={creating}
               className="rounded-lg bg-fs-magenta px-4 py-2 text-sm font-semibold text-white hover:bg-fs-magenta/90 disabled:opacity-50"
             >
-              {creating ? "Creating..." : "Submit Proposal"}
+              {creating ? "Creating..." : "Create Proposal"}
             </button>
           </form>
         </section>
       )}
 
       <section className="rounded-2xl border border-border bg-card p-5">
-        <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Proposals</p>
-        <h2 className="text-lg font-semibold mb-3">Review and open details</h2>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">Proposals</h2>
+          <Link href="/explain" className="text-xs font-semibold text-fs-teal hover:underline">
+            Advanced metadata in Explain
+          </Link>
+        </div>
 
-        {proposals.length === 0 ? (
-          <div className="rounded-lg border border-border bg-bg p-8 text-center text-sm text-text-3">
-            No proposals yet. Create the first one to start voting.
+        {loading ? (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {[1, 2].map((i) => (
+              <div key={i} className="h-24 rounded-xl bg-bg animate-pulse" />
+            ))}
           </div>
+        ) : proposals.length === 0 ? (
+          <p className="rounded-lg border border-border bg-bg p-6 text-sm text-text-3">No proposals yet.</p>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {proposals.map((proposal) => (
               <ProposalCard
                 key={proposal.id}
                 proposal={proposal}
-                showActions={false}
-                onOpen={() => setSelectedProposal(proposal)}
+                mode="compact"
+                actionHref={`/governance/${proposal.id}`}
               />
             ))}
           </div>
         )}
       </section>
-
-      <AdvancedDetails summary="Advanced governance notes">
-        <div className="space-y-2 text-xs text-text-2">
-          <p>Total proposals: {counts.total}</p>
-          <p>Privacy note: private FSFT checks verify eligibility without exposing private balances.</p>
-        </div>
-      </AdvancedDetails>
-
-      {selectedProposal && (
-        <div className="fixed inset-0 z-[60] p-4 md:p-8">
-          <button
-            type="button"
-            aria-label="Close proposal modal"
-            className="absolute inset-0 bg-fs-anthracite/40 backdrop-blur-[2px]"
-            onClick={() => setSelectedProposal(null)}
-          />
-          <div className="relative mx-auto mt-6 max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-border bg-card p-5 shadow-xl md:p-6">
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-text-3 font-medium">Proposal #{selectedProposal.id}</p>
-                <h2 className="text-xl text-text-1">{selectedProposal.title || `Proposal #${selectedProposal.id}`}</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedProposal(null)}
-                className="rounded-lg border border-border px-2.5 py-1 text-sm text-text-2 hover:bg-bg hover:text-text-1"
-              >
-                Close
-              </button>
-            </div>
-
-            {selectedProposal.description && (
-              <p className="mb-4 text-sm text-text-2">{selectedProposal.description}</p>
-            )}
-
-            <ProposalCard
-              proposal={selectedProposal}
-              onVote={handleVote}
-              onFinalize={handleFinalize}
-              onExecute={handleExecute}
-              onClaim={handleClaim}
-              isVoting={loading}
-              userAddress={address}
-              isInvestor={canVote}
-            />
-
-            <div className="mt-4 rounded-lg border border-border bg-bg p-3">
-              <p className="mb-1 text-[11px] uppercase tracking-wide text-text-3">Description hash</p>
-              <code className="break-all text-xs font-mono text-text-2">{selectedProposal.descHash}</code>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
