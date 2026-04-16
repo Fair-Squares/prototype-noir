@@ -1,19 +1,19 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import InvestForm from "@/components/InvestForm";
 import FundStats from "@/components/FundStats";
-import InfoTooltip from "@/components/InfoTooltip";
-import SimulationModeBadge from "@/components/SimulationModeBadge";
+import InvestForm from "@/components/InvestForm";
+import { AdvancedDetails, PageHero, PrimaryCard } from "@/components/SimplePage";
 import { useWallet } from "@/contexts/WalletContext";
 import {
+  depositFunds,
   fetchFundStats,
   fetchKYCProfile,
   fetchPortfolio,
-  depositFunds,
+  formatEUR,
   type FundStats as FundStatsType,
-  type PortfolioData,
   type KYCProfile,
+  type PortfolioData,
 } from "@/lib/contracts";
 
 export default function InvestPage() {
@@ -25,6 +25,7 @@ export default function InvestPage() {
   const [stats, setStats] = useState<FundStatsType | null>(null);
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
   const [txMessage, setTxMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const refreshAll = useCallback(async () => {
     const [newStats, newPortfolio] = await Promise.all([
@@ -32,148 +33,137 @@ export default function InvestPage() {
       address ? fetchPortfolio(address, accountIndex) : Promise.resolve(null),
     ]);
     setStats(newStats);
-    if (newPortfolio) setPortfolio(newPortfolio);
+    setPortfolio(newPortfolio);
   }, [address, accountIndex]);
 
-  useEffect(() => { fetchFundStats().then(setStats); }, []);
+  useEffect(() => {
+    fetchFundStats().then(setStats).catch((error: unknown) => {
+      setLoadError(error instanceof Error ? error.message : "Could not load fund data.");
+    });
+  }, []);
 
   useEffect(() => {
     if (!address) {
       setKycProfile({ verified: false, isInvestor: false, roles: [] });
+      setPortfolio(null);
       return;
     }
-    Promise.all([
-      fetchKYCProfile(address).then(setKycProfile),
-      fetchPortfolio(address, accountIndex).then(setPortfolio),
-    ]);
+
+    Promise.all([fetchKYCProfile(address), fetchPortfolio(address, accountIndex)])
+      .then(([profile, nextPortfolio]) => {
+        setKycProfile(profile);
+        setPortfolio(nextPortfolio);
+        setLoadError(null);
+      })
+      .catch((error: unknown) => {
+        setLoadError(error instanceof Error ? error.message : "Could not load account details.");
+      });
   }, [address, accountIndex]);
 
   const handleDeposit = async (amount: string) => {
     if (!address) return;
+
     setTxMessage(null);
-    const result = await depositFunds(address, parseFloat(amount), accountIndex);
-    if (result.success) {
-      setTxMessage({ type: "success", text: result.message ?? `Deposited €${Number(amount).toLocaleString()}` });
-      await refreshAll();
-    } else {
+    const result = await depositFunds(address, Number.parseFloat(amount), accountIndex);
+
+    if (!result.success) {
       setTxMessage({ type: "error", text: result.error ?? "Transaction failed" });
+      return;
     }
+
+    setTxMessage({ type: "success", text: result.message ?? `Deposited ${formatEUR(Number(amount))}` });
+    await refreshAll();
   };
 
+  const estimatedPrice = stats?.navPerFsftEur ?? (stats && stats.totalSupply > 0 ? (stats.navEur ?? 0) / stats.totalSupply : 0);
+
   return (
-    <div className="space-y-8">
-      <div className="rounded-2xl bg-card border border-border p-6">
-        <div className="mb-2">
-          <SimulationModeBadge />
+    <div className="space-y-6">
+      <PageHero
+        title="Invest"
+        subtitle="One step: deposit EUR into the fund. FSFT is distributed after approved proposals execute."
+        ctaHref="/portfolio"
+        ctaLabel="Open My Account"
+      />
+
+      {loadError && (
+        <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError}
         </div>
-        <h1 className="text-2xl mb-1">Invest</h1>
-        <p className="text-text-2 text-sm">
-          Add EURs to the fund. You receive FSFT later when approved purchases are executed.
-        </p>
-        {kycProfile.isInvestor && (
-          <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-fs-mint px-2.5 py-1 text-xs font-semibold text-fs-teal-dark">
-            Investor role granted
-          </p>
-        )}
-      </div>
+      )}
 
       {txMessage && (
-        <div className={`rounded-lg p-3 text-sm font-medium flex items-start gap-2 ${
+        <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${
           txMessage.type === "success"
-            ? "bg-fs-teal/10 text-fs-teal-dark border border-fs-teal/20"
-            : "bg-red-50 text-red-600 border border-red-100"
+            ? "border-fs-teal/20 bg-fs-teal/10 text-fs-teal-dark"
+            : "border-red-100 bg-red-50 text-red-700"
         }`}>
-          <span>{txMessage.type === "success" ? "✓" : "✗"}</span>
           {txMessage.text}
         </div>
       )}
 
-      {stats ? (
-        <FundStats {...stats} />
-      ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map((i) => <div key={i} className="h-24 rounded-xl bg-card animate-pulse" />)}
-        </div>
-      )}
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <PrimaryCard
+          title="Wallet EUR"
+          value={formatEUR(portfolio?.eurBalance ?? 0)}
+          hint="Spendable balance for deposit"
+        />
+        <PrimaryCard
+          title="Your Fund Position"
+          value={formatEUR(portfolio?.depositedAmount ?? 0)}
+          hint="Recorded deposit in the fund"
+        />
+        <PrimaryCard
+          title="Estimated FSFT Price"
+          value={`€${estimatedPrice.toFixed(4)}`}
+          hint="Fund value divided by FSFT supply"
+          accent
+        />
+      </section>
 
-      <div className="grid xl:grid-cols-[1.05fr_0.95fr] gap-6">
-        <div className="rounded-2xl bg-card border border-border p-5">
+      <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Primary Action</p>
+          <h2 className="text-lg font-semibold mb-4">Deposit into the fund</h2>
           <InvestForm
             isInvestor={kycProfile.isInvestor}
-            isConnected={!!address}
+            isConnected={Boolean(address)}
             eurBalance={portfolio?.eurBalance ?? 0}
             onDeposit={handleDeposit}
           />
         </div>
 
-        <div className="space-y-4">
-          <div className="rounded-2xl bg-card border border-border p-5">
-            <div className="flex items-center gap-1.5 mb-3">
-              <h3 className="font-semibold text-sm">Token model</h3>
-              <InfoTooltip text="EURs is your cash balance, FSFT is your fund share, and FSP is your reward token." />
-            </div>
-            <div className="space-y-3">
-              {[
-                {
-                  symbol: "EURs",
-                  color: "bg-blue-100 text-blue-700",
-                  title: "EUR wallet balance",
-                  summary: "Use this to deposit",
-                  details:
-                    "Your spendable cash balance for this app.",
-                },
-                {
-                  symbol: "FSFT",
-                  color: "bg-fs-mint text-fs-teal-dark",
-                  title: "Fund share token",
-                  summary: "Represents your share of the fund",
-                  details:
-                    "You receive FSFT after approved proposals are executed.",
-                },
-                {
-                  symbol: "FSP",
-                  color: "bg-amber-100 text-amber-700",
-                  title: "Protocol Token",
-                  summary: "Participation rewards",
-                  details:
-                    "FSP rewards deposits, FSFT participation, and voting activity.",
-                },
-              ].map((t) => (
-                <div key={t.symbol} className="flex gap-3">
-                  <div className={`rounded-md px-2 py-0.5 text-xs font-bold shrink-0 h-fit mt-0.5 ${t.color}`}>{t.symbol}</div>
-                  <div>
-                    <p className="text-sm font-medium inline-flex items-center gap-1.5">
-                      {t.title}
-                      <InfoTooltip text={t.details} align="right" />
-                    </p>
-                    <p className="text-xs text-text-3 mt-0.5 leading-relaxed">{t.summary}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-2xl bg-card border border-border p-5">
-            <div className="flex items-center gap-1.5 mb-3">
-              <h3 className="font-semibold text-sm">What happens after you deposit?</h3>
-              <InfoTooltip text="Simple timeline from deposit to FSFT distribution." />
-            </div>
-            <div className="space-y-2 text-xs text-text-2">
-              {[
-                ["1", "Deposit is recorded", "Your EURs is added to your fund position."],
-                ["2", "Some idle EUR may earn", "Unused EUR can be parked in lending while waiting."],
-                ["3", "Investors vote", "Proposals decide which properties to buy."],
-                ["4", "FSFT is distributed", "Once approved and executed, FSFT is distributed."],
-              ].map(([step, label, sub]) => (
-                <div key={label} className="flex items-start gap-2">
-                  <span className="font-bold text-fs-teal shrink-0 w-8">{step}</span>
-                  <div><span className="font-medium text-text-1">{label}</span><span className="text-text-3 ml-1">— {sub}</span></div>
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <p className="text-xs uppercase tracking-wide text-text-3 mb-2">What Happens Next</p>
+          <h2 className="text-lg font-semibold mb-3">Simple flow</h2>
+          <ol className="space-y-2 text-sm text-text-2">
+            <li>1. Your EUR deposit is recorded in the fund.</li>
+            <li>2. Governance decides where capital goes.</li>
+            <li>3. On executed proposals, FSFT distribution opens.</li>
+            <li>4. You can later trade FSFT and claim FSP rewards.</li>
+          </ol>
+          {!kycProfile.isInvestor && (
+            <a
+              href="/kyc"
+              className="mt-4 inline-flex rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-2 hover:bg-bg hover:text-text-1"
+            >
+              Complete KYC First
+            </a>
+          )}
         </div>
-      </div>
+      </section>
+
+      <AdvancedDetails summary="Advanced fund details">
+        {stats ? (
+          <FundStats {...stats} />
+        ) : (
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-24 rounded-xl bg-bg animate-pulse" />
+            ))}
+          </div>
+        )}
+      </AdvancedDetails>
     </div>
   );
 }

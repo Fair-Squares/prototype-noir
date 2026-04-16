@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import PrivateBalance from "@/components/PrivateBalance";
-import SimulationModeBadge from "@/components/SimulationModeBadge";
+import { AdvancedDetails, PageHero, PrimaryCard } from "@/components/SimplePage";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   attestFsftForRewards,
@@ -25,251 +25,211 @@ export default function PortfolioPage() {
   const [kycProfile, setKycProfile] = useState<KYCProfile>({ verified: false, isInvestor: false, roles: [] });
   const [rewards, setRewards] = useState<RewardsStats | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [topUpMsg, setTopUpMsg] = useState<string | null>(null);
   const [rewardMsg, setRewardMsg] = useState<string | null>(null);
+
   const isDevOrSimulation =
     process.env.NEXT_PUBLIC_DEV_MODE === "true" ||
     process.env.NEXT_PUBLIC_SIMULATION === "true";
 
-  const loadPortfolio = async (addr: string) => {
+  const loadAccountData = async (addr: string) => {
     setLoading(true);
     try {
-      setPortfolio(await fetchPortfolio(addr, accountIndex));
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+      const [nextPortfolio, nextProfile, nextRewards] = await Promise.all([
+        fetchPortfolio(addr, accountIndex),
+        fetchKYCProfile(addr),
+        fetchRewardsStats(addr, accountIndex),
+      ]);
+      setPortfolio(nextPortfolio);
+      setKycProfile(nextProfile);
+      setRewards(nextRewards);
+      setError(null);
+    } catch (loadError: unknown) {
+      setError(loadError instanceof Error ? loadError.message : "Could not load account data.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    if (address) {
-      loadPortfolio(address);
-      fetchKYCProfile(address)
-        .then(setKycProfile)
-        .catch(() => setKycProfile({ verified: false, isInvestor: false, roles: [] }));
-      fetchRewardsStats(address, accountIndex)
-        .then(setRewards)
-        .catch(() => setRewards(null));
-    } else {
+    if (!address) {
       setPortfolio(null);
-      setKycProfile({ verified: false, isInvestor: false, roles: [] });
       setRewards(null);
+      setKycProfile({ verified: false, isInvestor: false, roles: [] });
+      return;
     }
+
+    loadAccountData(address);
   }, [address, accountIndex]);
 
   const handleTopUp = async () => {
     if (!address) return;
+
     const res = await fetch("/api/fund/tokens", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ address, accountIndex, amount: 50_000 }),
     });
-    const data = await res.json().catch(() => ({}));
+
+    const data = (await res.json()) as { error?: unknown };
     if (!res.ok) {
-      setTopUpMsg(data?.error ? `Top up failed: ${data.error}` : "Top up failed");
-      setTimeout(() => setTopUpMsg(null), 5000);
+      setTopUpMsg(typeof data.error === "string" ? `Top up failed: ${data.error}` : "Top up failed");
       return;
     }
-    await loadPortfolio(address);
-    setTopUpMsg("Demo EURs topped up to €50,000 ✓");
-    setTimeout(() => setTopUpMsg(null), 4000);
+
+    await loadAccountData(address);
+    setTopUpMsg("Demo EUR topped up to €50,000");
   };
 
   const handleClaimRewards = async () => {
     if (!address) return;
+
     const result = await claimRewards(address, accountIndex);
     if (!result.success) {
       setRewardMsg(result.error ?? "Claim failed");
-      setTimeout(() => setRewardMsg(null), 5000);
       return;
     }
-    setRewardMsg(`Claimed ${(result.claimed ?? 0).toLocaleString()} ${rewards?.token.symbol ?? "FSP"} ✓`);
-    setTimeout(() => setRewardMsg(null), 5000);
-    await loadPortfolio(address);
-    fetchRewardsStats(address, accountIndex).then(setRewards).catch(() => undefined);
+
+    setRewardMsg(`Claimed ${(result.claimed ?? 0).toLocaleString()} ${rewards?.token.symbol ?? "FSP"}`);
+    await loadAccountData(address);
   };
 
   const handleAttestRewards = async () => {
     if (!address) return;
+
     const result = await attestFsftForRewards(address, accountIndex);
     if (!result.success) {
-      setRewardMsg(result.error ?? "Attestation failed");
-      setTimeout(() => setRewardMsg(null), 5000);
+      setRewardMsg(result.error ?? "Private FSFT check failed");
       return;
     }
+
     setRewardMsg(
       result.fsftProofMode === "recursive-verified"
-        ? "Private FSFT check completed with advanced verification ✓"
-        : "Private FSFT check completed. Rewards eligibility updated ✓"
+        ? "Private FSFT check completed with advanced verification"
+        : "Private FSFT check completed"
     );
-    setTimeout(() => setRewardMsg(null), 5000);
-    fetchRewardsStats(address, accountIndex).then(setRewards).catch(() => undefined);
+    await loadAccountData(address);
   };
 
   return (
-    <div className="space-y-8">
-      <div className="rounded-2xl bg-card border border-border p-6">
-        <div className="mb-2">
-          <SimulationModeBadge />
+    <div className="space-y-6">
+      <PageHero
+        title="My Account"
+        subtitle="Simple view of your wallet, fund position, and rewards."
+        ctaHref="/invest"
+        ctaLabel="Deposit EUR"
+      />
+
+      {error && (
+        <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
         </div>
-        <h1 className="text-2xl mb-1">My Account</h1>
-        <p className="text-text-2 text-sm">Track your EURs wallet, FSFT shares, and FSP rewards in one place.</p>
-        {address && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {activeAccount?.isAdmin && (
-              <span className="rounded-full bg-fs-mint px-2.5 py-1 text-xs font-semibold text-fs-teal-dark">Admin</span>
-            )}
-            {kycProfile.isInvestor && (
-              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">Investor</span>
-            )}
-          </div>
-        )}
-      </div>
+      )}
 
       {!address ? (
-        <div className="rounded-xl bg-card p-14 text-center border border-border">
-          <div className="w-14 h-14 rounded-full bg-fs-mint mx-auto mb-4 flex items-center justify-center">
-            <svg className="w-7 h-7 text-fs-teal" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 0 0-2.25-2.25H15a3 3 0 1 1-6 0H5.25A2.25 2.25 0 0 0 3 12m18 0v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 9m18 0V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v3" />
-            </svg>
-          </div>
-          <p className="font-semibold text-text-1 text-lg mb-2">Connect your wallet</p>
-          <p className="text-sm text-text-3">Use the button in the top-right to connect.</p>
+        <div className="rounded-xl border border-border bg-card p-12 text-center">
+          <p className="text-lg font-semibold mb-2">Connect your wallet</p>
+          <p className="text-sm text-text-3">Use the wallet button in the top-right to continue.</p>
         </div>
       ) : (
-        <div className="grid xl:grid-cols-[1fr_320px] gap-6 items-start">
-          <div className="space-y-6">
-            <PrivateBalance portfolio={portfolio} isLoading={loading} />
+        <>
+          <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <PrimaryCard
+              title="Wallet EUR"
+              value={formatEUR(portfolio?.eurBalance ?? 0)}
+              hint="Available to deposit"
+            />
+            <PrimaryCard
+              title="FSFT Position"
+              value={(portfolio?.balance ?? 0).toLocaleString()}
+              hint="Your fund share tokens"
+            />
+            <PrimaryCard
+              title="Claimable Rewards"
+              value={`${(rewards?.claimable ?? 0).toLocaleString()} ${rewards?.token.symbol ?? "FSP"}`}
+              hint="Ready to claim now"
+              accent
+            />
+          </section>
 
-            <div className="rounded-xl bg-card p-6 border border-border">
-              <h2 className="font-semibold text-text-1 mb-4">Transactions</h2>
-              <div className="text-sm text-text-3 text-center py-6">
-                <p>Your deposit and withdrawal history will appear here.</p>
-                <p className="mt-1 text-xs">This list updates as you invest, withdraw, and claim.</p>
-              </div>
-            </div>
-          </div>
-
-          <aside className="rounded-xl bg-card p-5 border border-border xl:sticky xl:top-24 space-y-4">
-            <div>
-              <p className="text-xs text-text-3 uppercase tracking-wide font-medium mb-1">Quick actions</p>
-              <p className="text-sm text-text-2">Top up demo EURs and continue with investing, trading, and voting.</p>
-            </div>
-
-            {isDevOrSimulation ? (
-              <div className="rounded-lg bg-bg border border-border p-4">
-                <div className="mb-3">
-                  <p className="text-sm font-semibold text-text-1">Demo: Top up EURs wallet</p>
-                  <p className="text-xs text-text-3 mt-0.5">Get demo EURs to test the invest flow.</p>
-                </div>
+          <section className="grid gap-6 xl:grid-cols-[1fr_340px]">
+            <div className="rounded-2xl border border-border bg-card p-5">
+              <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Primary Actions</p>
+              <h2 className="text-lg font-semibold mb-3">Choose one next step</h2>
+              <div className="grid gap-2 sm:grid-cols-2">
                 <button
-                  onClick={handleTopUp}
-                  className="w-full px-4 py-2 rounded-lg bg-fs-anthracite text-white text-sm font-semibold hover:bg-fs-anthracite/90"
+                  onClick={handleClaimRewards}
+                  disabled={!rewards?.eligibility?.canClaimNow}
+                  className="rounded-lg bg-fs-teal px-3 py-2 text-sm font-semibold text-white hover:bg-fs-teal-dark disabled:opacity-50"
                 >
-                  +{formatEUR(50_000)} EURs
+                  Claim Rewards
                 </button>
-                {topUpMsg && <p className="text-xs text-fs-teal mt-2 font-medium">{topUpMsg}</p>}
-              </div>
-            ) : (
-              <div className="rounded-lg bg-bg border border-border p-4 text-xs text-text-3">
-                Demo top-up is only available in simulation mode.
-              </div>
-            )}
-
-            <a
-              href="/invest"
-              className="w-full inline-flex items-center justify-center rounded-lg bg-fs-teal text-white text-sm font-semibold py-2.5 hover:bg-fs-teal-dark"
-            >
-              Go to Invest
-            </a>
-            <a
-              href="/dex"
-              className="w-full inline-flex items-center justify-center rounded-lg border border-border text-sm font-semibold py-2.5 text-text-2 hover:text-text-1 hover:bg-bg"
-            >
-              Trade FSFT/EUR
-            </a>
-            <a
-              href="/governance"
-              className="w-full inline-flex items-center justify-center rounded-lg border border-border text-sm font-semibold py-2.5 text-text-2 hover:text-text-1 hover:bg-bg"
-            >
-              Review Proposals
-            </a>
-            <a
-              href="/rewards"
-              className="w-full inline-flex items-center justify-center rounded-lg border border-border text-sm font-semibold py-2.5 text-text-2 hover:text-text-1 hover:bg-bg"
-            >
-              View FSP Distribution
-            </a>
-
-            <div className="rounded-lg bg-bg border border-border p-4 space-y-3">
-              <p className="text-sm font-semibold text-text-1">FSP rewards</p>
-              <p className="text-xs text-text-3">
-                FSP is distributed monthly: 40% deposits, 40% FSFT participation, 20% voting participation.
-              </p>
-              <div className="rounded-md border border-border bg-white px-3 py-2 text-[11px] text-text-2">
-                {rewards?.eligibility?.proofGuidance ??
-                  "Private check: you can confirm FSFT ownership without revealing your private balance."}
-              </div>
-              <div className="text-xs text-text-2 space-y-1">
-                <p>
-                  Balance: <strong>{(portfolio?.protocolTokenBalance ?? 0).toLocaleString()} {rewards?.token.symbol ?? "FSP"}</strong>
-                </p>
-                <p>
-                  Claimable: <strong>{(rewards?.claimable ?? 0).toLocaleString()} {rewards?.token.symbol ?? "FSP"}</strong>
-                </p>
-              </div>
-
-              <div className="space-y-2 rounded-md border border-border bg-white px-3 py-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span>Deposit bucket</span>
-                  <span className={rewards?.eligibility?.depositBucketEligible ? "text-fs-teal font-semibold" : "text-text-3"}>
-                    {rewards?.eligibility?.depositBucketEligible ? "Eligible" : "Not eligible"}
-                  </span>
-                </div>
-                {!rewards?.eligibility?.depositBucketEligible && (
-                  <a href="/invest" className="inline-flex text-xs font-semibold text-fs-teal hover:text-fs-teal-dark">
-                    Add a deposit
-                  </a>
-                )}
-              </div>
-
-              <div className="space-y-2 rounded-md border border-border bg-white px-3 py-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span>FSFT bucket</span>
-                  <span className={rewards?.eligibility?.fsftBucketEligible ? "text-fs-teal font-semibold" : "text-text-3"}>
-                    {rewards?.eligibility?.fsftBucketEligible ? "Eligible" : "Not eligible"}
-                  </span>
-                </div>
                 <button
                   onClick={handleAttestRewards}
-                  className="w-full rounded-md border border-border px-2 py-1.5 text-xs font-semibold hover:bg-white disabled:opacity-50"
                   disabled={Boolean(rewards?.eligibility?.fsftBucketEligible)}
+                  className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-2 hover:bg-bg hover:text-text-1 disabled:opacity-50"
                 >
-                  {rewards?.eligibility?.fsftBucketEligible ? "FSFT check complete" : "Run private FSFT check"}
+                  Run Private FSFT Check
                 </button>
+                <a href="/dex" className="rounded-lg border border-border px-3 py-2 text-center text-sm font-semibold text-text-2 hover:bg-bg hover:text-text-1">Trade on DEX</a>
+                <a href="/governance" className="rounded-lg border border-border px-3 py-2 text-center text-sm font-semibold text-text-2 hover:bg-bg hover:text-text-1">Open Governance</a>
               </div>
 
-              <div className="space-y-2 rounded-md border border-border bg-white px-3 py-2">
-                <div className="text-xs text-text-2">Governance bucket</div>
-                <p className="text-[11px] text-text-3">{rewards?.eligibility?.governanceBucketHint ?? "Vote to become eligible."}</p>
-                <a href="/governance" className="inline-flex text-xs font-semibold text-fs-teal hover:text-fs-teal-dark">
-                  Go vote
-                </a>
-              </div>
+              {rewardMsg && (
+                <p className="mt-3 rounded-lg border border-fs-teal/20 bg-fs-teal/10 px-3 py-2 text-sm text-fs-teal-dark">
+                  {rewardMsg}
+                </p>
+              )}
 
-              <button
-                onClick={handleClaimRewards}
-                className="w-full rounded-md bg-fs-teal text-white px-2 py-2 text-xs font-semibold hover:bg-fs-teal-dark disabled:opacity-50"
-                disabled={!rewards?.eligibility?.canClaimNow}
-              >
-                Claim
-              </button>
-              <p className="text-[11px] text-text-3">Claim minimum: {(rewards?.claimMin ?? 1).toLocaleString()} FSP.</p>
-              {rewards?.eligibility?.nextSteps?.length ? (
-                <p className="text-[11px] text-text-3">Next: {rewards.eligibility.nextSteps[0]}</p>
-              ) : null}
-              {rewardMsg && <p className="text-xs text-fs-teal font-medium">{rewardMsg}</p>}
+              <p className="mt-3 text-xs text-text-3">
+                {rewards?.eligibility?.nextSteps?.[0] ?? "Complete deposit, FSFT, and governance activity to maximize rewards."}
+              </p>
             </div>
-          </aside>
-        </div>
+
+            <aside className="rounded-2xl border border-border bg-card p-5">
+              <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Status</p>
+              <h2 className="text-lg font-semibold mb-3">Account readiness</h2>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-text-3">Investor role</span>
+                  <span className={kycProfile.isInvestor ? "text-fs-teal font-semibold" : "text-text-2"}>
+                    {kycProfile.isInvestor ? "Ready" : "Pending"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-text-3">Deposit bucket</span>
+                  <span className={rewards?.eligibility?.depositBucketEligible ? "text-fs-teal font-semibold" : "text-text-2"}>
+                    {rewards?.eligibility?.depositBucketEligible ? "Eligible" : "Not yet"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-text-3">FSFT bucket</span>
+                  <span className={rewards?.eligibility?.fsftBucketEligible ? "text-fs-teal font-semibold" : "text-text-2"}>
+                    {rewards?.eligibility?.fsftBucketEligible ? "Eligible" : "Not yet"}
+                  </span>
+                </div>
+              </div>
+
+              {isDevOrSimulation && (
+                <div className="mt-4 rounded-lg border border-border bg-bg p-3">
+                  <p className="text-xs text-text-3 mb-2">Demo tools</p>
+                  <button
+                    onClick={handleTopUp}
+                    className="w-full rounded-lg bg-fs-anthracite px-3 py-2 text-sm font-semibold text-white hover:bg-fs-anthracite/90"
+                  >
+                    Top Up Demo EUR (+€50,000)
+                  </button>
+                  {topUpMsg && <p className="mt-2 text-xs text-fs-teal-dark">{topUpMsg}</p>}
+                </div>
+              )}
+            </aside>
+          </section>
+
+          <AdvancedDetails summary="Advanced portfolio breakdown">
+            <PrivateBalance portfolio={portfolio} isLoading={loading} />
+          </AdvancedDetails>
+        </>
       )}
     </div>
   );

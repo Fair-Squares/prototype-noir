@@ -31,6 +31,9 @@ export async function POST(request: NextRequest) {
     const { getTestAccount } = await import("@/lib/serverWallet");
     const account = await getTestAccount(accountIndex);
     const wallet = account.wallet;
+    if (address.toLowerCase() !== account.address.toLowerCase()) {
+      return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
+    }
 
     const housingFundAddr = process.env.NEXT_PUBLIC_HOUSING_FUND_ADDRESS ?? "";
     if (!housingFundAddr) {

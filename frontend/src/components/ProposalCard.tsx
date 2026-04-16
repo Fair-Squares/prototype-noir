@@ -70,6 +70,47 @@ export default function ProposalCard({
     }
   };
 
+  if (!showActions) {
+    return (
+      <div
+        className={`rounded-xl bg-card border p-4 ${
+          isInteractive
+            ? "cursor-pointer border-border hover:border-fs-teal/40 transition-colors"
+            : "border-border"
+        }`}
+        role={isInteractive ? "button" : undefined}
+        tabIndex={isInteractive ? 0 : undefined}
+        onClick={isInteractive ? onOpen : undefined}
+        onKeyDown={handleKeyOpen}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="font-semibold truncate">{proposal.title || `Proposal #${proposal.id}`}</h3>
+            {proposal.description && (
+              <p className="text-sm text-text-2 mt-1 line-clamp-2">{proposal.description}</p>
+            )}
+          </div>
+          <span
+            className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
+              statusColor[proposal.status] ?? "text-text-3 bg-bg"
+            }`}
+          >
+            {statusLabel}
+          </span>
+        </div>
+        <p className="text-sm text-text-2 mt-3">
+          Budget: <strong className="text-text-1">{formatEUR(proposal.amount)}</strong>
+        </p>
+        <p className="text-xs text-text-3 mt-2">
+          Votes: {proposal.yesVotes} yes / {proposal.noVotes} no
+        </p>
+        {isInteractive && (
+          <p className="text-[11px] text-text-3 mt-3">Open details</p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       className={`rounded-xl bg-card border p-5 ${isExecuted ? "ring-1 ring-purple-200" : ""} ${

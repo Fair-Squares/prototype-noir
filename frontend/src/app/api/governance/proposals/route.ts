@@ -230,6 +230,9 @@ export async function POST(request: NextRequest) {
     if (!govAddr) return NextResponse.json({ error: "NEXT_PUBLIC_GOVERNANCE_ADDRESS not set" }, { status: 500 });
 
     const actor = await getTestAccount(accountIndex);
+    if (address && address.toLowerCase() !== actor.address.toLowerCase()) {
+      return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
+    }
 
     const GovArtifactJson = await loadGeneratedArtifactJson("governance-Governance.json");
     const HfArtifactJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");

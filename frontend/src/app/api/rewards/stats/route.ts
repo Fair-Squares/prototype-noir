@@ -12,14 +12,13 @@ function isNonZeroField(value: unknown): boolean {
   return false;
 }
 
-async function fetchJsonSafe(url: string): Promise<Record<string, unknown> | null> {
-  try {
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) return null;
-    return (await res.json()) as Record<string, unknown>;
-  } catch {
-    return null;
+async function fetchJsonOrThrow(url: string): Promise<Record<string, unknown>> {
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Request failed (${res.status}) for ${url}: ${text || "empty response"}`);
   }
+  return (await res.json()) as Record<string, unknown>;
 }
 
 function buildEligibility(
@@ -107,6 +106,9 @@ export async function GET(request: NextRequest) {
     const actor = await getTestAccount(accountIndex);
     const actorAddress = AztecAddress.fromString(actor.address);
     const userAddress = AztecAddress.fromString(address);
+    if (actor.address.toLowerCase() !== address.toLowerCase()) {
+      return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
+    }
 
     const RewardsJson = await loadGeneratedArtifactJson("protocol_rewards-ProtocolRewards.json");
     const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
@@ -137,20 +139,16 @@ export async function GET(request: NextRequest) {
     let balance = 0;
 
     if (protocolTokenAddr) {
-      try {
-        const FtJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
-        const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);
-        const tokenContract = await Contract.at(
-          AztecAddress.fromString(protocolTokenAddr),
-          ftArtifact,
-          actor.wallet
-        );
-        balance = Number(
-          await tokenContract.methods.public_balance_of(userAddress).simulate({ from: actorAddress })
-        );
-      } catch {
-        balance = 0;
-      }
+      const FtJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
+      const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);
+      const tokenContract = await Contract.at(
+        AztecAddress.fromString(protocolTokenAddr),
+        ftArtifact,
+        actor.wallet
+      );
+      balance = Number(
+        await tokenContract.methods.public_balance_of(userAddress).simulate({ from: actorAddress })
+      );
     }
 
     const lastClaimedEpoch = totalUserClaimed > 0 ? rawLastClaimedEpoch : -1;
@@ -160,10 +158,10 @@ export async function GET(request: NextRequest) {
     const origin = new URL(request.url).origin;
 
     const [portfolio, governance] = await Promise.all([
-      fetchJsonSafe(
+      fetchJsonOrThrow(
         `${origin}/api/portfolio?address=${encodeURIComponent(address)}&accountIndex=${accountIndex}`
       ),
-      fetchJsonSafe(
+      fetchJsonOrThrow(
         `${origin}/api/governance/eligibility?address=${encodeURIComponent(address)}&accountIndex=${accountIndex}`
       ),
     ]);

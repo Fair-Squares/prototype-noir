@@ -49,7 +49,9 @@ export async function GET(request: NextRequest) {
     const wallet = selected.wallet;
     const selectedAddr = AztecAddress.fromString(selected.address);
     const ownerAddr = AztecAddress.fromString(address);
-    const isOwnAccount = selected.address.toLowerCase() === address.toLowerCase();
+    if (selected.address.toLowerCase() !== address.toLowerCase()) {
+      return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
+    }
 
     let eurBalance = 0;
     let fsftBalance = 0;
@@ -70,50 +72,38 @@ export async function GET(request: NextRequest) {
     let privateHolderVkConfigured = false;
 
     if (kycAddr) {
-      try {
-        const KycJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
-        const kycArtifact = loadContractArtifact(KycJson as Parameters<typeof loadContractArtifact>[0]);
-        const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet);
-        investorRole = Boolean(
-          await kycContract.methods.is_investor(ownerAddr).simulate({ from: selectedAddr })
-        );
-      } catch {
-        investorRole = false;
-      }
+      const KycJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
+      const kycArtifact = loadContractArtifact(KycJson as Parameters<typeof loadContractArtifact>[0]);
+      const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet);
+      investorRole = Boolean(
+        await kycContract.methods.is_investor(ownerAddr).simulate({ from: selectedAddr })
+      );
     }
 
     if (eurTokenAddr) {
       const EurJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
       const eurArtifact = loadContractArtifact(EurJson as Parameters<typeof loadContractArtifact>[0]);
       const eurContract = await Contract.at(AztecAddress.fromString(eurTokenAddr), eurArtifact, wallet);
-      let privateEur = 0;
-      let publicEur = 0;
-      if (isOwnAccount) {
-        try {
-          privateEur = Number(await eurContract.methods.private_balance_of(ownerAddr).simulate({ from: selectedAddr }));
-        } catch {}
-        publicEur = Number(await eurContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr }));
-        eurBalance = privateEur + publicEur;
-      } else {
-        eurBalance = Number(await eurContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr }));
-      }
+      const privateEur = Number(
+        await eurContract.methods.private_balance_of(ownerAddr).simulate({ from: selectedAddr })
+      );
+      const publicEur = Number(
+        await eurContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr })
+      );
+      eurBalance = privateEur + publicEur;
     }
 
     if (fundTokenAddr) {
       const FtJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
       const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);
       const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, wallet);
-      let privateFsft = 0;
-      let publicFsft = 0;
-      if (isOwnAccount) {
-        try {
-          privateFsft = Number(await ftContract.methods.private_balance_of(ownerAddr).simulate({ from: selectedAddr }));
-        } catch {}
-        publicFsft = Number(await ftContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr }));
-        fsftBalance = privateFsft + publicFsft;
-      } else {
-        fsftBalance = Number(await ftContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr }));
-      }
+      const privateFsft = Number(
+        await ftContract.methods.private_balance_of(ownerAddr).simulate({ from: selectedAddr })
+      );
+      const publicFsft = Number(
+        await ftContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr })
+      );
+      fsftBalance = privateFsft + publicFsft;
       totalSupply = Number(await ftContract.methods.total_supply().simulate({ from: selectedAddr }));
       hasPrivateHolderProof = Boolean(
         await ftContract.methods.has_private_holder_proof(ownerAddr).simulate({ from: selectedAddr })
@@ -161,34 +151,26 @@ export async function GET(request: NextRequest) {
       const PtJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
       const ptArtifact = loadContractArtifact(PtJson as Parameters<typeof loadContractArtifact>[0]);
       const ptContract = await Contract.at(AztecAddress.fromString(protocolTokenAddr), ptArtifact, wallet);
-      let privateProtocol = 0;
-      let publicProtocol = 0;
-      if (isOwnAccount) {
-        try {
-          privateProtocol = Number(await ptContract.methods.private_balance_of(ownerAddr).simulate({ from: selectedAddr }));
-        } catch {}
-        publicProtocol = Number(await ptContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr }));
-        protocolTokenBalance = privateProtocol + publicProtocol;
-      } else {
-        protocolTokenBalance = Number(await ptContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr }));
-      }
+      const privateProtocol = Number(
+        await ptContract.methods.private_balance_of(ownerAddr).simulate({ from: selectedAddr })
+      );
+      const publicProtocol = Number(
+        await ptContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr })
+      );
+      protocolTokenBalance = privateProtocol + publicProtocol;
     }
 
     if (protocolRewardsAddr) {
-      try {
-        const RewardsJson = await loadGeneratedArtifactJson("protocol_rewards-ProtocolRewards.json");
-        const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
-        const rewardsContract = await Contract.at(
-          AztecAddress.fromString(protocolRewardsAddr),
-          rewardsArtifact,
-          wallet
-        );
-        rewardsClaimable = Number(
-          await rewardsContract.methods.get_claimable(ownerAddr).simulate({ from: selectedAddr })
-        );
-      } catch {
-        rewardsClaimable = 0;
-      }
+      const RewardsJson = await loadGeneratedArtifactJson("protocol_rewards-ProtocolRewards.json");
+      const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
+      const rewardsContract = await Contract.at(
+        AztecAddress.fromString(protocolRewardsAddr),
+        rewardsArtifact,
+        wallet
+      );
+      rewardsClaimable = Number(
+        await rewardsContract.methods.get_claimable(ownerAddr).simulate({ from: selectedAddr })
+      );
     }
 
     const sharePercent = totalSupply > 0 ? Math.round((fsftBalance / totalSupply) * 10000) / 100 : 0;
