@@ -7,6 +7,21 @@
  * The frontend always talks to these functions, never directly to PXE.
  */
 
+async function readApiError(res: Response, fallbackMessage: string): Promise<Error> {
+  try {
+    const body = (await res.json()) as { error?: unknown; message?: unknown };
+    const message =
+      typeof body.error === "string"
+        ? body.error
+        : typeof body.message === "string"
+        ? body.message
+        : fallbackMessage;
+    return new Error(message);
+  } catch {
+    return new Error(fallbackMessage);
+  }
+}
+
 // ── Fund Stats ────────────────────────────────────────────────────────────────
 
 export interface FundStats {
@@ -33,7 +48,7 @@ export interface FundStats {
 
 export async function fetchFundStats(): Promise<FundStats> {
   const res = await fetch("/api/fund/stats");
-  if (!res.ok) throw new Error("Failed to fetch fund stats");
+  if (!res.ok) throw await readApiError(res, "Failed to fetch fund stats");
   return res.json();
 }
 
@@ -82,13 +97,42 @@ export interface KYCProfile {
 
 export async function fetchKYCProfile(address: string): Promise<KYCProfile> {
   const res = await fetch(`/api/kyc/status?address=${encodeURIComponent(address)}`);
-  if (!res.ok) return { verified: false, isInvestor: false, roles: [] };
-  const data = await res.json();
+  if (!res.ok) throw await readApiError(res, "Failed to fetch KYC profile");
+  const data = (await res.json()) as {
+    verified?: unknown;
+    isInvestor?: unknown;
+    roles?: unknown;
+    canTradeDex?: unknown;
+    canVote?: unknown;
+    voteEligibilityReason?: unknown;
+    hasDepositTicket?: unknown;
+    hasFsftExposure?: unknown;
+    rewardsEligible?: unknown;
+    source?: unknown;
+  };
+
+  if (typeof data.verified !== "boolean") {
+    throw new Error("KYC profile response missing boolean `verified`");
+  }
+  if (typeof data.isInvestor !== "boolean") {
+    throw new Error("KYC profile response missing boolean `isInvestor`");
+  }
+  if (!Array.isArray(data.roles) || !data.roles.every((role) => typeof role === "string")) {
+    throw new Error("KYC profile response missing `roles` string array");
+  }
+
   return {
-    verified: Boolean(data.verified),
-    isInvestor: Boolean(data.isInvestor),
-    roles: Array.isArray(data.roles) ? data.roles : [],
-    source: data.source,
+    verified: data.verified,
+    isInvestor: data.isInvestor,
+    roles: data.roles,
+    canTradeDex: typeof data.canTradeDex === "boolean" ? data.canTradeDex : undefined,
+    canVote: typeof data.canVote === "boolean" ? data.canVote : undefined,
+    voteEligibilityReason:
+      typeof data.voteEligibilityReason === "string" ? data.voteEligibilityReason : undefined,
+    hasDepositTicket: typeof data.hasDepositTicket === "boolean" ? data.hasDepositTicket : undefined,
+    hasFsftExposure: typeof data.hasFsftExposure === "boolean" ? data.hasFsftExposure : undefined,
+    rewardsEligible: typeof data.rewardsEligible === "boolean" ? data.rewardsEligible : undefined,
+    source: typeof data.source === "string" ? data.source : undefined,
   };
 }
 
@@ -161,7 +205,7 @@ export async function fetchProposals(address?: string, accountIndex?: number): P
   if (accountIndex !== undefined) params.set("accountIndex", String(accountIndex));
   const query = params.toString();
   const res = await fetch(query ? `/api/governance/proposals?${query}` : "/api/governance/proposals");
-  if (!res.ok) return [];
+  if (!res.ok) throw await readApiError(res, "Failed to fetch governance proposals");
   const data = await res.json();
   return data.proposals;
 }
@@ -189,17 +233,7 @@ export async function fetchGovernanceEligibility(
     accountIndex: String(accountIndex),
   });
   const res = await fetch(`/api/governance/eligibility?${params.toString()}`);
-  if (!res.ok) {
-    const data = (await res.json()) as { error?: unknown };
-    return {
-      investorRole: false,
-      hasDepositTicket: false,
-      hasFsftExposure: false,
-      hasFsftVotingAttestation: false,
-      canVote: false,
-      reason: typeof data.error === "string" ? data.error : "Could not fetch voting eligibility",
-    };
-  }
+  if (!res.ok) throw await readApiError(res, "Failed to fetch governance eligibility");
   return res.json();
 }
 
@@ -313,7 +347,7 @@ export async function fetchPortfolio(address: string, accountIndex?: number): Pr
   const qs = new URLSearchParams({ address });
   if (accountIndex !== undefined) qs.set("accountIndex", String(accountIndex));
   const res = await fetch(`/api/portfolio?${qs.toString()}`);
-  if (!res.ok) throw new Error("Failed to fetch portfolio");
+  if (!res.ok) throw await readApiError(res, "Failed to fetch portfolio");
   return res.json();
 }
 
@@ -451,12 +485,14 @@ export interface RewardsClaim {
   error?: string;
 }
 
-export async function fetchDexOrderbook(address?: string): Promise<DexOrderbook> {
-  const url = address
-    ? `/api/dex/orders?address=${encodeURIComponent(address)}`
-    : "/api/dex/orders";
+export async function fetchDexOrderbook(address?: string, accountIndex?: number): Promise<DexOrderbook> {
+  const query = new URLSearchParams();
+  if (address) query.set("address", address);
+  if (accountIndex !== undefined) query.set("accountIndex", String(accountIndex));
+  const encoded = query.toString();
+  const url = encoded ? `/api/dex/orders?${encoded}` : "/api/dex/orders";
   const res = await fetch(url);
-  if (!res.ok) throw new Error("Failed to fetch DEX orderbook");
+  if (!res.ok) throw await readApiError(res, "Failed to fetch DEX orderbook");
   return res.json();
 }
 
@@ -506,13 +542,13 @@ export async function cancelDexOrder(
 export async function fetchRewardsStats(address: string, accountIndex = 0): Promise<RewardsStats> {
   const query = new URLSearchParams({ address, accountIndex: String(accountIndex) });
   const res = await fetch(`/api/rewards/stats?${query.toString()}`);
-  if (!res.ok) throw new Error("Failed to fetch rewards stats");
+  if (!res.ok) throw await readApiError(res, "Failed to fetch rewards stats");
   return res.json();
 }
 
 export async function fetchRewardsOverview(): Promise<RewardsOverview> {
   const res = await fetch("/api/rewards/overview");
-  if (!res.ok) throw new Error("Failed to fetch rewards overview");
+  if (!res.ok) throw await readApiError(res, "Failed to fetch rewards overview");
   return res.json();
 }
 
@@ -550,7 +586,7 @@ export async function fetchTokenInfo(address?: string): Promise<TokenInfo> {
     ? `/api/fund/tokens?address=${encodeURIComponent(address)}`
     : "/api/fund/tokens";
   const res = await fetch(url);
-  if (!res.ok) throw new Error("Failed to fetch token info");
+  if (!res.ok) throw await readApiError(res, "Failed to fetch token info");
   return res.json();
 }
 
@@ -558,7 +594,7 @@ export async function fetchTokenInfo(address?: string): Promise<TokenInfo> {
 
 export async function fetchAccounts(): Promise<string[]> {
   const res = await fetch("/api/wallet/accounts");
-  if (!res.ok) return [];
+  if (!res.ok) throw await readApiError(res, "Failed to fetch wallet accounts");
   const data = await res.json();
   return data.accounts;
 }

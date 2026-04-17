@@ -12,12 +12,31 @@ function toNumberSafe(value: unknown): number {
   return 0;
 }
 
+function toNumberStrict(value: unknown, fieldName: string): number {
+  const parsed = toNumberSafe(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${fieldName} is not a finite number`);
+  }
+  return parsed;
+}
+
+function expectTuple(value: unknown, expectedLength: number, methodName: string): unknown[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${methodName} returned non-tuple response`);
+  }
+  if (value.length < expectedLength) {
+    throw new Error(`${methodName} returned ${value.length} values, expected ${expectedLength}`);
+  }
+  return value;
+}
+
 function statusToLabel(status: number): "open" | "partial" | "filled" | "cancelled" | "expired" {
   if (status === 0) return "open";
   if (status === 1) return "partial";
   if (status === 2) return "filled";
   if (status === 3) return "cancelled";
-  return "expired";
+  if (status === 4) return "expired";
+  throw new Error(`Invalid DEX order status code: ${status}`);
 }
 
 export async function GET(request: NextRequest) {
@@ -59,29 +78,36 @@ export async function GET(request: NextRequest) {
       dexContract.methods.get_orderbook_snapshot().simulate({ from: actorAddress }),
     ]);
 
-    const count = Number(countRaw);
-    const snapshot = Array.isArray(snapshotRaw) ? snapshotRaw : [10_000, 9800, 10_200];
-    const referenceBps = toNumberSafe(snapshot[0]);
-    const minBps = toNumberSafe(snapshot[1]);
-    const maxBps = toNumberSafe(snapshot[2]);
+    const count = toNumberStrict(countRaw, "FSFTDex.get_order_count");
+    const snapshot = expectTuple(snapshotRaw, 3, "FSFTDex.get_orderbook_snapshot");
+    const referenceBps = toNumberStrict(snapshot[0], "FSFTDex.get_orderbook_snapshot.reference_bps");
+    const minBps = toNumberStrict(snapshot[1], "FSFTDex.get_orderbook_snapshot.min_bps");
+    const maxBps = toNumberStrict(snapshot[2], "FSFTDex.get_orderbook_snapshot.max_bps");
 
     const rawOrders = await Promise.all(
       Array.from({ length: count }, async (_, id) => {
         const orderRaw = await dexContract.methods.get_order(id).simulate({ from: actorAddress });
-        return { id, tuple: Array.isArray(orderRaw) ? orderRaw : [] };
+        return { id, tuple: expectTuple(orderRaw, 8, `FSFTDex.get_order(${id})`) };
       })
     );
 
     const orders = rawOrders.map(({ id, tuple }) => {
-      const owner = tuple[0] ? String(tuple[0]) : "0x0";
-      const sideCode = toNumberSafe(tuple[1]);
+      const ownerValue = tuple[0];
+      if (ownerValue === undefined || ownerValue === null) {
+        throw new Error(`FSFTDex.get_order(${id}) returned empty owner`);
+      }
+      const owner = String(ownerValue);
+      const sideCode = toNumberStrict(tuple[1], `FSFTDex.get_order(${id}).side`);
+      if (sideCode !== 0 && sideCode !== 1) {
+        throw new Error(`FSFTDex.get_order(${id}) returned invalid side code ${sideCode}`);
+      }
       const side = sideCode === 0 ? "buy" : "sell";
-      const amount = toNumberSafe(tuple[2]);
-      const remaining = toNumberSafe(tuple[3]);
-      const priceBps = toNumberSafe(tuple[4]);
-      const statusCode = toNumberSafe(tuple[5]);
-      const expiryBlock = toNumberSafe(tuple[6]);
-      const createdAt = toNumberSafe(tuple[7]);
+      const amount = toNumberStrict(tuple[2], `FSFTDex.get_order(${id}).amount`);
+      const remaining = toNumberStrict(tuple[3], `FSFTDex.get_order(${id}).remaining`);
+      const priceBps = toNumberStrict(tuple[4], `FSFTDex.get_order(${id}).price_bps`);
+      const statusCode = toNumberStrict(tuple[5], `FSFTDex.get_order(${id}).status`);
+      const expiryBlock = toNumberStrict(tuple[6], `FSFTDex.get_order(${id}).expiry_block`);
+      const createdAt = toNumberStrict(tuple[7], `FSFTDex.get_order(${id}).created_block`);
 
       return {
         id,
@@ -177,8 +203,11 @@ export async function POST(request: NextRequest) {
     const dexContract = await Contract.at(AztecAddress.fromString(dexAddr), dexArtifact, actor.wallet);
 
     const snapshotRaw = await dexContract.methods.get_orderbook_snapshot().simulate({ from: actorAddress });
-    const snapshot = Array.isArray(snapshotRaw) ? snapshotRaw : [10_000];
-    const referenceBps = toNumberSafe(snapshot[0]) || 10_000;
+    const snapshot = expectTuple(snapshotRaw, 1, "FSFTDex.get_orderbook_snapshot");
+    const referenceBps = toNumberStrict(snapshot[0], "FSFTDex.get_orderbook_snapshot.reference_bps");
+    if (referenceBps <= 0) {
+      throw new Error("FSFTDex.get_orderbook_snapshot returned non-positive reference price");
+    }
     const priceBps = limitPriceEur ? Math.round(Number(limitPriceEur) * 10_000) : referenceBps;
 
     const sideCode = side === "buy" ? 0 : 1;

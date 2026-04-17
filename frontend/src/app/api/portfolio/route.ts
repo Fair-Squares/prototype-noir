@@ -12,6 +12,24 @@ function toNumberSafe(value: unknown): number {
   return 0;
 }
 
+function toNumberStrict(value: unknown, fieldName: string): number {
+  const parsed = toNumberSafe(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${fieldName} is not a finite number`);
+  }
+  return parsed;
+}
+
+function expectTuple(value: unknown, expectedLength: number, methodName: string): unknown[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${methodName} returned non-tuple response`);
+  }
+  if (value.length < expectedLength) {
+    throw new Error(`${methodName} returned ${value.length} values, expected ${expectedLength}`);
+  }
+  return value;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const address = searchParams.get("address") ?? "";
@@ -36,8 +54,19 @@ export async function GET(request: NextRequest) {
     const fundTokenAddr = process.env.NEXT_PUBLIC_FUND_TOKEN_ADDRESS ?? "";
     const housingFundAddr = process.env.NEXT_PUBLIC_HOUSING_FUND_ADDRESS ?? "";
     const kycAddr = process.env.NEXT_PUBLIC_KYC_VERIFIER_ADDRESS ?? "";
+    const defiVaultAddr = process.env.NEXT_PUBLIC_DEFI_VAULT_ADDRESS ?? "";
     const protocolTokenAddr = process.env.NEXT_PUBLIC_PROTOCOL_TOKEN_ADDRESS ?? "";
     const protocolRewardsAddr = process.env.NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS ?? "";
+
+    if (!eurTokenAddr || !fundTokenAddr || !housingFundAddr || !kycAddr) {
+      return NextResponse.json(
+        {
+          error:
+            "NEXT_PUBLIC_EUR_TOKEN_ADDRESS, NEXT_PUBLIC_FUND_TOKEN_ADDRESS, NEXT_PUBLIC_HOUSING_FUND_ADDRESS, and NEXT_PUBLIC_KYC_VERIFIER_ADDRESS must be set",
+        },
+        { status: 500 }
+      );
+    }
 
     const { getTestAccount } = await import("@/lib/serverWallet");
     const { Contract } = await import("@aztec/aztec.js/contracts");
@@ -55,6 +84,7 @@ export async function GET(request: NextRequest) {
 
     let eurBalance = 0;
     let fsftBalance = 0;
+    let publicFsftBalance = 0;
     let depositTicket = 0;
     let totalFundDeposits = 0;
     let totalInDefi = 0;
@@ -71,91 +101,96 @@ export async function GET(request: NextRequest) {
     let hasPrivateHolderProof = false;
     let privateHolderVkConfigured = false;
 
-    if (kycAddr) {
-      const KycJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
-      const kycArtifact = loadContractArtifact(KycJson as Parameters<typeof loadContractArtifact>[0]);
-      const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet);
-      investorRole = Boolean(
-        await kycContract.methods.is_investor(ownerAddr).simulate({ from: selectedAddr })
-      );
-    }
+    const KycJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
+    const kycArtifact = loadContractArtifact(KycJson as Parameters<typeof loadContractArtifact>[0]);
+    const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet);
+    investorRole = Boolean(await kycContract.methods.is_investor(ownerAddr).simulate({ from: selectedAddr }));
 
-    if (eurTokenAddr) {
-      const EurJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
-      const eurArtifact = loadContractArtifact(EurJson as Parameters<typeof loadContractArtifact>[0]);
-      const eurContract = await Contract.at(AztecAddress.fromString(eurTokenAddr), eurArtifact, wallet);
-      const privateEur = Number(
-        await eurContract.methods.private_balance_of(ownerAddr).simulate({ from: selectedAddr })
-      );
-      const publicEur = Number(
-        await eurContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr })
-      );
-      eurBalance = privateEur + publicEur;
-    }
+    const EurJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
+    const eurArtifact = loadContractArtifact(EurJson as Parameters<typeof loadContractArtifact>[0]);
+    const eurContract = await Contract.at(AztecAddress.fromString(eurTokenAddr), eurArtifact, wallet);
+    const privateEur = toNumberStrict(
+      await eurContract.methods.private_balance_of(ownerAddr).simulate({ from: selectedAddr }),
+      "EURToken.private_balance_of"
+    );
+    const publicEur = toNumberStrict(
+      await eurContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr }),
+      "EURToken.public_balance_of"
+    );
+    eurBalance = privateEur + publicEur;
 
-    if (fundTokenAddr) {
-      const FtJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
-      const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);
-      const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, wallet);
-      const privateFsft = Number(
-        await ftContract.methods.private_balance_of(ownerAddr).simulate({ from: selectedAddr })
-      );
-      const publicFsft = Number(
-        await ftContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr })
-      );
-      fsftBalance = privateFsft + publicFsft;
-      totalSupply = Number(await ftContract.methods.total_supply().simulate({ from: selectedAddr }));
-      hasPrivateHolderProof = Boolean(
-        await ftContract.methods.has_private_holder_proof(ownerAddr).simulate({ from: selectedAddr })
-      );
-      privateHolderVkConfigured = Boolean(
-        await ftContract.methods
-          .get_private_holder_vk_hash()
-          .simulate({ from: selectedAddr })
-          .then((value: unknown) => {
-            if (typeof value === "bigint") return value !== 0n;
-            if (typeof value === "number") return value !== 0;
-            if (typeof value === "string") return value !== "0";
-            if (value && typeof value === "object" && "toString" in value) {
-              return (value as { toString: () => string }).toString() !== "0";
-            }
-            return false;
-          })
-      );
-    }
+    const FtJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
+    const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);
+    const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, wallet);
+    const privateFsft = toNumberStrict(
+      await ftContract.methods.private_balance_of(ownerAddr).simulate({ from: selectedAddr }),
+      "FundToken.private_balance_of"
+    );
+    publicFsftBalance = toNumberStrict(
+      await ftContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr }),
+      "FundToken.public_balance_of"
+    );
+    fsftBalance = privateFsft + publicFsftBalance;
+    totalSupply = toNumberStrict(await ftContract.methods.total_supply().simulate({ from: selectedAddr }), "FundToken.total_supply");
+    hasPrivateHolderProof = Boolean(
+      await ftContract.methods.has_private_holder_proof(ownerAddr).simulate({ from: selectedAddr })
+    );
+    const privateHolderVkHash = await ftContract.methods
+      .get_private_holder_vk_hash()
+      .simulate({ from: selectedAddr });
+    privateHolderVkConfigured = (() => {
+      if (typeof privateHolderVkHash === "bigint") return privateHolderVkHash !== 0n;
+      if (typeof privateHolderVkHash === "number") return privateHolderVkHash !== 0;
+      if (typeof privateHolderVkHash === "string") return privateHolderVkHash !== "0";
+      if (privateHolderVkHash && typeof privateHolderVkHash === "object" && "toString" in privateHolderVkHash) {
+        return (privateHolderVkHash as { toString: () => string }).toString() !== "0";
+      }
+      return false;
+    })();
 
-    if (housingFundAddr) {
-      const HfJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
-      const hfArtifact = loadContractArtifact(HfJson as Parameters<typeof loadContractArtifact>[0]);
-      const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, wallet);
+    const HfJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
+    const hfArtifact = loadContractArtifact(HfJson as Parameters<typeof loadContractArtifact>[0]);
+    const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, wallet);
 
-      const statsRaw = await hfContract.methods.get_fund_stats().simulate({ from: selectedAddr });
-      const stats = Array.isArray(statsRaw) ? statsRaw : [0, 0, 0, 0];
-      totalFundDeposits = toNumberSafe(stats[0]);
-      totalInDefi = toNumberSafe(stats[1]);
-      totalAllocated = toNumberSafe(stats[2]);
-      available = toNumberSafe(stats[3]);
+    const statsRaw = await hfContract.methods.get_fund_stats().simulate({ from: selectedAddr });
+    const stats = expectTuple(statsRaw, 4, "HousingFund.get_fund_stats");
+    totalFundDeposits = toNumberStrict(stats[0], "HousingFund.get_fund_stats.total_deposits");
+    totalInDefi = toNumberStrict(stats[1], "HousingFund.get_fund_stats.total_in_defi");
+    totalAllocated = toNumberStrict(stats[2], "HousingFund.get_fund_stats.total_allocated");
+    available = toNumberStrict(stats[3], "HousingFund.get_fund_stats.available");
 
-      depositTicket = Number(
-        await hfContract.methods.get_user_deposit_ticket(ownerAddr).simulate({ from: selectedAddr })
+    depositTicket = toNumberStrict(
+      await hfContract.methods.get_user_deposit_ticket(ownerAddr).simulate({ from: selectedAddr }),
+      "HousingFund.get_user_deposit_ticket"
+    );
+
+    const valuationRaw = await hfContract.methods.get_valuation().simulate({ from: selectedAddr });
+    const valuation = expectTuple(valuationRaw, 4, "HousingFund.get_valuation");
+    lastAssetSalePrice = toNumberStrict(valuation[0], "HousingFund.get_valuation.last_asset_sale_price");
+    lastFsftMinted = toNumberStrict(valuation[1], "HousingFund.get_valuation.last_fsft_minted");
+    tokenPriceBps = toNumberStrict(valuation[2], "HousingFund.get_valuation.last_token_price_bps");
+
+    if (defiVaultAddr) {
+      const DvJson = await loadGeneratedArtifactJson("defi_vault-DeFiVault.json");
+      const dvArtifact = loadContractArtifact(DvJson as Parameters<typeof loadContractArtifact>[0]);
+      const dvContract = await Contract.at(AztecAddress.fromString(defiVaultAddr), dvArtifact, wallet);
+      totalYield = toNumberStrict(
+        await dvContract.methods.get_accrued_yield().simulate({ from: selectedAddr }),
+        "DeFiVault.get_accrued_yield"
       );
-
-      const valuationRaw = await hfContract.methods.get_valuation().simulate({ from: selectedAddr });
-      const valuation = Array.isArray(valuationRaw) ? valuationRaw : [0, 0, 0, 0];
-      lastAssetSalePrice = toNumberSafe(valuation[0]);
-      lastFsftMinted = toNumberSafe(valuation[1]);
-      tokenPriceBps = toNumberSafe(valuation[2]);
     }
 
     if (protocolTokenAddr) {
       const PtJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
       const ptArtifact = loadContractArtifact(PtJson as Parameters<typeof loadContractArtifact>[0]);
       const ptContract = await Contract.at(AztecAddress.fromString(protocolTokenAddr), ptArtifact, wallet);
-      const privateProtocol = Number(
-        await ptContract.methods.private_balance_of(ownerAddr).simulate({ from: selectedAddr })
+      const privateProtocol = toNumberStrict(
+        await ptContract.methods.private_balance_of(ownerAddr).simulate({ from: selectedAddr }),
+        "ProtocolToken.private_balance_of"
       );
-      const publicProtocol = Number(
-        await ptContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr })
+      const publicProtocol = toNumberStrict(
+        await ptContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr }),
+        "ProtocolToken.public_balance_of"
       );
       protocolTokenBalance = privateProtocol + publicProtocol;
     }
@@ -168,8 +203,9 @@ export async function GET(request: NextRequest) {
         rewardsArtifact,
         wallet
       );
-      rewardsClaimable = Number(
-        await rewardsContract.methods.get_claimable(ownerAddr).simulate({ from: selectedAddr })
+      rewardsClaimable = toNumberStrict(
+        await rewardsContract.methods.get_claimable(ownerAddr).simulate({ from: selectedAddr }),
+        "ProtocolRewards.get_claimable"
       );
     }
 
@@ -179,7 +215,7 @@ export async function GET(request: NextRequest) {
     const navPerFsftEur = totalSupply > 0 ? Math.round((navEur / totalSupply) * 10000) / 10000 : 0;
     const fsftMarketValue = Math.round(fsftBalance * navPerFsftEur * 100) / 100;
     const hasDepositTicket = depositTicket > 0;
-    const hasFsftExposure = fsftBalance > 0 || hasPrivateHolderProof;
+    const hasFsftExposure = publicFsftBalance > 0 || hasPrivateHolderProof;
     const canVote = investorRole && (hasDepositTicket || hasFsftExposure);
     const privateFsftProofMode = hasPrivateHolderProof
       ? privateHolderVkConfigured

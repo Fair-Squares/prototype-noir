@@ -12,6 +12,34 @@ function isNonZeroField(value: unknown): boolean {
   return false;
 }
 
+function toNumberSafe(value: unknown): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "bigint") return Number(value);
+  if (typeof value === "string") return Number(value);
+  if (value && typeof value === "object" && "toString" in value) {
+    return Number((value as { toString: () => string }).toString());
+  }
+  return Number.NaN;
+}
+
+function toNumberStrict(value: unknown, fieldName: string): number {
+  const parsed = toNumberSafe(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${fieldName} is not a finite number`);
+  }
+  return parsed;
+}
+
+function expectTuple(value: unknown, expectedLength: number, methodName: string): unknown[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${methodName} returned non-tuple response`);
+  }
+  if (value.length < expectedLength) {
+    throw new Error(`${methodName} returned ${value.length} values, expected ${expectedLength}`);
+  }
+  return value;
+}
+
 async function fetchJsonOrThrow(url: string): Promise<Record<string, unknown>> {
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
@@ -122,19 +150,19 @@ export async function GET(request: NextRequest) {
         .simulate({ from: actorAddress }),
     ]);
 
-    const cfg = Array.isArray(configRaw) ? configRaw : [8_000_000, 0, 0, 0, 120, 1];
-    const user = Array.isArray(userRaw) ? userRaw : [0, 0, 0, false];
+    const cfg = expectTuple(configRaw, 6, "ProtocolRewards.get_rewards_config");
+    const user = expectTuple(userRaw, 4, "ProtocolRewards.get_user_stats");
 
-    const distributionPool = Number(cfg[0] ?? 8_000_000);
-    const emittedToDate = Number(cfg[1] ?? 0);
-    const totalClaimed = Number(cfg[2] ?? 0);
-    const currentEpoch = Number(cfg[3] ?? 0);
-    const totalEpochs = Number(cfg[4] ?? 120);
-    const claimMin = Number(cfg[5] ?? 1);
+    const distributionPool = toNumberStrict(cfg[0], "ProtocolRewards.get_rewards_config.total_distribution_pool");
+    const emittedToDate = toNumberStrict(cfg[1], "ProtocolRewards.get_rewards_config.total_distributed");
+    const totalClaimed = toNumberStrict(cfg[2], "ProtocolRewards.get_rewards_config.total_claimed");
+    const currentEpoch = toNumberStrict(cfg[3], "ProtocolRewards.get_rewards_config.current_epoch");
+    const totalEpochs = toNumberStrict(cfg[4], "ProtocolRewards.get_rewards_config.total_epochs");
+    const claimMin = toNumberStrict(cfg[5], "ProtocolRewards.get_rewards_config.claim_min");
 
-    const claimable = Number(user[0] ?? 0);
-    const totalUserClaimed = Number(user[1] ?? 0);
-    const rawLastClaimedEpoch = Number(user[2] ?? 0);
+    const claimable = toNumberStrict(user[0], "ProtocolRewards.get_user_stats.claimable");
+    const totalUserClaimed = toNumberStrict(user[1], "ProtocolRewards.get_user_stats.total_user_claimed");
+    const rawLastClaimedEpoch = toNumberStrict(user[2], "ProtocolRewards.get_user_stats.last_claimed_epoch");
     const fsftRewardsAttested = Boolean(user[3]);
     let balance = 0;
 
@@ -146,8 +174,9 @@ export async function GET(request: NextRequest) {
         ftArtifact,
         actor.wallet
       );
-      balance = Number(
-        await tokenContract.methods.public_balance_of(userAddress).simulate({ from: actorAddress })
+      balance = toNumberStrict(
+        await tokenContract.methods.public_balance_of(userAddress).simulate({ from: actorAddress }),
+        "ProtocolToken.public_balance_of"
       );
     }
 

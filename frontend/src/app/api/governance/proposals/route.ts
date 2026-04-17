@@ -12,28 +12,38 @@ import {
 
 // -- Helpers -----------------------------------------------------------------
 
-function toBigInt(value: unknown): bigint {
+function toBigIntStrict(value: unknown, fieldName: string): bigint {
   if (typeof value === "bigint") return value;
-  if (typeof value === "number") return BigInt(value);
-  if (typeof value === "string") return value.startsWith("0x") ? BigInt(value) : BigInt(Number(value));
-  if (value && typeof value === "object" && "toBigInt" in value) {
-    try {
-      return (value as { toBigInt: () => bigint }).toBigInt();
-    } catch {
-      return BigInt(0);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new Error(`${fieldName} is not a finite number`);
     }
+    return BigInt(value);
+  }
+  if (typeof value === "string") {
+    if (value.startsWith("0x")) return BigInt(value);
+    if (value.trim().length === 0) throw new Error(`${fieldName} is empty`);
+    return BigInt(value);
+  }
+  if (value && typeof value === "object" && "toBigInt" in value) {
+    return (value as { toBigInt: () => bigint }).toBigInt();
   }
   if (value && typeof value === "object" && "toString" in value) {
     const s = (value as { toString: () => string }).toString();
-    if (s) {
-      try {
-        return s.startsWith("0x") ? BigInt(s) : BigInt(Number(s));
-      } catch {
-        return BigInt(0);
-      }
-    }
+    if (!s) throw new Error(`${fieldName} is empty`);
+    return s.startsWith("0x") ? BigInt(s) : BigInt(s);
   }
-  return BigInt(0);
+  throw new Error(`${fieldName} is not a bigint-compatible value`);
+}
+
+function expectTuple(value: unknown, expectedLength: number, methodName: string): unknown[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${methodName} returned non-tuple response`);
+  }
+  if (value.length < expectedLength) {
+    throw new Error(`${methodName} returned ${value.length} values, expected ${expectedLength}`);
+  }
+  return value;
 }
 
 // -- GET: list proposals ------------------------------------------------------
@@ -101,29 +111,31 @@ export async function GET(request: NextRequest) {
     const proposals = await Promise.all(
       Array.from({ length: count }, async (_, id) => {
         const raw = await govContract.methods.get_proposal(id).simulate({ from });
-        const tuple = Array.isArray(raw)
-          ? raw
-          : [BigInt(0), BigInt(0), BigInt(0), BigInt(0), BigInt(0), BigInt(0), BigInt(0)];
+        const tuple = expectTuple(raw, 7, `Governance.get_proposal(${id})`);
 
-        const descHash = toBigInt(tuple[0]);
-        const amount = Number(toBigInt(tuple[1]));
-        const yesVotes = Number(toBigInt(tuple[2]));
-        const noVotes = Number(toBigInt(tuple[3]));
-        const status = Number(toBigInt(tuple[4]));
-        const createdBlock = Number(toBigInt(tuple[5]));
-        const deadlineBlock = Number(toBigInt(tuple[6]));
+        const descHash = toBigIntStrict(tuple[0], `Governance.get_proposal(${id}).desc_hash`);
+        const amount = Number(toBigIntStrict(tuple[1], `Governance.get_proposal(${id}).amount`));
+        const yesVotes = Number(toBigIntStrict(tuple[2], `Governance.get_proposal(${id}).yes_votes`));
+        const noVotes = Number(toBigIntStrict(tuple[3], `Governance.get_proposal(${id}).no_votes`));
+        const status = Number(toBigIntStrict(tuple[4], `Governance.get_proposal(${id}).status`));
+        const createdBlock = Number(toBigIntStrict(tuple[5], `Governance.get_proposal(${id}).created_block`));
+        const deadlineBlock = Number(toBigIntStrict(tuple[6], `Governance.get_proposal(${id}).deadline_block`));
         const totalVotes = yesVotes + noVotes;
 
         const distributionRaw = await hfContract.methods
           .get_distribution_status(id)
           .simulate({ from });
-        const distributionTuple = Array.isArray(distributionRaw)
-          ? distributionRaw
-          : [false, BigInt(0), BigInt(0), BigInt(0)];
+        const distributionTuple = expectTuple(distributionRaw, 4, `HousingFund.get_distribution_status(${id})`);
         const distributionOpened = Boolean(distributionTuple[0]);
-        const distributionAmount = Number(toBigInt(distributionTuple[1]));
-        const distributionSnapshotDeposits = Number(toBigInt(distributionTuple[2]));
-        const distributionClaimed = Number(toBigInt(distributionTuple[3]));
+        const distributionAmount = Number(
+          toBigIntStrict(distributionTuple[1], `HousingFund.get_distribution_status(${id}).amount`)
+        );
+        const distributionSnapshotDeposits = Number(
+          toBigIntStrict(distributionTuple[2], `HousingFund.get_distribution_status(${id}).snapshot_total`)
+        );
+        const distributionClaimed = Number(
+          toBigIntStrict(distributionTuple[3], `HousingFund.get_distribution_status(${id}).claimed_total`)
+        );
 
         let hasClaimed = false;
         let claimableAmount = 0;

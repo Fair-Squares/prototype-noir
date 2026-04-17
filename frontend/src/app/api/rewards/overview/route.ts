@@ -4,6 +4,34 @@ import { simGetRewardsOverview } from "@/lib/simulationStore";
 
 const YEARLY_CURVE_PERCENTS = [13, 12, 11, 10, 10, 10, 9, 9, 8, 8];
 
+function toNumberSafe(value: unknown): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "bigint") return Number(value);
+  if (typeof value === "string") return Number(value);
+  if (value && typeof value === "object" && "toString" in value) {
+    return Number((value as { toString: () => string }).toString());
+  }
+  return Number.NaN;
+}
+
+function toNumberStrict(value: unknown, fieldName: string): number {
+  const parsed = toNumberSafe(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${fieldName} is not a finite number`);
+  }
+  return parsed;
+}
+
+function expectTuple(value: unknown, expectedLength: number, methodName: string): unknown[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${methodName} returned non-tuple response`);
+  }
+  if (value.length < expectedLength) {
+    throw new Error(`${methodName} returned ${value.length} values, expected ${expectedLength}`);
+  }
+  return value;
+}
+
 function buildYearlySchedule(distributionPool: number) {
   return YEARLY_CURVE_PERCENTS.map((percent, index) => ({
     year: index + 1,
@@ -43,14 +71,14 @@ export async function GET() {
     const rewardsContract = await Contract.at(AztecAddress.fromString(rewardsAddr), rewardsArtifact, admin.wallet);
 
     const configRaw = await rewardsContract.methods.get_rewards_config().simulate({ from });
-    const cfg = Array.isArray(configRaw) ? configRaw : [8_000_000, 0, 0, 0, 120, 1];
+    const cfg = expectTuple(configRaw, 6, "ProtocolRewards.get_rewards_config");
 
-    const distributionPool = Number(cfg[0] ?? 8_000_000);
-    const emittedToDate = Number(cfg[1] ?? 0);
-    const totalClaimed = Number(cfg[2] ?? 0);
-    const currentEpoch = Number(cfg[3] ?? 0);
-    const totalEpochs = Number(cfg[4] ?? 120);
-    const claimMin = Number(cfg[5] ?? 1);
+    const distributionPool = toNumberStrict(cfg[0], "ProtocolRewards.get_rewards_config.total_distribution_pool");
+    const emittedToDate = toNumberStrict(cfg[1], "ProtocolRewards.get_rewards_config.total_distributed");
+    const totalClaimed = toNumberStrict(cfg[2], "ProtocolRewards.get_rewards_config.total_claimed");
+    const currentEpoch = toNumberStrict(cfg[3], "ProtocolRewards.get_rewards_config.current_epoch");
+    const totalEpochs = toNumberStrict(cfg[4], "ProtocolRewards.get_rewards_config.total_epochs");
+    const claimMin = toNumberStrict(cfg[5], "ProtocolRewards.get_rewards_config.claim_min");
     const rewardStart = Date.parse(process.env.PROTOCOL_REWARDS_START ?? "2026-01-01T00:00:00.000Z");
     const epochMs = 30 * 24 * 60 * 60 * 1000;
 
