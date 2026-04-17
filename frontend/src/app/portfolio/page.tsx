@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ActionPanel, MetricRow, PageHero } from "@/components/SimplePage";
 import { useWallet } from "@/contexts/WalletContext";
+import { DEMO_PORTFOLIO, DEMO_REWARDS_STATS } from "@/lib/demoData";
 import {
   attestFsftForRewards,
   claimRewards,
@@ -21,13 +22,14 @@ export default function PortfolioPage() {
   const address = activeAccount?.address ?? null;
   const accountIndex = activeAccount?.index ?? 0;
 
-  const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
+  const [portfolio, setPortfolio] = useState<PortfolioData>(DEMO_PORTFOLIO);
   const [kycProfile, setKycProfile] = useState<KYCProfile>({
     verified: false,
     isInvestor: false,
     roles: [],
   });
-  const [rewards, setRewards] = useState<RewardsStats | null>(null);
+  const [rewards, setRewards] = useState<RewardsStats>(DEMO_REWARDS_STATS);
+  const [usingDemoData, setUsingDemoData] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -43,9 +45,15 @@ export default function PortfolioPage() {
       setPortfolio(nextPortfolio);
       setKycProfile(nextProfile);
       setRewards(nextRewards);
+      setUsingDemoData(false);
       setError(null);
     } catch (loadError: unknown) {
-      setError(loadError instanceof Error ? loadError.message : "Could not load account data.");
+      setError(
+        loadError instanceof Error
+          ? `${loadError.message} Showing demo snapshot.`
+          : "Could not load account data. Showing demo snapshot."
+      );
+      setUsingDemoData(true);
     } finally {
       setLoading(false);
     }
@@ -53,9 +61,10 @@ export default function PortfolioPage() {
 
   useEffect(() => {
     if (!address) {
-      setPortfolio(null);
-      setRewards(null);
+      setPortfolio(DEMO_PORTFOLIO);
+      setRewards(DEMO_REWARDS_STATS);
       setKycProfile({ verified: false, isInvestor: false, roles: [] });
+      setUsingDemoData(true);
       return;
     }
     loadAccountData(address);
@@ -68,7 +77,7 @@ export default function PortfolioPage() {
       setMessage(result.error ?? "Claim failed.");
       return;
     }
-    setMessage(`Claimed ${(result.claimed ?? 0).toLocaleString()} ${rewards?.token.symbol ?? "FSP"}.`);
+    setMessage(`Claimed ${(result.claimed ?? 0).toLocaleString()} ${rewards.token.symbol}.`);
     await loadAccountData(address);
   };
 
@@ -83,29 +92,13 @@ export default function PortfolioPage() {
     await loadAccountData(address);
   };
 
-  if (!address) {
-    return (
-      <div className="space-y-6">
-        <PageHero
-          title="Account"
-          subtitle="Connect your wallet to see your balances."
-          ctaHref="/invest"
-          ctaLabel="Deposit"
-        />
-        <div className="rounded-xl border border-border bg-card p-10 text-center text-sm text-text-3">
-          Connect your wallet from the top-right account button.
-        </div>
-      </div>
-    );
-  }
-
   const metrics = [
-    { label: "Cash (EURs)", value: formatEUR(portfolio?.eurBalance ?? 0) },
-    { label: "Fund Shares (FSFT)", value: (portfolio?.balance ?? 0).toLocaleString() },
-    { label: "Deposited", value: formatEUR(portfolio?.depositedAmount ?? 0) },
+    { label: "Cash (EURs)", value: formatEUR(portfolio.eurBalance) },
+    { label: "Fund Shares (FSFT)", value: portfolio.balance.toLocaleString() },
+    { label: "Deposited", value: formatEUR(portfolio.depositedAmount) },
     {
       label: "Rewards (FSP)",
-      value: (rewards?.claimable ?? 0).toLocaleString(),
+      value: rewards.claimable.toLocaleString(),
       accent: true,
     },
   ];
@@ -114,7 +107,7 @@ export default function PortfolioPage() {
     <div className="space-y-6">
       <PageHero
         title="Account"
-        subtitle="Your balances and next actions."
+        subtitle={address ? "Your balances and next actions." : "Demo account preview while wallet is disconnected."}
         ctaHref="/invest"
         ctaLabel="Deposit"
       />
@@ -129,6 +122,11 @@ export default function PortfolioPage() {
           {message}
         </div>
       )}
+      {usingDemoData && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Showing seeded demo account data for simulation.
+        </div>
+      )}
 
       <MetricRow items={metrics} />
 
@@ -136,27 +134,27 @@ export default function PortfolioPage() {
         <div className="grid gap-2 sm:grid-cols-2">
           <button
             onClick={handleClaimRewards}
-            disabled={loading || !rewards?.eligibility?.canClaimNow}
+            disabled={!address || usingDemoData || loading || !rewards.eligibility?.canClaimNow}
             className="rounded-lg bg-fs-teal px-3 py-2 text-sm font-semibold text-white hover:bg-fs-teal-dark disabled:opacity-50"
           >
             Claim Rewards
           </button>
-          <a
+          <Link
             href="/invest"
             className="rounded-lg border border-border px-3 py-2 text-center text-sm font-semibold text-text-2 hover:bg-bg hover:text-text-1"
           >
             Deposit
-          </a>
+          </Link>
         </div>
         <div className="mt-3 flex gap-3 text-xs">
           <button
             onClick={handleAttestRewards}
-            disabled={loading}
+            disabled={!address || usingDemoData || loading}
             className="text-fs-teal hover:underline disabled:opacity-50"
           >
             Run private Fund Shares check
           </button>
-          {!kycProfile.isInvestor && (
+          {address && !kycProfile.isInvestor && (
             <Link href="/kyc" className="text-fs-teal hover:underline">
               Complete KYC
             </Link>

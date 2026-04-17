@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ActionPanel, MetricRow, PageHero } from "@/components/SimplePage";
 import { useWallet } from "@/contexts/WalletContext";
+import { DEMO_DEX_ORDERBOOK } from "@/lib/demoData";
 import {
   cancelDexOrder,
   fetchDexOrderbook,
@@ -20,24 +21,28 @@ export default function DexPage() {
   const address = activeAccount?.address ?? null;
   const accountIndex = activeAccount?.index ?? 0;
 
-  const [orderbook, setOrderbook] = useState<DexOrderbook | null>(null);
+  const [orderbook, setOrderbook] = useState<DexOrderbook | null>(DEMO_DEX_ORDERBOOK);
   const [profile, setProfile] = useState<KYCProfile>({ verified: false, isInvestor: false, roles: [] });
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("100");
   const [limitPrice, setLimitPrice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [usingDemoData, setUsingDemoData] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const book = await fetchDexOrderbook(address ?? undefined);
+      const book = await fetchDexOrderbook(address ?? undefined, accountIndex);
       setOrderbook(book);
+      setUsingDemoData(false);
       setLoadError(null);
     } catch (error: unknown) {
       setLoadError(error instanceof Error ? error.message : "Could not load trade data.");
+      setOrderbook(DEMO_DEX_ORDERBOOK);
+      setUsingDemoData(true);
     }
-  }, [address]);
+  }, [address, accountIndex]);
 
   useEffect(() => {
     refresh();
@@ -121,20 +126,20 @@ export default function DexPage() {
     }
   };
 
+  const displayBook = orderbook ?? DEMO_DEX_ORDERBOOK;
+
   const metrics = [
     { label: "Investor Status", value: profile.isInvestor ? "Ready" : "Required" },
     {
       label: "Reference Price",
-      value: orderbook ? `€${orderbook.priceReferenceEur.toFixed(4)}` : "n/a",
+      value: `€${displayBook.priceReferenceEur.toFixed(4)}`,
       accent: true,
     },
     {
       label: "Price Band",
-      value: orderbook
-        ? `€${orderbook.priceBandMinEur.toFixed(4)} - €${orderbook.priceBandMaxEur.toFixed(4)}`
-        : "n/a",
+      value: `€${displayBook.priceBandMinEur.toFixed(4)} - €${displayBook.priceBandMaxEur.toFixed(4)}`,
     },
-    { label: "Open Orders", value: String(orderbook?.userOrders.length ?? 0) },
+    { label: "Open Orders", value: String(displayBook.userOrders.length) },
   ];
 
   return (
@@ -148,7 +153,20 @@ export default function DexPage() {
 
       {loadError && (
         <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {loadError}
+          {loadError} Showing seeded demo orderbook.
+          <button
+            type="button"
+            onClick={refresh}
+            className="ml-2 font-semibold underline"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {usingDemoData && !loadError && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Demo orderbook data is shown for simulation preview.
         </div>
       )}
 
@@ -217,12 +235,15 @@ export default function DexPage() {
           >
             {busy ? "Submitting..." : "Place"}
           </button>
+          {!address && (
+            <p className="mt-2 text-xs text-text-3">Connect a wallet to place or manage orders.</p>
+          )}
         </ActionPanel>
 
         <ActionPanel title="Primary Action" subtitle="Manage Orders">
           <div className="space-y-2">
-            {orderbook?.userOrders.length ? (
-              orderbook.userOrders.map((order) => (
+            {displayBook.userOrders.length ? (
+              displayBook.userOrders.map((order) => (
                 <div
                   key={order.id}
                   className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-bg p-3"
@@ -235,14 +256,14 @@ export default function DexPage() {
                   </div>
                   <div className="flex gap-2">
                     <button
-                      disabled={busy || !["open", "partial"].includes(order.status)}
+                      disabled={!address || busy || !["open", "partial"].includes(order.status)}
                       onClick={() => matchOrder(order.id)}
                       className="rounded-md border border-border px-2.5 py-1 text-xs"
                     >
                       Match
                     </button>
                     <button
-                      disabled={busy || !["open", "partial"].includes(order.status)}
+                      disabled={!address || busy || !["open", "partial"].includes(order.status)}
                       onClick={() => cancelOrder(order.id)}
                       className="rounded-md bg-fs-anthracite px-2.5 py-1 text-xs text-white disabled:opacity-50"
                     >

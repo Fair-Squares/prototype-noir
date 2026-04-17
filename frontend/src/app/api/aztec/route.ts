@@ -11,11 +11,9 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { resolveServerPxeUrl } from "@/lib/pxeUrl";
 
-const NODE_URL =
-  process.env.AZTEC_PXE_URL ??
-  process.env.NEXT_PUBLIC_AZTEC_PXE_URL ??
-  "http://aztec:8080";
+const NODE_URL = resolveServerPxeUrl();
 
 const TIMEOUT_MS = 30_000;
 

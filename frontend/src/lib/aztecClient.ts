@@ -10,8 +10,10 @@
  * Those packages crash the Next.js server worker during webpack initialization.
  */
 
+import { resolveServerPxeUrl } from "@/lib/pxeUrl";
+
 const DEFAULT_NODE_URL =
-  process.env.NEXT_PUBLIC_AZTEC_PXE_URL ?? "http://aztec:8080";
+  resolveServerPxeUrl();
 
 let lastFailure = 0;
 const COOLDOWN_MS = 15_000;

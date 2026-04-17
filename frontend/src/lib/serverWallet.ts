@@ -10,7 +10,7 @@
  * they're never bundled into browser chunks.
  *
  * Initialization:
- *   1. Creates an ephemeral in-process PXE connected to http://aztec:8080
+ *   1. Creates an ephemeral in-process PXE connected to the configured PXE URL
  *   2. Registers local-network test accounts in the embedded wallet/PXE
  *
  * All subsequent calls reuse the cached wallet (module-level singleton).
@@ -23,8 +23,9 @@
  */
 
 import type { Wallet } from "@aztec/aztec.js/wallet";
+import { resolveServerPxeUrl } from "@/lib/pxeUrl";
 
-const AZTEC_NODE_URL = "http://aztec:8080";
+const AZTEC_NODE_URL = resolveServerPxeUrl();
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

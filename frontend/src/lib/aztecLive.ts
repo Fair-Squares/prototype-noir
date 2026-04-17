@@ -24,18 +24,13 @@ export function isLiveModeEnabled(): boolean {
 }
 
 /**
- * Simulation mode is enabled when live mode is off and either:
- * - running on Vercel, or
- * - AZTEC_SIMULATION=true (server-only), or
- * - NEXT_PUBLIC_SIMULATION=true (frontend flag, useful in local dev)
+ * Simulation mode is the default whenever live mode is off.
+ *
+ * This keeps local demo flows reliable without requiring a specific deployment
+ * target or extra env toggles.
  */
 export function isVercelSimulationMode(): boolean {
-  if (isLiveModeEnabled()) return false;
-  return (
-    process.env.VERCEL === "1" ||
-    process.env.AZTEC_SIMULATION === "true" ||
-    process.env.NEXT_PUBLIC_SIMULATION === "true"
-  );
+  return !isLiveModeEnabled();
 }
 
 // ── Contract addresses from env ───────────────────────────────────────────────

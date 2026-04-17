@@ -9,6 +9,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "userAddress required" }, { status: 400 });
   }
 
+  const forceDevMode =
+    devMode ||
+    process.env.NEXT_PUBLIC_DEV_MODE === "true" ||
+    process.env.NEXT_PUBLIC_SIMULATION === "true";
+
+  // ── SDK dev-mode/testing bypass ─────────────────────────────────────────
+  // This keeps local KYC flows usable even when a live PXE/node is not running.
+  if (forceDevMode) {
+    simSetKYCVerified(userAddress);
+    return NextResponse.json({
+      success: true,
+      message: "KYC verified instantly (dev mode). Investor role granted.",
+      verified: true,
+      isInvestor: true,
+      roles: ["investor"],
+      source: "dev",
+    });
+  }
+
   // ── Simulation mode ──────────────────────────────────────────────────────
   if (!isLiveModeEnabled() && isVercelSimulationMode()) {
     simSetKYCVerified(userAddress);

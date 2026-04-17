@@ -5,9 +5,28 @@ import { simGetKYCProfile, simGetVotingEligibility } from "@/lib/simulationStore
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const address = searchParams.get("address") ?? "";
+  const forceDevMode =
+    process.env.NEXT_PUBLIC_DEV_MODE === "true" ||
+    process.env.NEXT_PUBLIC_SIMULATION === "true";
 
   if (!address) {
     return NextResponse.json({ error: "address required" }, { status: 400 });
+  }
+
+  // ── SDK dev-mode/testing profile ────────────────────────────────────────
+  if (forceDevMode) {
+    const profile = simGetKYCProfile(address);
+    const eligibility = simGetVotingEligibility(address);
+    return NextResponse.json({
+      ...profile,
+      canTradeDex: profile.isInvestor,
+      canVote: eligibility.canVote,
+      voteEligibilityReason: eligibility.reason,
+      hasDepositTicket: eligibility.hasDepositTicket,
+      hasFsftExposure: eligibility.hasFsftExposure,
+      rewardsEligible: profile.isInvestor && (eligibility.hasDepositTicket || eligibility.hasFsftExposure),
+      source: "dev",
+    });
   }
 
   // ── Simulation mode ──────────────────────────────────────────────────────

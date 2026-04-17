@@ -3,22 +3,28 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ActionPanel, MetricRow, PageHero } from "@/components/SimplePage";
+import { DEMO_FUND_STATS } from "@/lib/demoData";
 import { fetchFundStats, formatEUR, type FundStats } from "@/lib/contracts";
 
 export default function FundPage() {
-  const [stats, setStats] = useState<FundStats | null>(null);
+  const [stats, setStats] = useState<FundStats>(DEMO_FUND_STATS);
+  const [usingDemoData, setUsingDemoData] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchFundStats()
-      .then(setStats)
+      .then((nextStats) => {
+        setStats(nextStats);
+        setUsingDemoData(false);
+        setError(null);
+      })
       .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : "Could not load fund data.");
+        setError(e instanceof Error ? e.message : "Could not load fund data. Showing demo snapshot.");
+        setUsingDemoData(true);
       });
   }, []);
 
   const metrics = useMemo(() => {
-    if (!stats) return null;
     const fundValue = stats.navEur ?? Math.max(0, stats.totalDeposits + stats.totalYield);
     const sharePrice =
       stats.navPerFsftEur ?? (stats.totalSupply > 0 ? fundValue / stats.totalSupply : 0);
@@ -45,30 +51,47 @@ export default function FundPage() {
         </div>
       )}
 
-      {!metrics ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-24 rounded-xl bg-card animate-pulse" />
-          ))}
+      {usingDemoData && !error && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Showing seeded demo fund data for simulation.
         </div>
-      ) : (
-        <MetricRow items={metrics} />
       )}
+
+      <MetricRow items={metrics} />
+
+      <section className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Fund Breakdown</p>
+          <div className="space-y-2 text-sm text-text-2">
+            <p>In DeFi: <strong className="text-text-1">{formatEUR(stats.totalInDefi)}</strong></p>
+            <p>Allocated: <strong className="text-text-1">{formatEUR(stats.totalAllocated)}</strong></p>
+            <p>Yield: <strong className="text-text-1">{formatEUR(stats.totalYield)}</strong></p>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Health Check</p>
+          <div className="space-y-2 text-sm text-text-2">
+            <p>Investor count: <strong className="text-text-1">{stats.investorCount.toLocaleString()}</strong></p>
+            <p>Fund status: <strong className="text-text-1">{stats.isPaused ? "Paused" : "Active"}</strong></p>
+            <p>Data source: <strong className="text-text-1">{usingDemoData ? "Demo" : (stats.source ?? "Live")}</strong></p>
+          </div>
+        </div>
+      </section>
 
       <ActionPanel title="What To Do Now" subtitle="Pick one">
         <div className="grid gap-2 sm:grid-cols-2">
-          <a
+          <Link
             href="/invest"
             className="rounded-lg bg-fs-teal px-3 py-2 text-center text-sm font-semibold text-white hover:bg-fs-teal-dark"
           >
             Deposit
-          </a>
-          <a
+          </Link>
+          <Link
             href="/governance"
             className="rounded-lg border border-border px-3 py-2 text-center text-sm font-semibold text-text-2 hover:bg-bg hover:text-text-1"
           >
             Vote
-          </a>
+          </Link>
         </div>
         <p className="mt-3 text-xs text-text-3">
           Need deeper formulas and market details? Open{" "}
