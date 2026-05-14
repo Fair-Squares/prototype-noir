@@ -40,7 +40,6 @@
 
 :root {
   --ink: #243034;
-  --paper: #ffffff;
   --soft: #f7f8f4;
   --rose: #c41667;
   --sage: #4cbdb0;
@@ -66,16 +65,36 @@ button, a, input, [role="button"] {
 
 h1, h2, h3, .font-brand-black, .font-brand-heavy {
   font-family: "Sora", "NexaHeavy", "Avenir Next", "Segoe UI", sans-serif;
-  letter-spacing: -0.045em;
-  line-height: 1;
+  letter-spacing: -0.035em;
+  line-height: 1.08;
+}
+
+.type-hero {
+  font-family: "Sora", "NexaHeavy", "Avenir Next", "Segoe UI", sans-serif;
+  font-size: clamp(2.25rem, 5vw, 4rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  font-weight: 800;
+}
+
+.type-section {
+  font-family: "Sora", "NexaHeavy", "Avenir Next", "Segoe UI", sans-serif;
+  font-size: clamp(1.45rem, 2.6vw, 2.25rem);
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+  font-weight: 750;
+}
+
+.type-body {
+  font-size: 0.98rem;
+  line-height: 1.75;
 }
 
 .fs-site-bg {
   background:
-    radial-gradient(circle at 8% 8%, rgba(76, 189, 176, 0.19), transparent 24rem),
-    radial-gradient(circle at 88% 12%, rgba(196, 22, 103, 0.12), transparent 25rem),
-    radial-gradient(circle at 78% 78%, rgba(221, 239, 232, 0.92), transparent 34rem),
-    linear-gradient(135deg, #ffffff 0%, #f7f8f4 46%, #eef8f5 100%);
+    radial-gradient(circle at 8% 8%, rgba(76, 189, 176, 0.17), transparent 24rem),
+    radial-gradient(circle at 88% 12%, rgba(196, 22, 103, 0.10), transparent 25rem),
+    linear-gradient(135deg, #ffffff 0%, #f7f8f4 52%, #eef8f5 100%);
   min-height: 100vh;
 }
 
@@ -84,10 +103,10 @@ h1, h2, h3, .font-brand-black, .font-brand-heavy {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.22;
-  background-image: radial-gradient(circle at center, rgba(36,48,52,0.16) 1px, transparent 1px);
-  background-size: 30px 30px;
-  mask-image: linear-gradient(to bottom, black, transparent 70%);
+  opacity: 0.16;
+  background-image: radial-gradient(circle at center, rgba(36,48,52,0.14) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: linear-gradient(to bottom, black, transparent 72%);
 }
 
 .fs-shell-bg {
@@ -104,11 +123,10 @@ h1, h2, h3, .font-brand-black, .font-brand-heavy {
   background-size: 24px 24px;
 }
 
-.editorial-card,
 .open-card {
   border: 1px solid rgba(36, 48, 52, 0.12);
-  background: rgba(255, 255, 255, 0.84);
-  box-shadow: 0 22px 70px rgba(36, 48, 52, 0.08);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 18px 54px rgba(36, 48, 52, 0.075);
   backdrop-filter: blur(18px);
 }
 
@@ -119,11 +137,9 @@ h1, h2, h3, .font-brand-black, .font-brand-heavy {
   border-radius: 999px;
   border: 1px solid rgba(76, 189, 176, 0.34);
   background: rgba(221, 239, 232, 0.68);
-  padding: 0.55rem 0.9rem;
-  font-size: 0.72rem;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.98rem;
   font-weight: 800;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
   color: #2f7f78;
 }
 
@@ -137,6 +153,6 @@ h1, h2, h3, .font-brand-black, .font-brand-heavy {
 }
 
 .paper-lift:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 24px 68px rgba(36, 48, 52, 0.12);
+  transform: translateY(-2px);
+  box-shadow: 0 22px 60px rgba(36, 48, 52, 0.105);
 }

@@ -1,69 +1,47 @@
-import { coreProblem, fairSquaresDirection, keyMetrics, researchSources } from "@/lib/research";
+import { coreProblem, outcomeMetrics, overview, protocolFit } from "@/lib/research";
 
 export default function ResearchPage() {
   return (
-    <div className="space-y-12">
-      <section className="open-card rounded-[2.5rem] p-6 md:p-10">
-        <p className="marker-label">CPB research direction</p>
-        <h1 className="mt-4 max-w-4xl text-4xl font-black md:text-6xl">
-          The core problem is affordable supply, not housing marketing.
-        </h1>
-        <p className="mt-6 max-w-3xl text-base leading-8 text-text-2">
-          {coreProblem.long}
-        </p>
+    <div className="space-y-10">
+      <section className="open-card rounded-[2rem] p-6 md:p-8">
+        <p className="marker-label">Approach</p>
+        <h1 className="type-hero mt-5 max-w-3xl text-text-1">A practical answer to the affordable housing gap.</h1>
+        <p className="type-body mt-5 max-w-3xl text-text-2">{coreProblem.long}</p>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-4">
-        {fairSquaresDirection.map((item) => (
-          <div key={item.title} className="paper-lift rounded-[1.75rem] border border-fs-teal/20 bg-fs-mint/60 p-5">
-            <h2 className="text-xl font-black text-text-1">{item.title}</h2>
-            <p className="mt-3 text-sm leading-6 text-text-2">{item.body}</p>
-          </div>
-        ))}
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-2">
-        {researchSources.map((source) => (
-          <a
-            key={source.url}
-            href={source.url}
-            target="_blank"
-            rel="noreferrer"
-            className="paper-lift open-card group rounded-[2rem] p-5 hover:border-fs-teal/50"
-          >
-            <div className="flex items-center justify-between gap-4">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-fs-magenta">
-                {source.publisher} · {source.year}
-              </p>
-              <span className="text-xs font-semibold text-text-3 group-hover:text-fs-teal-dark">Source ↗</span>
+      <section className="open-card rounded-[2rem] p-6 md:p-8">
+        <div className="grid gap-6 md:grid-cols-3">
+          {overview.map((item) => (
+            <div key={item.title}>
+              <h2 className="type-section text-text-1">{item.title}</h2>
+              <p className="type-body mt-3 text-text-2">{item.body}</p>
             </div>
-            <h2 className="mt-4 text-2xl font-black leading-tight text-text-1">{source.title}</h2>
-
-            <div className="mt-5 grid gap-3">
-              <div className="rounded-2xl bg-bg p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-text-3">CPB / source signal</p>
-                <p className="mt-2 text-sm leading-6 text-text-2">{source.takeaway}</p>
-              </div>
-              <div className="rounded-2xl bg-fs-mint p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-fs-teal-dark">Fair Squares fit</p>
-                <p className="mt-2 text-sm leading-6 text-text-1">{source.implication}</p>
-              </div>
-            </div>
-          </a>
-        ))}
+          ))}
+        </div>
       </section>
 
-      <section className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
+      <section className="grid gap-8 lg:grid-cols-[0.85fr_1.15fr]">
         <div>
-          <p className="marker-label">Public accountability</p>
-          <h2 className="mt-3 text-4xl font-black">If the protocol helps, the housing outcome should be visible.</h2>
-          <p className="mt-5 text-sm leading-7 text-text-2">
-            Fair Squares should report the practical result of each project: the gap closed, homes enabled, rent level protected and affordability period maintained.
+          <p className="marker-label">Protocol fit</p>
+          <h2 className="type-section mt-4 text-text-1">The technology is useful when it makes trust easier.</h2>
+          <p className="type-body mt-4 text-text-2">
+            The public story should stay simple: what is being funded, why the gap exists, who can participate and how the affordability promise is monitored.
           </p>
         </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          {keyMetrics.map((metric) => (
-            <div key={metric} className="paper-lift rounded-[1.5rem] border border-border bg-white p-4 text-sm font-semibold leading-6 text-text-1">
+        <div className="grid gap-3">
+          {protocolFit.map((item) => (
+            <div key={item} className="rounded-2xl border border-fs-teal/20 bg-fs-mint/50 p-4 font-bold leading-7 text-text-1">
+              {item}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-fs-teal/20 bg-fs-anthracite p-6 text-white md:p-8">
+        <h2 className="type-section">Report outcomes in plain language.</h2>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {outcomeMetrics.map((metric) => (
+            <div key={metric} className="rounded-2xl border border-white/10 bg-white/7 p-4 font-bold leading-7">
               {metric}
             </div>
           ))}
