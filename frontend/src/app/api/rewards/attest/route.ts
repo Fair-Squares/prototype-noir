@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simAttestFsftForRewards } from "@/lib/simulationStore";
+import { requireAztecTxHash } from "@/lib/txHash";
 
 function isNonZeroField(value: unknown): boolean {
   if (typeof value === "bigint") return value !== 0n;
@@ -127,7 +128,7 @@ export async function POST(request: NextRequest) {
           ? "Private FSFT proof generated (recursive verifier configured) and rewards eligibility recorded"
           : "Private FSFT proof generated and rewards eligibility recorded"
         : "FSFT rewards eligibility recorded",
-      txHash: (() => { const txHash = receipt.txHash?.toString(); if (!txHash) { throw new Error("Transaction receipt missing txHash"); } return txHash; })(),
+      txHash: requireAztecTxHash(receipt),
       holderProofGenerated,
       fsftProofMode: holderProofMode,
       recursiveVkConfigured,

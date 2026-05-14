@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simDeposit } from "@/lib/simulationStore";
+import { requireAztecTxHash } from "@/lib/txHash";
 
 export async function POST(request: NextRequest) {
   const { address, accountIndex = 0, amount } = await request.json();
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: `Deposited €${amount.toLocaleString()} to housing fund`,
-      txHash: (() => { const txHash = receipt.txHash?.toString(); if (!txHash) { throw new Error("Transaction receipt missing txHash"); } return txHash; })(),
+      txHash: requireAztecTxHash(receipt),
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);

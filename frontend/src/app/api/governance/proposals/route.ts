@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBlockNumber } from "@/lib/aztecClient";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
+import { getAztecTxHash } from "@/lib/txHash";
 import {
   simGetProposals,
   simCreateProposal,
@@ -279,7 +280,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         message: `Proposal \"${title}\" created`,
-        txHash: receipt.txHash?.toString(),
+        txHash: getAztecTxHash(receipt),
       });
     }
 
@@ -287,7 +288,7 @@ export async function POST(request: NextRequest) {
       const receipt = await govContract.methods
         .finalize_proposal(Number(proposalId))
         .send({ from: AztecAddress.fromString(actor.address) });
-      return NextResponse.json({ success: true, txHash: receipt.txHash?.toString() });
+      return NextResponse.json({ success: true, txHash: getAztecTxHash(receipt) });
     }
 
     if (action === "execute") {
@@ -305,8 +306,8 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        txHash: executeReceipt.txHash?.toString(),
-        openDistributionTxHash: openReceipt.txHash?.toString(),
+        txHash: getAztecTxHash(executeReceipt),
+        openDistributionTxHash: getAztecTxHash(openReceipt),
         message: "Proposal executed and distribution opened",
       });
     }

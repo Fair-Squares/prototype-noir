@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simMatchDexOrder } from "@/lib/simulationStore";
+import { requireAztecTxHash } from "@/lib/txHash";
 
 function toNumberSafe(value: unknown): number {
   if (typeof value === "number") return value;
@@ -144,7 +145,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: "Order matched",
-      txHash: (() => { const txHash = receipt.txHash?.toString(); if (!txHash) { throw new Error("Transaction receipt missing txHash"); } return txHash; })(),
+      txHash: requireAztecTxHash(receipt),
       source: "live",
       makerOrderId: Number(makerId),
       fillAmount: Number(fillAmount),

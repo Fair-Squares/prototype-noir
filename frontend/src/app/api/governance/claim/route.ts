@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simClaimDistribution } from "@/lib/simulationStore";
+import { requireAztecTxHash } from "@/lib/txHash";
 
 export async function POST(request: NextRequest) {
   const { proposalId, accountIndex = 0, address } = await request.json();
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       claimedAmount: claimableAmount,
-      txHash: (() => { const txHash = receipt.txHash?.toString(); if (!txHash) { throw new Error("Transaction receipt missing txHash"); } return txHash; })(),
+      txHash: requireAztecTxHash(receipt),
       message: "Distribution claimed",
     });
   } catch (error: unknown) {

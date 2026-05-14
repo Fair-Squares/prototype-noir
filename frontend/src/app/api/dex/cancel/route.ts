@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simCancelDexOrder } from "@/lib/simulationStore";
+import { requireAztecTxHash } from "@/lib/txHash";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: "Order cancelled",
-      txHash: (() => { const txHash = receipt.txHash?.toString(); if (!txHash) { throw new Error("Transaction receipt missing txHash"); } return txHash; })(),
+      txHash: requireAztecTxHash(receipt),
       source: "live",
     });
   } catch (error: unknown) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simSetKYCVerified } from "@/lib/simulationStore";
+import { requireAztecTxHash } from "@/lib/txHash";
 
 export async function POST(request: NextRequest) {
   const { userAddress, accountIndex = 0, devMode = false } = await request.json();
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: devMode ? "KYC verified instantly (dev mode). Investor role granted." : "KYC verified on-chain. Investor role granted.",
-      txHash: (() => { const txHash = receipt.txHash?.toString(); if (!txHash) { throw new Error("Transaction receipt missing txHash"); } return txHash; })(),
+      txHash: requireAztecTxHash(receipt),
       verified: true,
       isInvestor: true,
       roles: ["investor"],

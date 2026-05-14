@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simGetFundStats, simGetPortfolio } from "@/lib/simulationStore";
+import { requireAztecTxHash } from "@/lib/txHash";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -202,7 +203,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: `Topped up ${Number(amount).toLocaleString()} EURs to ${address}`,
-      txHash: (() => { const txHash = receipt.txHash?.toString(); if (!txHash) { throw new Error("Transaction receipt missing txHash"); } return txHash; })(),
+      txHash: requireAztecTxHash(receipt),
       source: "live",
     });
   } catch (error: unknown) {
