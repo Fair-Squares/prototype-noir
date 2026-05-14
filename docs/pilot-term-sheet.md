@@ -6,25 +6,25 @@
 
 Viability-gap financing for mid-rent / affordable rental housing projects.
 
-Fair Squares provides a final layer of patient project capital where affordable-rent constraints make an otherwise socially desirable project financially difficult to realise.
+Fair Squares provides the final layer of patient project capital when affordable rent requirements make an otherwise good housing project difficult to finance.
 
 ## 2. Target project
 
-- Project type: mid-rent / affordable rental new-build, transformation, splitting, or optopping.
+- Project type: mid-rent / affordable rental new-build, transformation, building split, or rooftop addition.
 - Geography: Netherlands, preferably municipality-backed or corporation-backed.
-- Stage: land/control and planning path substantially de-risked; capital gap documented.
+- Stage: land/control and planning path substantially de-risked; financing gap documented.
 - Size: initial pilot of 5–50 units, depending on partner and permitting status.
 
 ## 3. Capital amount
 
 - Indicative Fair Squares commitment: €250k–€1.5m.
 - Use of funds: junior equity, mezzanine, preferred equity, or subordinated project loan.
-- Requirement: open-book development budget and evidence that the project cannot proceed under the same affordability terms without gap capital.
+- Requirement: open-book development budget and clear evidence that the project cannot proceed under the same affordability terms without gap capital.
 
 ## 4. Investor economics
 
-- Target return cap: 3–4% net annual return, project-risk adjusted.
-- No uncapped speculative upside.
+- Target return cap: 3–4% net annual return, adjusted for project risk.
+- No uncapped upside from rising housing scarcity.
 - Distributions paid from project cashflow, refinancing proceeds, or agreed repayment schedule.
 - Loss/risk allocation to be negotiated based on senior debt, collateral, partner strength, subsidies, and covenant package.
 
@@ -74,12 +74,12 @@ Fair Squares / investor vehicle consent required for:
 
 ## 10. Pilot success KPI
 
-Primary KPI: number of affordable units enabled per €1m of Fair Squares capital, with rent discount and affordability years locked.
+Primary KPI: affordable homes enabled per €1m of Fair Squares capital, with rent discount and affordability years locked.
 
 Secondary KPIs:
 
 - Financing gap closed.
-- Months accelerated vs delayed/cancelled baseline.
+- Months saved compared with a delayed or cancelled project.
 - Tenant rent burden reduction.
-- Private/social capital mobilised alongside Fair Squares.
+- Private or social capital brought in alongside Fair Squares.
 - Covenant compliance and reporting completeness.

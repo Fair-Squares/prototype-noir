@@ -1,55 +1,74 @@
 # Fair Squares — One-Page Pilot Thesis
 
-**Positioning:** Fair Squares is a capped-return capital layer for affordable housing projects that are socially valuable but underfinanced by traditional markets.
+## Positioning
 
-## CPB-backed problem
+Fair Squares is a capped-return capital layer for affordable housing projects that are socially valuable but underfinanced by traditional markets.
 
-Recent CPB housing-market work points to a financing and allocation problem behind the Dutch housing shortage. Affordable-rent requirements are socially necessary, but lower rent also lowers debt capacity and investor return. If that financing gap is not solved, projects are delayed, cancelled, or shifted toward higher-rent segments.
+## The problem
 
-Generic demand subsidies or looser mortgages are not enough. They can raise prices, debt, or land values without reliably increasing affordable supply. CPB’s most useful signal for Fair Squares is practical: target projects where affordability requirements create a documented viability gap and where capital is tied to real additional housing.
+The Netherlands does not only need more homes. It needs affordable homes that can actually be financed.
 
-## Fair Squares solution
+Affordable rents are good for tenants, but they reduce the income of a housing project. Lower income means the project can borrow less and may not attract ordinary investors. That is why a project can be socially valuable and still fail financially.
 
-Fair Squares provides patient project capital with a capped investor return. The goal is not to maximise upside from housing scarcity. The goal is to close the final financing gap so affordable rental projects can proceed while long-term affordability is contractually protected.
+CPB research also warns that broad subsidies can miss the target. If land and permits are the real bottleneck, extra money can end up in land prices instead of lower rents or more homes.
 
-**First product:** viability-gap financing for mid-rent / affordable rental projects.
+## The Fair Squares solution
 
-**Second product:** transformation, splitting, or optopping finance for existing buildings where land dependency and planning risk are lower.
+Fair Squares provides patient project capital with a capped investor return.
+
+The goal is not to maximise upside from housing scarcity. The goal is to close the final financing gap so affordable rental projects can proceed while long-term affordability is protected.
+
+## First pilot product
+
+**Viability-gap financing for mid-rent or affordable rental projects.**
+
+Fair Squares provides the final layer of capital when a project is close to working, but affordable rents make the return too low for normal market capital.
+
+## Strong second product
+
+**Transformation, building splits and rooftop additions.**
+
+These projects can add homes without depending as much on new land, which makes them well aligned with CPB’s findings around land scarcity and supply constraints.
 
 ## Who benefits
 
-- **Municipalities:** more affordable homes without relying only on generic subsidies.
-- **Housing corporations / social operators:** extra project-level capital without changing the social mission.
-- **Middle-income tenants:** access to homes below market pressure, without needing full ownership leverage.
-- **Social investors:** predictable capped return plus measurable housing impact.
+- **Municipalities:** more affordable homes without relying only on broad subsidies.
+- **Housing corporations and social operators:** extra project-level capital without changing their mission.
+- **Middle-income tenants:** access to homes below market pressure.
+- **Social investors:** a predictable capped return plus measurable housing impact.
 
-## Pilot structure
+## Draft pilot structure
 
 - Target capital: €250k–€1.5m per pilot project.
-- Capital position: junior equity, mezzanine, or preferred equity closing the gap between senior debt and total cost.
-- Investor return: capped around 3–4% net, depending on project risk and subsidy stack.
-- Affordability: 15–25 year minimum affordability period, rent discount, or income-linked rent formula.
-- Governance: consent rights on rent policy, refinancing, sale, and covenant changes.
-- Reporting: open-book budget, annual affordability report, project-level use-of-funds, and impact metrics.
-- Anti-speculation: clawbacks or capped residual upside if affordability covenants are broken or early sale/refinancing occurs.
+- Capital position: junior equity, mezzanine, preferred equity or subordinated loan.
+- Investor return: capped around 3–4% net, depending on risk.
+- Affordability: 15–25 year minimum affordability period, rent discount or income-linked rent formula.
+- Governance: consent rights on rent policy, refinancing, sale and covenant changes.
+- Reporting: open-book budget, annual affordability report, use-of-funds reporting and impact metrics.
+- Anti-speculation: clawbacks or capped upside if affordability commitments are broken.
 
 ## Pilot partner ask
 
-> Do you have a project that is socially desirable but has a financing gap because affordability requirements make the return too low?
+> Do you have a socially desirable housing project that is blocked because affordability requirements make the return too low?
 
-Best targets: municipality, housing corporation, social developer, or owner with a transformation/optopping opportunity.
+Best targets:
 
-## Tech posture
+- municipality;
+- housing corporation;
+- social developer;
+- property owner with a transformation or rooftop-addition opportunity.
 
-Tokenisation and privacy tech should wait until the legal and project structure are clear. The immediate goal is a credible pilot finance wrapper. Once a pilot exists, the protocol can add investor onboarding, transparent reporting, capped-return accounting, governance, and privacy-preserving eligibility checks.
+## Technology posture
+
+Tokenisation and privacy technology should wait until the legal and project structure are clear.
+
+The immediate goal is a credible finance pilot. Once a pilot exists, the protocol can support investor onboarding, transparent reporting, capped-return accounting, governance and privacy-preserving eligibility checks.
 
 ## Production website narrative
 
-The production website should be organised around four claims, each tied to a public source:
+The website should be built around four plain claims:
 
-1. **The shortage is real and persistent.** ABF/Primos estimates the 2025 statistical housing shortage at roughly 396,000 homes. Rijksoverheid targets 900,000 new homes through 2030, two-thirds affordable.
-2. **Affordability creates a finance gap.** CPB describes the rent dilemma: lower rents improve affordability for some tenants but can reduce available rental supply when investors withdraw or owners sell.
-3. **Generic support is risky.** CPB warns that broad construction subsidies can have limited production effect and may push up land prices unless targeted and paired with ground-policy safeguards.
-4. **Targeted viability-gap capital is the wedge.** CPB identifies more promising support where regulated rents do not cover costs despite demand, and for stock-composition interventions such as splitting and optopping.
-
-This supports a production path where Fair Squares first proves a legal/financial pilot, then adds protocol features for transparent reporting, capped-return accounting, governance and privacy-preserving eligibility.
+1. **The shortage is real.** ABF/Primos estimates the 2025 Dutch housing shortage at roughly 396,000 homes. The Dutch government targets 900,000 new homes through 2030.
+2. **Affordability creates a finance gap.** Lower rents help tenants, but they also reduce project income and borrowing capacity.
+3. **Generic support can miss the target.** CPB warns that broad subsidies can leak into land prices if land and permits are the real bottleneck.
+4. **Targeted gap capital is the wedge.** Fair Squares should fund a documented gap in a real project, with affordability locked in.

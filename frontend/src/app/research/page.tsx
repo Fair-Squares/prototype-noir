@@ -9,7 +9,7 @@ export default function ResearchPage() {
           A production path grounded in housing-market evidence.
         </h1>
         <p className="mt-6 max-w-3xl text-base leading-8 text-text-2">
-          Fair Squares is deliberately framed around a narrow, evidence-backed wedge: affordable housing projects can be socially desirable and still fail financially when capped rents reduce debt capacity and market-return capital is too expensive.
+          This page translates the Dutch housing research into plain English. The basic point is simple: some affordable housing projects are good for society, but the numbers do not work when rents are capped and ordinary capital still expects market-level returns.
         </p>
       </section>
 
@@ -29,13 +29,14 @@ export default function ResearchPage() {
               <span className="text-xs font-semibold text-text-3 group-hover:text-fs-teal-dark">Source ↗</span>
             </div>
             <h2 className="mt-4 text-2xl font-black leading-tight">{source.title}</h2>
+
             <div className="mt-5 grid gap-3">
               <div className="rounded-2xl bg-bg p-4">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-text-3">Evidence</p>
                 <p className="mt-2 text-sm leading-6 text-text-2">{source.takeaway}</p>
               </div>
               <div className="rounded-2xl bg-fs-mint/60 p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-fs-teal-dark">Fair Squares implication</p>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-fs-teal-dark">What this means for Fair Squares</p>
                 <p className="mt-2 text-sm leading-6 text-text-1">{source.implication}</p>
               </div>
             </div>
@@ -65,9 +66,9 @@ export default function ResearchPage() {
       <section className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-fs-magenta">Pilot KPIs</p>
-          <h2 className="mt-3 text-4xl font-black">Measure housing outcomes, not hype.</h2>
+          <h2 className="mt-3 text-4xl font-black">Measure homes, not hype.</h2>
           <p className="mt-5 text-sm leading-7 text-text-2">
-            The website should invite serious partners by showing exactly how a pilot would be judged.
+            A serious pilot should be judged by concrete housing outcomes: homes enabled, rent discounts, affordability duration and clean reporting.
           </p>
         </div>
         <div className="grid gap-3 md:grid-cols-2">

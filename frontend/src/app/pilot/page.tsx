@@ -2,7 +2,7 @@ import { keyMetrics } from "@/lib/research";
 
 const terms = [
   ["Product", "Viability-gap finance for mid-rent / affordable rental projects"],
-  ["Project types", "New-build, transformation, splitting or optopping with reduced planning/land risk"],
+  ["Project types", "New-build, transformation, building splits or rooftop additions with reduced planning and land risk"],
   ["Ticket", "Indicative €250k–€1.5m final-layer capital"],
   ["Return cap", "Target 3–4% net annual return, risk-adjusted and contractually capped"],
   ["Affordability", "15–25 year rent covenant, rent discount or income-linked rent formula"],
@@ -28,7 +28,7 @@ export default function PilotPage() {
           Close the final financing gap without extracting the housing upside.
         </h1>
         <p className="mt-6 max-w-3xl text-base leading-8 text-text-2">
-          Fair Squares starts with one pragmatic product: capped-return capital that makes a specific affordable rental project viable while locking in affordability obligations.
+          Fair Squares starts with one practical product: capped-return capital that helps a specific affordable rental project work financially while locking in affordability obligations.
         </p>
         <a
           href="mailto:hello@fair-squares.nl?subject=Fair%20Squares%20pilot%20candidate"

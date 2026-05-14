@@ -3,16 +3,16 @@ import { productionPath, researchSources } from "@/lib/research";
 
 const problemCards = [
   {
-    title: "Affordability lowers yield",
-    body: "Mid-rent and affordable rental projects often become unfinanceable once rents are capped, even when the social value is obvious.",
+    title: "Affordable rents change the numbers",
+    body: "A project can be socially valuable and still fail financially. Lower rents mean less income, less borrowing capacity and less room for ordinary investors who want market returns.",
   },
   {
-    title: "Subsidies can leak away",
-    body: "Broad support can end up in land prices when planning and land supply are constrained. Capital has to be tied to a documented gap.",
+    title: "Generic money can miss the target",
+    body: "If land and permits are the bottleneck, broad subsidies can leak into land prices. The useful money is tied to a specific gap in a specific project.",
   },
   {
-    title: "Corporations hit balance limits",
-    body: "Mission-driven operators accept lower returns, but lower rents also reduce borrowing capacity and slow their pipeline.",
+    title: "Good operators still need capital",
+    body: "Housing corporations and social developers can accept lower returns, but their balance sheets are not unlimited. Some projects need an extra patient capital layer.",
   },
 ];
 
@@ -32,7 +32,7 @@ const terms = [
   ["Protection", "Anti-speculation clawbacks on sale/refinancing and open-book reporting"],
 ];
 
-const partnerTypes = ["Municipality", "Housing corporation", "Social developer", "Owner with transformation/optopping opportunity"];
+const partnerTypes = ["Municipality", "Housing corporation", "Social developer", "Owner with a transformation or rooftop-addition opportunity"];
 
 export default function HomePage() {
   return (
@@ -49,7 +49,7 @@ export default function HomePage() {
               Capped-return capital for housing projects the market leaves unfunded.
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-text-2 md:text-xl">
-              Fair Squares fills the last layer of patient capital for socially valuable affordable rental projects, so homes can be built or transformed without forcing rents to market levels.
+              Fair Squares helps affordable rental projects get over the line. We provide patient capital with capped returns, so homes can be built or transformed without pushing rents back to market levels.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <a
@@ -73,7 +73,7 @@ export default function HomePage() {
               <p className="text-sm text-white/60">Best first product</p>
               <h2 className="mt-3 text-3xl font-black leading-tight">Viability-gap finance for capped-rent rental projects</h2>
               <p className="mt-4 text-sm leading-6 text-white/70">
-                Not full property acquisition. Not a broad subsidy. A disciplined final capital layer that makes a specific affordable project proceed.
+                Not a broad subsidy. Not a land speculation fund. A focused capital layer for one real project with one real funding gap.
               </p>
             </div>
             <div className="mt-4 grid grid-cols-3 gap-3 text-center">
@@ -107,9 +107,9 @@ export default function HomePage() {
       <section className="grid gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-fs-teal-dark">CPB-backed wedge</p>
-          <h2 className="mt-3 text-4xl font-black md:text-5xl">The issue is not only housing shortage. It is finance design.</h2>
+          <h2 className="mt-3 text-4xl font-black md:text-5xl">The problem is not only a shortage of homes. It is how affordable homes are financed.</h2>
           <p className="mt-5 text-base leading-8 text-text-2">
-            CPB research points to the same tension from multiple angles: affordability rules can reduce available supply, broad subsidies can inflate land values, and housing corporations face balance-sheet limits. Fair Squares turns mission-aligned investor capital into lower-cost project capital, with upside deliberately capped so affordability is not competed away.
+            CPB research keeps pointing to the same tension: rent caps help affordability, but they can make projects harder to finance. Broad subsidies can leak into land prices. Housing corporations have a social mission, but not unlimited balance sheets. Fair Squares is built for the narrow gap in between.
           </p>
           <Link href="/research" className="mt-6 inline-flex text-sm font-bold text-fs-magenta hover:underline">
             Read the research base →
@@ -133,7 +133,7 @@ export default function HomePage() {
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-fs-teal-dark">Evidence, not vibes</p>
-            <h2 className="mt-3 text-4xl font-black">The public claims are source-backed.</h2>
+            <h2 className="mt-3 text-4xl font-black">Every major claim has a source behind it.</h2>
           </div>
           <Link href="/research" className="text-sm font-bold text-fs-magenta hover:underline">
             Full source library →
@@ -157,7 +157,7 @@ export default function HomePage() {
             <h2 className="mt-3 text-4xl font-black">Make the first conversation concrete.</h2>
           </div>
           <p className="max-w-xl text-sm leading-7 text-text-2">
-            These are starting points for a municipality, housing corporation, social developer or property owner with a real financing gap.
+            These are plain starting terms for a municipality, housing corporation, social developer or property owner with a real financing gap.
           </p>
         </div>
         <div className="mt-8 grid gap-3 md:grid-cols-2">
@@ -172,7 +172,7 @@ export default function HomePage() {
 
       <section className="rounded-[2rem] border border-border bg-card p-6 md:p-8">
         <p className="text-xs font-bold uppercase tracking-[0.22em] text-fs-magenta">Production path</p>
-        <h2 className="mt-3 text-4xl font-black">Build the finance wrapper before scaling the protocol.</h2>
+        <h2 className="mt-3 text-4xl font-black">Prove the finance model before scaling the protocol.</h2>
         <div className="mt-8 grid gap-3">
           {productionPath.map((item) => (
             <div key={item.phase} className="grid gap-4 rounded-2xl bg-bg p-4 md:grid-cols-[64px_1fr_140px] md:items-start">
