@@ -42,3 +42,14 @@ Best targets: municipality, housing corporation, social developer, or owner with
 ## Tech posture
 
 Tokenisation and privacy tech should wait until the legal and project structure are clear. The immediate goal is a credible pilot finance wrapper. Once a pilot exists, the protocol can add investor onboarding, transparent reporting, capped-return accounting, governance, and privacy-preserving eligibility checks.
+
+## Production website narrative
+
+The production website should be organised around four claims, each tied to a public source:
+
+1. **The shortage is real and persistent.** ABF/Primos estimates the 2025 statistical housing shortage at roughly 396,000 homes. Rijksoverheid targets 900,000 new homes through 2030, two-thirds affordable.
+2. **Affordability creates a finance gap.** CPB describes the rent dilemma: lower rents improve affordability for some tenants but can reduce available rental supply when investors withdraw or owners sell.
+3. **Generic support is risky.** CPB warns that broad construction subsidies can have limited production effect and may push up land prices unless targeted and paired with ground-policy safeguards.
+4. **Targeted viability-gap capital is the wedge.** CPB identifies more promising support where regulated rents do not cover costs despite demand, and for stock-composition interventions such as splitting and optopping.
+
+This supports a production path where Fair Squares first proves a legal/financial pilot, then adds protocol features for transparent reporting, capped-return accounting, governance and privacy-preserving eligibility.

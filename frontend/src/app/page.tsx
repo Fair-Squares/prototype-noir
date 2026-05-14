@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { productionPath, researchSources } from "@/lib/research";
 
 const problemCards = [
   {
@@ -108,8 +109,11 @@ export default function HomePage() {
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-fs-teal-dark">CPB-backed wedge</p>
           <h2 className="mt-3 text-4xl font-black md:text-5xl">The issue is not only housing shortage. It is finance design.</h2>
           <p className="mt-5 text-base leading-8 text-text-2">
-            Fair Squares turns mission-aligned investor capital into lower-cost project capital, with upside deliberately capped so affordability is not competed away.
+            CPB research points to the same tension from multiple angles: affordability rules can reduce available supply, broad subsidies can inflate land values, and housing corporations face balance-sheet limits. Fair Squares turns mission-aligned investor capital into lower-cost project capital, with upside deliberately capped so affordability is not competed away.
           </p>
+          <Link href="/research" className="mt-6 inline-flex text-sm font-bold text-fs-magenta hover:underline">
+            Read the research base →
+          </Link>
         </div>
         <div className="rounded-3xl border border-border bg-card p-5">
           <div className="grid gap-3">
@@ -128,6 +132,27 @@ export default function HomePage() {
       <section className="rounded-[2rem] border border-border bg-card p-6 md:p-8">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <div>
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-fs-teal-dark">Evidence, not vibes</p>
+            <h2 className="mt-3 text-4xl font-black">The public claims are source-backed.</h2>
+          </div>
+          <Link href="/research" className="text-sm font-bold text-fs-magenta hover:underline">
+            Full source library →
+          </Link>
+        </div>
+        <div className="mt-8 grid gap-4 md:grid-cols-3">
+          {researchSources.slice(0, 3).map((source) => (
+            <a key={source.url} href={source.url} target="_blank" rel="noreferrer" className="rounded-2xl border border-border bg-bg p-4 hover:border-fs-teal/50">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-fs-magenta">{source.publisher} · {source.year}</p>
+              <h3 className="mt-3 text-lg font-black leading-tight">{source.title}</h3>
+              <p className="mt-3 text-sm leading-6 text-text-2">{source.takeaway}</p>
+            </a>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-border bg-card p-6 md:p-8">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+          <div>
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-fs-magenta">Draft pilot term sheet</p>
             <h2 className="mt-3 text-4xl font-black">Make the first conversation concrete.</h2>
           </div>
@@ -140,6 +165,23 @@ export default function HomePage() {
             <div key={label} className="rounded-2xl border border-border bg-bg p-4">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-text-3">{label}</p>
               <p className="mt-2 text-sm font-semibold leading-6 text-text-1">{value}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-border bg-card p-6 md:p-8">
+        <p className="text-xs font-bold uppercase tracking-[0.22em] text-fs-magenta">Production path</p>
+        <h2 className="mt-3 text-4xl font-black">Build the finance wrapper before scaling the protocol.</h2>
+        <div className="mt-8 grid gap-3">
+          {productionPath.map((item) => (
+            <div key={item.phase} className="grid gap-4 rounded-2xl bg-bg p-4 md:grid-cols-[64px_1fr_140px] md:items-start">
+              <p className="text-3xl font-black text-fs-teal-dark">{item.phase}</p>
+              <div>
+                <h3 className="text-xl font-black">{item.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-text-2">{item.body}</p>
+              </div>
+              <p className="rounded-full bg-white px-3 py-1 text-center text-xs font-bold uppercase tracking-[0.14em] text-text-3">{item.status}</p>
             </div>
           ))}
         </div>

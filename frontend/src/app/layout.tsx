@@ -7,19 +7,19 @@ import HeaderWalletButton from "@/components/HeaderWalletButton";
 import SimulationBanner from "@/components/SimulationBanner";
 
 export const metadata: Metadata = {
-  title: "Fair Squares - Affordable Housing Fund",
-  description: "Community-funded affordable housing. Fair returns for investors, fair rents for tenants.",
+  title: "Fair Squares - Capped-Return Capital for Affordable Housing",
+  description:
+    "Research-backed viability-gap finance for affordable housing projects: capped investor returns, locked affordability, transparent reporting.",
 };
 
 const NAV_ITEMS = [
   { label: "Home", href: "/" },
+  { label: "Research", href: "/research" },
+  { label: "Pilot", href: "/pilot" },
   { label: "Fund", href: "/fund" },
   { label: "Invest", href: "/invest" },
-  { label: "Trade", href: "/dex" },
-  { label: "Rewards", href: "/rewards" },
   { label: "Vote", href: "/governance" },
   { label: "Account", href: "/portfolio" },
-  { label: "Explain", href: "/explain" },
 ] as const;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
