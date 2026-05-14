@@ -1,4 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,500..900,35,0..1&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
 @font-face {
@@ -18,9 +17,7 @@
 @theme {
   --font-brand-black: "NexaBlack", "Avenir Next", "Segoe UI", sans-serif;
   --font-brand-heavy: "NexaHeavy", "Avenir Next", "Segoe UI", sans-serif;
-  --font-serif-display: "Fraunces", Georgia, serif;
-  --font-sans-human: "Manrope", "Segoe UI", sans-serif;
-  --font-mono-human: "IBM Plex Mono", monospace;
+  --font-sans-human: "Avenir Next", "Segoe UI", sans-serif;
 
   --color-fs-magenta: #C41667;
   --color-fs-magenta-light: #D93D85;
@@ -30,24 +27,23 @@
   --color-fs-anthracite: #243034;
   --color-fs-mint: #DDEFE8;
 
-  --color-bg: #f8f1e6;
-  --color-card: #fffaf2;
-  --color-card-hover: #fff4e2;
-  --color-border: rgba(31, 42, 46, 0.13);
+  --color-bg: #F7F7F2;
+  --color-card: #FFFFFF;
+  --color-card-hover: #F3FBF8;
+  --color-border: rgba(36, 48, 52, 0.13);
 
-  --color-text-1: #1f2a2e;
-  --color-text-2: #665a50;
-  --color-text-3: #9b8979;
+  --color-text-1: #243034;
+  --color-text-2: #536367;
+  --color-text-3: #778589;
 }
 
 :root {
-  --ink: #1f2a2e;
-  --paper: #fffaf2;
-  --sand: #f8f1e6;
-  --clay: #c9784f;
+  --ink: #243034;
+  --paper: #ffffff;
+  --soft: #f7f7f2;
   --rose: #c41667;
   --sage: #4cbdb0;
-  --olive: #6c7354;
+  --mint: #ddefe8;
 }
 
 * {
@@ -55,11 +51,11 @@
 }
 
 body {
-  background: var(--sand);
+  background: var(--soft);
   color: var(--ink);
-  font-family: "Manrope", "Segoe UI", sans-serif;
-  letter-spacing: -0.012em;
-  line-height: 1.5;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  letter-spacing: -0.01em;
+  line-height: 1.55;
   font-feature-settings: "liga", "kern";
 }
 
@@ -67,28 +63,18 @@ button, a, input, [role="button"] {
   transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease, opacity 180ms ease, transform 180ms ease, box-shadow 180ms ease;
 }
 
-h1, h2, .font-serif-display {
-  font-family: "Fraunces", Georgia, serif;
-  letter-spacing: -0.045em;
-  line-height: 0.96;
-}
-
-h3, .font-brand-black {
-  font-family: "Fraunces", Georgia, serif;
-  letter-spacing: -0.03em;
-  line-height: 1.05;
-}
-
-.font-brand-heavy {
-  font-family: "Fraunces", Georgia, serif;
+h1, h2, h3, .font-brand-black, .font-brand-heavy {
+  font-family: "NexaHeavy", "Avenir Next", "Segoe UI", sans-serif;
+  letter-spacing: -0.035em;
+  line-height: 0.98;
 }
 
 .fs-site-bg {
   background:
-    radial-gradient(circle at 7% 4%, rgba(196, 120, 79, 0.22), transparent 24rem),
-    radial-gradient(circle at 86% 9%, rgba(76, 189, 176, 0.16), transparent 26rem),
-    radial-gradient(circle at 72% 74%, rgba(196, 22, 103, 0.11), transparent 30rem),
-    linear-gradient(135deg, #fbf3e6 0%, #f8f1e6 42%, #efe7d7 100%);
+    radial-gradient(circle at 8% 8%, rgba(76, 189, 176, 0.20), transparent 24rem),
+    radial-gradient(circle at 88% 12%, rgba(196, 22, 103, 0.13), transparent 26rem),
+    radial-gradient(circle at 78% 78%, rgba(221, 239, 232, 0.9), transparent 32rem),
+    linear-gradient(135deg, #ffffff 0%, #f7f7f2 46%, #edf7f4 100%);
   min-height: 100vh;
 }
 
@@ -97,13 +83,11 @@ h3, .font-brand-black {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.23;
-  mix-blend-mode: multiply;
+  opacity: 0.24;
   background-image:
-    linear-gradient(rgba(31,42,46,0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(31,42,46,0.035) 1px, transparent 1px);
-  background-size: 56px 56px;
-  mask-image: linear-gradient(to bottom, black, transparent 78%);
+    radial-gradient(circle at center, rgba(36,48,52,0.16) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: linear-gradient(to bottom, black, transparent 70%);
 }
 
 .fs-shell-bg {
@@ -121,10 +105,16 @@ h3, .font-brand-black {
 }
 
 .editorial-card {
-  border: 1px solid rgba(31, 42, 46, 0.12);
-  background: rgba(255, 250, 242, 0.76);
-  box-shadow: 0 24px 80px rgba(49, 37, 24, 0.08);
+  border: 1px solid rgba(36, 48, 52, 0.12);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 22px 70px rgba(36, 48, 52, 0.08);
   backdrop-filter: blur(18px);
+}
+
+.open-card {
+  border: 1px solid rgba(36, 48, 52, 0.11);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 16px 46px rgba(36, 48, 52, 0.07);
 }
 
 .marker-label {
@@ -132,14 +122,14 @@ h3, .font-brand-black {
   align-items: center;
   gap: 0.55rem;
   border-radius: 999px;
-  border: 1px solid rgba(31, 42, 46, 0.12);
-  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(76, 189, 176, 0.34);
+  background: rgba(221, 239, 232, 0.68);
   padding: 0.55rem 0.9rem;
   font-size: 0.72rem;
   font-weight: 800;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #8d6b4f;
+  color: #2f7f78;
 }
 
 .marker-label::before {
@@ -152,6 +142,6 @@ h3, .font-brand-black {
 }
 
 .paper-lift:hover {
-  transform: translateY(-3px) rotate(-0.15deg);
-  box-shadow: 0 26px 80px rgba(49, 37, 24, 0.12);
+  transform: translateY(-3px);
+  box-shadow: 0 24px 68px rgba(36, 48, 52, 0.12);
 }
