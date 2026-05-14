@@ -3,8 +3,8 @@ import { keyMetrics, productionPath, researchSources } from "@/lib/research";
 export default function ResearchPage() {
   return (
     <div className="space-y-12">
-      <section className="rounded-[2rem] border border-border bg-card p-6 md:p-10">
-        <p className="text-xs font-bold uppercase tracking-[0.22em] text-fs-teal-dark">Research base</p>
+      <section className="editorial-card rounded-[2.5rem] p-6 md:p-10">
+        <p className="marker-label">Research base</p>
         <h1 className="mt-4 max-w-4xl text-4xl font-black md:text-6xl">
           A production path grounded in housing-market evidence.
         </h1>
@@ -20,7 +20,7 @@ export default function ResearchPage() {
             href={source.url}
             target="_blank"
             rel="noreferrer"
-            className="group rounded-3xl border border-border bg-card p-5 hover:border-fs-teal/50 hover:shadow-sm"
+            className="paper-lift editorial-card group rounded-[2rem] p-5 hover:border-fs-teal/50"
           >
             <div className="flex items-center justify-between gap-4">
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-fs-magenta">
@@ -44,7 +44,7 @@ export default function ResearchPage() {
         ))}
       </section>
 
-      <section className="rounded-[2rem] border border-text-1/10 bg-text-1 p-6 text-white md:p-8">
+      <section className="rounded-[2.25rem] border border-text-1/10 bg-text-1 p-6 text-white shadow-2xl shadow-black/10 md:p-8">
         <p className="text-xs font-bold uppercase tracking-[0.22em] text-fs-teal-light">Production path</p>
         <h2 className="mt-3 text-4xl font-black">From thesis to pilot, before protocol scale.</h2>
         <div className="mt-8 grid gap-3">
@@ -65,7 +65,7 @@ export default function ResearchPage() {
 
       <section className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-fs-magenta">Pilot KPIs</p>
+          <p className="marker-label">Pilot KPIs</p>
           <h2 className="mt-3 text-4xl font-black">Measure homes, not hype.</h2>
           <p className="mt-5 text-sm leading-7 text-text-2">
             A serious pilot should be judged by concrete housing outcomes: homes enabled, rent discounts, affordability duration and clean reporting.
@@ -73,7 +73,7 @@ export default function ResearchPage() {
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           {keyMetrics.map((metric) => (
-            <div key={metric} className="rounded-2xl border border-border bg-card p-4 text-sm font-semibold leading-6 text-text-1">
+            <div key={metric} className="paper-lift rounded-[1.5rem] border border-black/10 bg-white/55 p-4 text-sm font-semibold leading-6 text-text-1">
               {metric}
             </div>
           ))}

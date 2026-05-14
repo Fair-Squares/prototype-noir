@@ -22,8 +22,8 @@ const qualification = [
 export default function PilotPage() {
   return (
     <div className="space-y-12">
-      <section className="rounded-[2rem] border border-border bg-[#fbfaf6] p-6 md:p-10">
-        <p className="text-xs font-bold uppercase tracking-[0.22em] text-fs-magenta">Pilot product</p>
+      <section className="editorial-card rounded-[2.5rem] p-6 md:p-10">
+        <p className="marker-label">Pilot product</p>
         <h1 className="mt-4 max-w-4xl text-4xl font-black md:text-6xl">
           Close the final financing gap without extracting the housing upside.
         </h1>
@@ -32,7 +32,7 @@ export default function PilotPage() {
         </p>
         <a
           href="mailto:hello@fair-squares.nl?subject=Fair%20Squares%20pilot%20candidate"
-          className="mt-8 inline-flex rounded-xl bg-fs-magenta px-6 py-3 text-sm font-bold text-white hover:bg-fs-magenta-light"
+          className="mt-8 inline-flex rounded-full bg-[#1f2a2e] px-6 py-3 text-sm font-bold text-[#fffaf2] shadow-lg shadow-black/10 hover:-translate-y-0.5 hover:bg-fs-magenta"
         >
           Discuss a pilot candidate
         </a>
@@ -48,8 +48,8 @@ export default function PilotPage() {
       </section>
 
       <section className="grid gap-8 lg:grid-cols-2">
-        <div className="rounded-[2rem] border border-border bg-card p-6 md:p-8">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-fs-teal-dark">Qualification checklist</p>
+        <div className="editorial-card rounded-[2rem] p-6 md:p-8">
+          <p className="marker-label">Qualification checklist</p>
           <div className="mt-6 space-y-3">
             {qualification.map((item, index) => (
               <div key={item} className="flex gap-3 rounded-2xl bg-bg p-4">
@@ -62,7 +62,7 @@ export default function PilotPage() {
           </div>
         </div>
 
-        <div className="rounded-[2rem] border border-text-1/10 bg-text-1 p-6 text-white md:p-8">
+        <div className="rounded-[2.25rem] border border-text-1/10 bg-text-1 p-6 text-white shadow-2xl shadow-black/10 md:p-8">
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-fs-teal-light">Success metrics</p>
           <h2 className="mt-3 text-3xl font-black">What the pilot must prove</h2>
           <div className="mt-6 space-y-3">

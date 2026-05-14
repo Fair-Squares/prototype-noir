@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700;800&family=Noto+Sans+Mono:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,500..900,35,0..1&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
 @font-face {
@@ -18,46 +18,92 @@
 @theme {
   --font-brand-black: "NexaBlack", "Avenir Next", "Segoe UI", sans-serif;
   --font-brand-heavy: "NexaHeavy", "Avenir Next", "Segoe UI", sans-serif;
+  --font-serif-display: "Fraunces", Georgia, serif;
+  --font-sans-human: "Manrope", "Segoe UI", sans-serif;
+  --font-mono-human: "IBM Plex Mono", monospace;
 
   --color-fs-magenta: #C41667;
   --color-fs-magenta-light: #D93D85;
   --color-fs-teal: #4CBDB0;
   --color-fs-teal-light: #6DD4C8;
   --color-fs-teal-dark: #3A9A8F;
-  --color-fs-anthracite: #2A2D34;
-  --color-fs-mint: #E0F0EC;
+  --color-fs-anthracite: #243034;
+  --color-fs-mint: #DDEFE8;
 
-  --color-bg: #f5f6f8;
-  --color-card: #ffffff;
-  --color-card-hover: #fafbfc;
-  --color-border: #e8eaed;
+  --color-bg: #f8f1e6;
+  --color-card: #fffaf2;
+  --color-card-hover: #fff4e2;
+  --color-border: rgba(31, 42, 46, 0.13);
 
-  --color-text-1: #1a1d26;
-  --color-text-2: #6b7280;
-  --color-text-3: #9ca3af;
+  --color-text-1: #1f2a2e;
+  --color-text-2: #665a50;
+  --color-text-3: #9b8979;
+}
+
+:root {
+  --ink: #1f2a2e;
+  --paper: #fffaf2;
+  --sand: #f8f1e6;
+  --clay: #c9784f;
+  --rose: #c41667;
+  --sage: #4cbdb0;
+  --olive: #6c7354;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--color-bg);
-  color: var(--color-text-1);
-  font-family: "Noto Sans", "Segoe UI", sans-serif;
-  letter-spacing: 0.003em;
-  line-height: 1.45;
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  background: var(--sand);
+  color: var(--ink);
+  font-family: "Manrope", "Segoe UI", sans-serif;
+  letter-spacing: -0.012em;
+  line-height: 1.5;
+  font-feature-settings: "liga", "kern";
 }
 
 button, a, input, [role="button"] {
-  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
+  transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease, opacity 180ms ease, transform 180ms ease, box-shadow 180ms ease;
 }
 
-h1, h2, h3, .font-brand-black {
-  font-family: "Noto Sans Mono", monospace;
-  letter-spacing: 0.006em;
-  line-height: 1.1;
+h1, h2, .font-serif-display {
+  font-family: "Fraunces", Georgia, serif;
+  letter-spacing: -0.045em;
+  line-height: 0.96;
+}
+
+h3, .font-brand-black {
+  font-family: "Fraunces", Georgia, serif;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
 }
 
 .font-brand-heavy {
-  font-family: var(--font-brand-black);
+  font-family: "Fraunces", Georgia, serif;
+}
+
+.fs-site-bg {
+  background:
+    radial-gradient(circle at 7% 4%, rgba(196, 120, 79, 0.22), transparent 24rem),
+    radial-gradient(circle at 86% 9%, rgba(76, 189, 176, 0.16), transparent 26rem),
+    radial-gradient(circle at 72% 74%, rgba(196, 22, 103, 0.11), transparent 30rem),
+    linear-gradient(135deg, #fbf3e6 0%, #f8f1e6 42%, #efe7d7 100%);
+  min-height: 100vh;
+}
+
+.fs-site-bg::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.23;
+  mix-blend-mode: multiply;
+  background-image:
+    linear-gradient(rgba(31,42,46,0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(31,42,46,0.035) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: linear-gradient(to bottom, black, transparent 78%);
 }
 
 .fs-shell-bg {
@@ -72,4 +118,40 @@ h1, h2, h3, .font-brand-black {
     linear-gradient(to right, rgba(42, 45, 52, 0.04) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(42, 45, 52, 0.04) 1px, transparent 1px);
   background-size: 24px 24px;
+}
+
+.editorial-card {
+  border: 1px solid rgba(31, 42, 46, 0.12);
+  background: rgba(255, 250, 242, 0.76);
+  box-shadow: 0 24px 80px rgba(49, 37, 24, 0.08);
+  backdrop-filter: blur(18px);
+}
+
+.marker-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(31, 42, 46, 0.12);
+  background: rgba(255, 255, 255, 0.5);
+  padding: 0.55rem 0.9rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #8d6b4f;
+}
+
+.marker-label::before {
+  content: "";
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--rose);
+  box-shadow: 0 0 0 5px rgba(196, 22, 103, 0.1);
+}
+
+.paper-lift:hover {
+  transform: translateY(-3px) rotate(-0.15deg);
+  box-shadow: 0 26px 80px rgba(49, 37, 24, 0.12);
 }

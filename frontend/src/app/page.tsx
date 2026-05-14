@@ -37,15 +37,13 @@ const partnerTypes = ["Municipality", "Housing corporation", "Social developer",
 export default function HomePage() {
   return (
     <div className="space-y-16 overflow-hidden">
-      <section className="relative rounded-[2rem] border border-border bg-[#fbfaf6] px-6 py-10 shadow-sm md:px-12 md:py-16">
+      <section className="editorial-card relative rounded-[2.5rem] px-6 py-10 md:px-12 md:py-16 lg:px-14">
         <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-fs-teal/20 blur-3xl" />
         <div className="absolute -bottom-20 left-1/3 h-64 w-64 rounded-full bg-fs-magenta/10 blur-3xl" />
         <div className="relative grid gap-10 lg:grid-cols-[1.08fr_0.92fr] lg:items-end">
           <div className="max-w-4xl">
-            <p className="mb-5 inline-flex rounded-full border border-fs-teal/30 bg-white/70 px-4 py-2 text-xs font-bold uppercase tracking-[0.22em] text-fs-teal-dark">
-              Pilot thesis · Affordable housing capital
-            </p>
-            <h1 className="max-w-5xl text-4xl font-black tracking-tight text-text-1 md:text-6xl lg:text-7xl">
+            <p className="marker-label mb-5">Pilot thesis · Affordable housing capital</p>
+            <h1 className="max-w-5xl text-5xl font-black text-text-1 md:text-7xl lg:text-8xl">
               Capped-return capital for housing projects the market leaves unfunded.
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-text-2 md:text-xl">
@@ -54,22 +52,22 @@ export default function HomePage() {
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <a
                 href="mailto:hello@fair-squares.nl?subject=Fair%20Squares%20pilot%20project"
-                className="inline-flex items-center justify-center rounded-xl bg-fs-magenta px-6 py-3 text-sm font-bold text-white shadow-lg shadow-fs-magenta/20 hover:bg-fs-magenta-light"
+                className="inline-flex items-center justify-center rounded-full bg-[#1f2a2e] px-6 py-3 text-sm font-bold text-[#fffaf2] shadow-lg shadow-black/10 hover:-translate-y-0.5 hover:bg-fs-magenta"
               >
                 Bring a pilot project
               </a>
               <Link
                 href="/fund"
-                className="inline-flex items-center justify-center rounded-xl border border-border bg-white px-6 py-3 text-sm font-bold text-text-1 hover:border-fs-teal/50"
+                className="inline-flex items-center justify-center rounded-full border border-black/10 bg-white/55 px-6 py-3 text-sm font-bold text-text-1 hover:-translate-y-0.5 hover:bg-white"
               >
                 View protocol app
               </Link>
             </div>
           </div>
 
-          <div className="relative rounded-3xl border border-text-1/10 bg-white p-5 shadow-xl">
+          <div className="relative rotate-1 rounded-[2rem] border border-text-1/10 bg-[#fffaf2] p-5 shadow-2xl shadow-black/10">
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-text-3">First pilot focus</p>
-            <div className="mt-4 rounded-2xl bg-text-1 p-6 text-white">
+            <div className="mt-4 rounded-[1.5rem] bg-text-1 p-6 text-white">
               <p className="text-sm text-white/60">Best first product</p>
               <h2 className="mt-3 text-3xl font-black leading-tight">Viability-gap finance for capped-rent rental projects</h2>
               <p className="mt-4 text-sm leading-6 text-white/70">
@@ -96,7 +94,7 @@ export default function HomePage() {
 
       <section className="grid gap-5 md:grid-cols-3">
         {problemCards.map((card, index) => (
-          <div key={card.title} className="rounded-3xl border border-border bg-card p-6">
+          <div key={card.title} className="paper-lift editorial-card rounded-[2rem] p-6">
             <p className="mb-5 text-sm font-black text-fs-magenta">0{index + 1}</p>
             <h3 className="text-2xl font-black">{card.title}</h3>
             <p className="mt-4 text-sm leading-7 text-text-2">{card.body}</p>
@@ -106,7 +104,7 @@ export default function HomePage() {
 
       <section className="grid gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-fs-teal-dark">CPB-backed wedge</p>
+          <p className="marker-label">CPB-backed wedge</p>
           <h2 className="mt-3 text-4xl font-black md:text-5xl">The problem is not only a shortage of homes. It is how affordable homes are financed.</h2>
           <p className="mt-5 text-base leading-8 text-text-2">
             CPB research keeps pointing to the same tension: rent caps help affordability, but they can make projects harder to finance. Broad subsidies can leak into land prices. Housing corporations have a social mission, but not unlimited balance sheets. Fair Squares is built for the narrow gap in between.
@@ -115,7 +113,7 @@ export default function HomePage() {
             Read the research base →
           </Link>
         </div>
-        <div className="rounded-3xl border border-border bg-card p-5">
+        <div className="editorial-card rounded-[2rem] p-5">
           <div className="grid gap-3">
             {steps.map((step, index) => (
               <div key={step} className="flex gap-4 rounded-2xl bg-bg p-4">
@@ -129,10 +127,10 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="rounded-[2rem] border border-border bg-card p-6 md:p-8">
+      <section className="editorial-card rounded-[2rem] p-6 md:p-8">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-fs-teal-dark">Evidence, not vibes</p>
+            <p className="marker-label">Evidence, not vibes</p>
             <h2 className="mt-3 text-4xl font-black">Every major claim has a source behind it.</h2>
           </div>
           <Link href="/research" className="text-sm font-bold text-fs-magenta hover:underline">
@@ -141,7 +139,7 @@ export default function HomePage() {
         </div>
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           {researchSources.slice(0, 3).map((source) => (
-            <a key={source.url} href={source.url} target="_blank" rel="noreferrer" className="rounded-2xl border border-border bg-bg p-4 hover:border-fs-teal/50">
+            <a key={source.url} href={source.url} target="_blank" rel="noreferrer" className="paper-lift rounded-[1.5rem] border border-black/10 bg-white/50 p-4 hover:border-fs-teal/50">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-fs-magenta">{source.publisher} · {source.year}</p>
               <h3 className="mt-3 text-lg font-black leading-tight">{source.title}</h3>
               <p className="mt-3 text-sm leading-6 text-text-2">{source.takeaway}</p>
@@ -150,7 +148,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="rounded-[2rem] border border-border bg-card p-6 md:p-8">
+      <section className="editorial-card rounded-[2rem] p-6 md:p-8">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-fs-magenta">Draft pilot term sheet</p>
@@ -170,7 +168,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="rounded-[2rem] border border-border bg-card p-6 md:p-8">
+      <section className="editorial-card rounded-[2rem] p-6 md:p-8">
         <p className="text-xs font-bold uppercase tracking-[0.22em] text-fs-magenta">Production path</p>
         <h2 className="mt-3 text-4xl font-black">Prove the finance model before scaling the protocol.</h2>
         <div className="mt-8 grid gap-3">
@@ -187,7 +185,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="grid gap-8 rounded-[2rem] border border-text-1/10 bg-text-1 p-6 text-white md:p-8 lg:grid-cols-[1fr_1fr]">
+      <section className="grid gap-8 rounded-[2.25rem] border border-text-1/10 bg-text-1 p-6 text-white shadow-2xl shadow-black/10 md:p-8 lg:grid-cols-[1fr_1fr]">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-fs-teal-light">Partner ask</p>
           <h2 className="mt-3 text-4xl font-black">Do you have a socially desirable project blocked by low affordable-rent returns?</h2>
