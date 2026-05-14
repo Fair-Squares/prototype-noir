@@ -1,35 +1,28 @@
-import { keyMetrics } from "@/lib/research";
+import { coreProblem, keyMetrics, protocolFit } from "@/lib/research";
 
 const focusAreas = [
-  ["Affordable-rent pressure", "The project is useful, but capped rents reduce the income traditional finance expects."],
-  ["A defined funding gap", "The missing layer is visible in the project budget, not hidden in vague development risk."],
-  ["Real additional homes", "Fair Squares capital should enable homes that would otherwise be delayed, reduced or not delivered."],
-  ["Long-term affordability", "The public value comes from homes staying affordable, not only from getting built."],
-];
-
-const productShape = [
-  ["Capital", "Patient, capped-return capital for a specific affordable housing project."],
-  ["Outcome", "Homes enabled, rent level, affordability period and reporting commitments."],
-  ["Protection", "Anti-speculation terms, open-book reporting and consent rights around affordability changes."],
-  ["Audience", "Partners and investors who want measurable housing impact rather than maximum real-estate upside."],
+  ["Rent caps create the gap", "The home is needed and affordable, but the lower rent weakens the business case."],
+  ["Land and permits stay outside the bet", "Fair Squares should enter after the project is concrete enough to avoid subsidising speculative land value."],
+  ["Capital is capped by design", "The return profile should match the mission: enough to attract patient capital, not enough to extract the housing upside."],
+  ["The protocol makes it legible", "Funding, governance, eligibility and reporting should make the project understandable to participants and the public."],
 ];
 
 export default function PilotPage() {
   return (
     <div className="space-y-12">
       <section className="open-card rounded-[2.5rem] p-6 md:p-10">
-        <p className="marker-label">Fair Squares fit</p>
+        <p className="marker-label">Fair Squares use case</p>
         <h1 className="mt-4 max-w-4xl text-4xl font-black md:text-6xl">
-          A practical capital layer for affordable housing gaps.
+          Capped-return capital for affordable housing projects that almost work.
         </h1>
         <p className="mt-6 max-w-3xl text-base leading-8 text-text-2">
-          The first Fair Squares use case is not a generic investment product. It is a focused way to help affordable rental projects work when the social rent target creates a financing gap.
+          {coreProblem.short} Fair Squares fits the moment where a project has demand, a partner and a real affordability target, but needs a better capital layer to move forward.
         </p>
         <a
-          href="mailto:hello@fair-squares.nl?subject=Fair%20Squares%20housing%20project"
+          href="mailto:hello@fair-squares.nl?subject=Fair%20Squares%20housing%20gap"
           className="mt-8 inline-flex rounded-full bg-fs-magenta px-6 py-3 text-sm font-bold text-white shadow-lg shadow-fs-magenta/20 hover:-translate-y-0.5 hover:bg-fs-anthracite"
         >
-          Share a suitable project
+          Share a housing gap
         </a>
       </section>
 
@@ -44,12 +37,11 @@ export default function PilotPage() {
 
       <section className="grid gap-8 lg:grid-cols-2">
         <div className="open-card rounded-[2rem] p-6 md:p-8">
-          <p className="marker-label">Product shape</p>
+          <p className="marker-label">What Fair Squares already supports</p>
           <div className="mt-6 space-y-3">
-            {productShape.map(([label, value]) => (
-              <div key={label} className="rounded-2xl border border-border bg-white p-4">
-                <p className="text-sm font-black text-fs-magenta">{label}</p>
-                <p className="mt-2 text-sm leading-6 text-text-2">{value}</p>
+            {protocolFit.map((item) => (
+              <div key={item} className="rounded-2xl border border-border bg-white p-4 text-sm font-bold leading-6 text-text-1">
+                {item}
               </div>
             ))}
           </div>
@@ -57,7 +49,7 @@ export default function PilotPage() {
 
         <div className="rounded-[2.25rem] border border-fs-teal/20 bg-fs-anthracite p-6 text-white shadow-2xl shadow-black/10 md:p-8">
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-fs-teal-light">What should be visible</p>
-          <h2 className="mt-3 text-3xl font-black">The public should be able to understand what the capital enabled.</h2>
+          <h2 className="mt-3 text-3xl font-black">A housing-finance product should prove the housing result.</h2>
           <div className="mt-6 space-y-3">
             {keyMetrics.slice(0, 5).map((metric) => (
               <div key={metric} className="rounded-2xl border border-white/10 bg-white/7 p-4 text-sm font-semibold leading-6">

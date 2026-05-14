@@ -12,6 +12,13 @@ export type FairSquaresDirection = {
   body: string;
 };
 
+export const coreProblem = {
+  short:
+    "Affordable housing policy often lowers rents before the financing problem is solved.",
+  long:
+    "CPB’s housing work keeps returning to the same trade-off: the Netherlands needs more affordable homes, but rent limits, scarce land, slow procedures and stretched housing corporations can make those homes harder to finance. Fair Squares fits where a real project is useful, demand is clear, but the final capital layer does not work at normal market-return expectations.",
+};
+
 export const researchSources: ResearchSource[] = [
   {
     title: "The effect of housing subsidies on new construction",
@@ -19,9 +26,9 @@ export const researchSources: ResearchSource[] = [
     year: "2025",
     url: "https://www.cpb.nl/de-effecten-van-subsidies-op-woningbouw",
     takeaway:
-      "CPB warns that broad building subsidies often do not create many extra homes when land and permits are the real bottlenecks. In that situation, public money can leak into higher land prices instead of lower rents or more homes.",
+      "CPB finds that broad construction subsidies have limited effect when land and regulation prevent quick supply growth. They can also leak into higher land prices. Subsidies are more promising when a project is otherwise not profitable, for example because regulated rents do not cover costs, or when they support efficient forms such as splits and rooftop additions.",
     implication:
-      "Fair Squares focuses on project-level gaps instead of generic subsidies: capital is connected to a specific project, fixed land terms and measurable affordability outcomes.",
+      "Fair Squares should stay project-specific: fund the documented gap between affordable rents and project costs, after land/control terms are clear, instead of acting like a broad subsidy or speculative land strategy.",
   },
   {
     title: "How new housing affects affordability and fit",
@@ -29,9 +36,9 @@ export const researchSources: ResearchSource[] = [
     year: "2024",
     url: "https://www.cpb.nl/de-effecten-van-woningbouw-op-betaalbaarheid-en-vraaggerichtheid",
     takeaway:
-      "For many middle-income households, the biggest help is simply more homes. CPB also notes that when land is scarce, smaller and more efficient homes can help more people than larger homes on the same land.",
+      "CPB shows that for many middle-income households the main relief is substantially more homes. Where land is scarce, smaller homes can help more households than larger homes on the same land.",
     implication:
-      "Fair Squares is best suited to projects that add usable affordable homes efficiently: transformations, building splits, rooftop additions and compact mid-rent apartments.",
+      "Fair Squares should favour efficient supply: compact mid-rent homes, transformations, splits and rooftop additions where the same scarce land can house more people affordably.",
   },
   {
     title: "A perspective on the housing market",
@@ -39,9 +46,9 @@ export const researchSources: ResearchSource[] = [
     year: "2026",
     url: "https://www.cpb.nl/publicatie/perspectief-op-de-woningmarkt",
     takeaway:
-      "CPB argues that the housing market has to be viewed as one connected system. A measure that helps one group can make scarcity worse for another group if it only increases demand for limited homes.",
+      "CPB argues that housing policy has to be viewed as one connected system. Measures in one segment affect others; extra demand support can increase scarcity, while affordable building requires explicit choices about location, subsidy and flexibility.",
     implication:
-      "Fair Squares is a supply-side tool. The public promise is not more bidding power, but helping specific affordable homes get built, transformed or preserved.",
+      "Fair Squares should be a supply-side financing layer, not extra bidding power. The protocol should make clear which homes are enabled, which affordability choice is being made and how outcomes are reported.",
   },
   {
     title: "The rent dilemma: affordability versus availability",
@@ -49,9 +56,9 @@ export const researchSources: ResearchSource[] = [
     year: "2024",
     url: "https://www.cpb.nl/huurdilemma-betaalbaarheid-versus-beschikbaarheid",
     takeaway:
-      "Rent caps can make homes cheaper for tenants who get them, but they can also make rental projects less attractive to owners and investors. That can reduce the number of available rental homes.",
+      "CPB describes the central rental-market dilemma: limiting rents helps tenants who get a home, but can reduce the willingness of private owners and investors to offer mid-rent homes. Housing corporations may help, but they also face capacity, funding and allocation constraints.",
     implication:
-      "This is where Fair Squares fits: lower-return, mission-aligned capital can help capped-rent projects work without forcing rents back up to market level.",
+      "This is the core Fair Squares gap: use capped-return, mission-aligned capital so affordability rules do not automatically remove homes from the rental supply pipeline.",
   },
   {
     title: "Measures are needed to address a €19.4bn housing-corporation funding gap",
@@ -61,7 +68,7 @@ export const researchSources: ResearchSource[] = [
     takeaway:
       "The Dutch government reports that housing corporations face a €19.4bn shortfall against €115bn of agreed investments through 2034. Without extra room, new-build, maintenance and sustainability targets are at risk.",
     implication:
-      "Fair Squares can complement mission-driven operators with an extra capital layer tied to affordability, reporting and anti-speculation protections.",
+      "Fair Squares can complement, not replace, public and corporation finance: a transparent project layer for affordability gaps where a partner has a real plan but limited balance-sheet room.",
   },
   {
     title: "900,000 new homes to meet growing demand",
@@ -71,7 +78,7 @@ export const researchSources: ResearchSource[] = [
     takeaway:
       "The Netherlands aims to build 900,000 homes through 2030, with two-thirds intended to be affordable rental or affordable purchase homes.",
     implication:
-      "Fair Squares belongs in the affordable part of that pipeline, especially where a small but difficult funding gap blocks a viable project.",
+      "Fair Squares belongs in the affordable part of that pipeline, where the social target is clear but the return profile needs a different type of capital.",
   },
   {
     title: "Primos forecast 2025",
@@ -81,27 +88,35 @@ export const researchSources: ResearchSource[] = [
     takeaway:
       "ABF estimates the 2025 statistical housing shortage at roughly 396,000 homes, or 4.8% of the housing stock.",
     implication:
-      "The shortage is urgent, but Fair Squares should stay disciplined: capital should be tied to additional homes, affordability years and clear public reporting.",
+      "The shortage makes speed important, but Fair Squares should still tie capital to additional homes, affordability years and reporting rather than vague impact claims.",
   },
 ];
 
 export const fairSquaresDirection: FairSquaresDirection[] = [
   {
-    title: "Bridge the affordability gap",
-    body: "When rents are capped, a useful housing project can lose just enough income to become unfinanceable. Fair Squares fills that narrow gap with patient, capped-return capital.",
+    title: "Turn the rent dilemma into a finance problem",
+    body: "If rent limits make a project socially useful but financially thin, Fair Squares can supply the capped-return layer that normal capital will not provide.",
   },
   {
-    title: "Fund homes, not speculation",
-    body: "Capital is connected to real homes, fixed land/control terms and anti-speculation protections, so value is directed toward affordability rather than land-price inflation.",
+    title: "Use the protocol for trust, not hype",
+    body: "Fair Squares already has rails for pooled funding, project accounting, governance and participant eligibility. Those rails should show what was funded and whether the affordability promise is kept.",
   },
   {
-    title: "Make affordability visible",
-    body: "Each project should show the financing gap, homes enabled, rent level, affordability duration and reporting status in language anyone can understand.",
+    title: "Stay close to real supply",
+    body: "The best fit is not abstract housing exposure. It is compact homes, transformations, splits and rooftop additions where capital can unlock measurable additional supply.",
   },
   {
-    title: "Open access for social investors",
-    body: "Fair Squares is designed for people and organisations willing to accept capped returns in exchange for concrete, measurable housing outcomes.",
+    title: "Keep the upside with the housing outcome",
+    body: "Investors can receive a capped return, while excess value is protected through reporting, governance and affordability conditions instead of being extracted as speculation.",
   },
+];
+
+export const protocolFit = [
+  "Funding pools for a specific housing project or portfolio",
+  "Transparent project reporting: gap, use of funds, homes enabled and affordability period",
+  "Governance for key project decisions and covenant changes",
+  "Eligibility and privacy rails where participant checks are needed",
+  "On-chain accounting for capped returns and distributions when the legal wrapper allows it",
 ];
 
 export const keyMetrics = [
