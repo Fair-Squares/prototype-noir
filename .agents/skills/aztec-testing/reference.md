@@ -3,8 +3,8 @@
 ## Scope and Pin
 
 - Skill: `aztec-testing`
-- Version label: `v4.1.0-rc.2`
-- Commit SHA: `9598e7eff941a151aeff4cf4264327283db39a88`
+- Version label: `v4.2.0`
+- Commit SHA: `f8c89cf4345df6c4ca9e66ea9b738e96070abc5a`
 - Primary source map: `docs/internal_notes/llm_docs_skill_candidates.md`
 - Upstream repo: `https://github.com/AztecProtocol/aztec-packages`
 
@@ -13,15 +13,15 @@
 ```bash
 git clone https://github.com/AztecProtocol/aztec-packages.git
 cd aztec-packages
-git checkout v4.1.0-rc.2
+git checkout v4.2.0
 git status
 git rev-parse HEAD
 ```
 
 Expected:
 
-- `HEAD detached at v4.1.0-rc.2`
-- `9598e7eff941a151aeff4cf4264327283db39a88`
+- `HEAD detached at v4.2.0`
+- `f8c89cf4345df6c4ca9e66ea9b738e96070abc5a`
 
 ## Pinned Testing Source Corpus
 
@@ -51,7 +51,7 @@ Primary code fanout used by testing docs:
 
 Remote pinned docs root:
 
-- `https://github.com/AztecProtocol/aztec-packages/tree/v4.1.0-rc.2/docs`
+- `https://github.com/AztecProtocol/aztec-packages/tree/v4.2.0/docs`
 
 ## TestEnvironment API Map
 
@@ -201,10 +201,10 @@ Account loading approaches:
 
 ### 2. Contract integration test flow
 
-1. deploy contract via generated binding
-2. verify baseline state with `.simulate(...)`
-3. apply state transition via `.send(...)`
-4. assert post-state with `.simulate(...)`
+1. deploy contract via generated binding — waited deploys return `{ contract, receipt, ... }`
+2. verify baseline state with `.simulate(...)` — returns `{ result, ... }`, use `result` for assertions
+3. apply state transition via `.send(...)` — waited sends return `{ receipt, ... }`
+4. assert post-state with `.simulate(...)` — destructure `{ result }` for the value
 5. include revert expectations with `.simulate(...).rejects`
 
 ### 3. Authwit integration test flow

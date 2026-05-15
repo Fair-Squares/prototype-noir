@@ -10,7 +10,7 @@
 # Frontend-only (simulation mode, no Aztec needed):
 #   docker compose --profile sim up
 
-x-aztec-image: &aztec-image aztecprotocol/aztec:4.2.0-aztecnr-rc.2
+x-aztec-image: &aztec-image aztecprotocol/aztec:4.2.1
 
 services:
   # -- Frontend (live Aztec mode) ----------------------------------------------

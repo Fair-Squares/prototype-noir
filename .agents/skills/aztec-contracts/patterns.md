@@ -1,6 +1,6 @@
 # Aztec Contract Patterns
 
-All patterns assume pin `v4.1.0-rc.2` (`9598e7eff941a151aeff4cf4264327283db39a88`).
+All patterns assume pin `v4.2.0` (`f8c89cf4345df6c4ca9e66ea9b738e96070abc5a`).
 
 ## Pattern 1: Minimal Stateful Contract
 
@@ -63,7 +63,7 @@ Delivery guidance:
 
 ## Pattern 3: Private-to-Public Bridge with `#[only_self]`
 
-Use when private logic must mutate public state safely.
+Use when private logic must mutate public state safely. In v4.2.0, `#[only_self]` also implicitly skips the init check — if you invoke this bridge from a private initializer, the same `#[only_self]` attribute keeps it callable pre-init.
 
 ```rust
 #[external("private")]

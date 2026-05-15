@@ -9,11 +9,11 @@ Installs core Wallet SDK dependencies into the current project.
 
 Arguments:
   package-manager   npm, yarn, or pnpm
-  version           Optional package version (example: 4.0.0-devnet.2-patch.1)
+  version           Optional package version (example: 4.2.1)
 
 Examples:
   $0 npm
-  $0 yarn 4.0.0-devnet.2-patch.1
+  $0 yarn 4.2.1
 USAGE
 }
 

@@ -1,6 +1,6 @@
 # Aztec.js Patterns
 
-All patterns assume pin `v4.1.0-rc.2` (`9598e7eff941a151aeff4cf4264327283db39a88`).
+All patterns assume pin `v4.2.0` (`f8c89cf4345df6c4ca9e66ea9b738e96070abc5a`).
 
 ## Pattern 1: Connect + Register Local Accounts
 
@@ -25,21 +25,22 @@ const [alice, bob] = await Promise.all(
 
 ## Pattern 2: Create and Deploy a New Account
 
-Use when onboarding a user account.
+Use when onboarding a user account. In v4.2.0 the `AztecAddress.ZERO` sentinel for bypassing the account entrypoint was replaced by `NO_FROM` (imported from `@aztec/aztec.js/account`); self-deployments wrap through `DefaultMultiCallEntrypoint` + `mergeExecutionPayloads` internally so the fee claim and the deployment land in a single private payload.
 
 ```typescript
 import { Fr } from "@aztec/aztec.js/fields";
-import { AztecAddress } from "@aztec/aztec.js/addresses";
+import { NO_FROM } from "@aztec/aztec.js/account";
+import { ContractInitializationStatus } from "@aztec/aztec.js/wallet";
 
 const newAccount = await wallet.createSchnorrAccount(Fr.random(), Fr.random());
 const deployMethod = await newAccount.getDeployMethod();
 
 await deployMethod.send({
-  from: AztecAddress.ZERO,
+  from: NO_FROM,
 });
 
 const metadata = await wallet.getContractMetadata(newAccount.address);
-if (!metadata.isContractInitialized) {
+if (metadata.initializationStatus !== ContractInitializationStatus.INITIALIZED) {
   throw new Error("Account deployment not initialized");
 }
 ```
@@ -51,8 +52,9 @@ Use for production-safe deployment flow.
 ```typescript
 import { TokenContract } from "@aztec/noir-contracts.js/Token";
 import { Fr } from "@aztec/aztec.js/fields";
+import { ContractInitializationStatus } from "@aztec/aztec.js/wallet";
 
-const token = await TokenContract.deploy(wallet, alice, "Token", "TOK", 18).send({
+const { contract: token } = await TokenContract.deploy(wallet, alice, "Token", "TOK", 18).send({
   from: alice,
   contractAddressSalt: Fr.random(),
   universalDeploy: false,
@@ -63,7 +65,7 @@ const classMeta = metadata.instance
   ? await wallet.getContractClassMetadata(metadata.instance.currentContractClassId)
   : undefined;
 
-if (!metadata.isContractInitialized) throw new Error("not initialized");
+if (metadata.initializationStatus !== ContractInitializationStatus.INITIALIZED) throw new Error("not initialized");
 if (!metadata.isContractPublished) throw new Error("instance not published");
 if (classMeta && !classMeta.isContractClassPubliclyRegistered) {
   throw new Error("class not publicly registered");
@@ -79,7 +81,7 @@ import { NO_WAIT } from "@aztec/aztec.js/contracts";
 
 await token.methods.transfer(bob, 100n).simulate({ from: alice });
 
-const txHash = await token.methods.transfer(bob, 100n).send({
+const { txHash } = await token.methods.transfer(bob, 100n).send({
   from: alice,
   wait: NO_WAIT,
 });
@@ -100,7 +102,7 @@ const batch = new BatchCall(wallet, [
   token.methods.transfer(bob, 200n),
 ]);
 
-const batchReceipt = await batch.send({ from: alice });
+const { receipt: batchReceipt } = await batch.send({ from: alice });
 console.log(batchReceipt.blockNumber);
 ```
 
@@ -112,13 +114,16 @@ Use for predictable fee handling with a supported payment flow.
 import { GasSettings } from "@aztec/stdlib/gas";
 import { SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee";
 
-const sim = await token.methods.transfer(bob, 50n).simulate({
+const { result: sim } = await token.methods.transfer(bob, 50n).simulate({
   from: alice,
   fee: { estimateGas: true, estimatedGasPadding: 0.2 },
 });
 
 const maxFeesPerGas = (await node.getCurrentMinFees()).mul(1.5);
-const gasSettings = GasSettings.default({ maxFeesPerGas });
+// v4.2.0: `GasSettings.default(...)` was renamed to `GasSettings.fallback(...)`.
+// For simulation/estimation, prefer `GasSettings.forEstimation(...)` in conjunction with
+// `skipTxValidation: true`. `EmbeddedWallet.simulateTx` already wires this automatically.
+const gasSettings = GasSettings.fallback({ maxFeesPerGas });
 const paymentMethod = new SponsoredFeePaymentMethod(fpcAddress);
 
 await token.methods.transfer(bob, 50n).send({
@@ -163,7 +168,7 @@ Use for indexer-lite app reads.
 import { getPublicEvents } from "@aztec/aztec.js/events";
 import type { PrivateEventFilter } from "@aztec/aztec.js/wallet";
 
-const publicEvents = await getPublicEvents(node, TokenContract.events.Transfer, {
+const { events: publicEvents, maxLogsHit } = await getPublicEvents(node, TokenContract.events.Transfer, {
   fromBlock: 1,
   toBlock: 100,
   contractAddress: token.address,
@@ -211,7 +216,7 @@ beforeAll(async () => {
 });
 
 it("simulates before sending", async () => {
-  const result = await contract.methods.balance_of_public(alice).simulate({ from: alice });
+  const { result } = await contract.methods.balance_of_public(alice).simulate({ from: alice });
   expect(result).toBeDefined();
 });
 ```

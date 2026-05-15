@@ -54,8 +54,11 @@
 - [x] Fund/portfolio views now surface NAV and NAV per FSFT
 
 ### Verification
+- [x] `aztec compile` passes for all contracts on Aztec 4.2.1
+- [x] `aztec test` runs for all contracts (0 in-repo Noir tests currently)
 - [x] `npx tsc --noEmit --incremental false` (frontend) passes
 - [x] `npm run build` (frontend) passes
+- [x] `npx tsc --noEmit --incremental false` (scripts) passes
 
 ---
 
@@ -67,11 +70,13 @@
 - [x] **DeFiVault** — yield stub with time-based 3% APY calculation, deposit/withdraw/accrue
 - [x] **HousingFund** — core fund: private deposit/withdraw, KYC gate, DeFi allocation, property reservation, pause/unpause
 - [x] **Governance** — private voting with nullifiers, proposal creation, finalization, public results
-- [x] **Nargo.toml** for all 5 contracts with pinned aztec-packages v4.2.0-aztecnr-rc.2 dependencies
+- [x] **FSFTDex** — investor-gated secondary FSFT/EUR orderbook prototype
+- [x] **ProtocolRewards** — epoch rewards allocation/claiming prototype
+- [x] **Nargo.toml** for all 7 contracts with pinned Aztec v4.2.1 dependencies
 
 ### Deployment
-- [x] **deploy.ts** — deploys all 5 contracts in dependency order, saves addresses to frontend/.env.local
-- [x] **docker-compose.yml** — Aztec local network (Docker image v4.2.0-aztecnr-rc.2) + local Anvil L1 (`ETHEREUM_HOSTS`) + healthchecks
+- [x] **deploy.ts** — deploys contracts in dependency order, saves addresses to frontend/.env.local
+- [x] **docker-compose.yml** — Aztec local network (Docker image v4.2.1) + local Anvil L1 (`ETHEREUM_HOSTS`) + healthchecks
 - [x] **bootstrap-local-network.sh** — waits for PXE, compiles contracts, runs deploy script in Docker profile `aztec`
 
 ### Frontend (Next.js)
@@ -116,17 +121,10 @@
 
 ## ❌ Known Issues / TODOs
 
-1. **Contracts need compilation** — `aztec compile` required; some import paths and API calls may need adjustment for exact v4.2.0-aztecnr-rc.2 compatibility
-2. **MessageDelivery import path** — the `.deliver(MessageDelivery.ONCHAIN_CONSTRAINED)` pattern may have changed between Aztec versions
-3. **Cross-contract calls** — `KYCVerifier::at(addr).is_verified(sender).call(&mut self.context)` syntax needs verification
-4. **Block timestamp access** — `BlockHeader::get_timestamp(self.context)` may use a different API
-5. **Nullifier API** — `self.context.push_nullifier(nullifier)` needs verification
-6. **poseidon2_hash import** — path `aztec::protocol::hash::poseidon2_hash` needs verification
-7. **Frontend contract interaction** — all contract calls are stubbed; need generated TypeScript types after compile
-8. **zkPassport real integration** — SDK imported but not called; needs domain registration with zkPassport
-9. **FundToken admin transfer** — after deploying HousingFund, FundToken.admin should be set to HousingFund address
-10. **Wallet connect UX** — prototype uses local-network pre-funded accounts; real wallet flow requires account abstraction setup
-11. **Write routes are still simulation-backed** — deposit/withdraw/vote/register KYC are not yet wired to live contract mutations
+1. **Frontend contract interaction** — several routes are still simulation-backed; live contract mutation paths need generated TypeScript bindings and deployed addresses
+2. **zkPassport real integration** — SDK imported but not called; needs domain registration with zkPassport
+3. **FundToken admin transfer** — after deploying HousingFund, FundToken.admin should be set to HousingFund address
+4. **Wallet connect UX** — prototype uses local-network pre-funded accounts; real wallet flow requires account abstraction setup
 
 ## 🚀 How to Run
 

@@ -11,6 +11,8 @@ const AZTEC_SERVER_EXTERNALS_PREFIX = "@aztec/";
 const ZKPASSPORT_EXTERNALS_PREFIX = "@zkpassport/";
 
 const nextConfig: NextConfig = {
+  outputFileTracingRoot: __dirname,
+
   webpack: (config, { isServer }) => {
     // ── WebAssembly support (required for @aztec/bb.js in browser) ─────────
     config.experiments = { ...config.experiments, asyncWebAssembly: true };
