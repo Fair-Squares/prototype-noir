@@ -7,7 +7,7 @@ import HeaderWalletButton from "@/components/HeaderWalletButton";
 export const metadata: Metadata = {
   title: "Fair Squares - Affordable Housing Capital",
   description:
-    "A patient capital layer for affordable housing projects where affordability creates a real financing gap.",
+    "Fair financing for affordable housing projects where capped rents create a real project gap."
 };
 
 const PUBLIC_NAV = [
@@ -34,7 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </span>
                 <span className="leading-none">
                   <span className="block font-black tracking-tight text-text-1">Fair Squares</span>
-                  <span className="mt-1 block font-bold text-fs-teal-dark">Finance the housing gap</span>
+                  <span className="mt-1 block font-bold text-fs-teal-dark">Fair financing for housing gaps</span>
                 </span>
               </Link>
 
@@ -74,10 +74,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <div>
                   <p className="type-section">Fair Squares</p>
                   <p className="type-body mt-2 max-w-xl text-white/65">
-                    A patient capital layer for affordable housing projects where affordability creates a real financing gap.
+                    Fair financing for affordable housing projects where capped rents create a documented project gap.
                   </p>
                 </div>
-                <p className="type-body font-bold text-fs-teal-light/80">Approach · Use case · Protocol</p>
+                <p className="type-body font-bold text-fs-teal-light/80">Fair financing · CPB edge · Pilot protocol</p>
               </div>
             </div>
           </footer>

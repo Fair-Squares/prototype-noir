@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap");
 @import "tailwindcss";
 
 @font-face {
@@ -19,6 +19,7 @@
   --font-brand-black: "Sora", "NexaHeavy", "Avenir Next", "Segoe UI", sans-serif;
   --font-brand-heavy: "Sora", "NexaHeavy", "Avenir Next", "Segoe UI", sans-serif;
   --font-sans-human: "Plus Jakarta Sans", "Avenir Next", "Segoe UI", sans-serif;
+  --font-mono-ledger: "IBM Plex Mono", "SFMono-Regular", monospace;
 
   --color-fs-magenta: #C41667;
   --color-fs-magenta-light: #D93D85;
@@ -85,6 +86,13 @@ h1, h2, h3, .font-brand-black, .font-brand-heavy {
   font-weight: 750;
 }
 
+.type-lead {
+  font-size: clamp(1.12rem, 1.8vw, 1.45rem);
+  line-height: 1.58;
+  letter-spacing: -0.025em;
+  font-weight: 700;
+}
+
 .type-body {
   font-size: 0.98rem;
   line-height: 1.75;
@@ -103,10 +111,13 @@ h1, h2, h3, .font-brand-black, .font-brand-heavy {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.16;
-  background-image: radial-gradient(circle at center, rgba(36,48,52,0.14) 1px, transparent 1px);
-  background-size: 34px 34px;
-  mask-image: linear-gradient(to bottom, black, transparent 72%);
+  opacity: 0.14;
+  background-image:
+    linear-gradient(to right, rgba(36,48,52,0.09) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(36,48,52,0.07) 1px, transparent 1px),
+    radial-gradient(circle at center, rgba(36,48,52,0.12) 1px, transparent 1px);
+  background-size: 96px 96px, 96px 96px, 34px 34px;
+  mask-image: linear-gradient(to bottom, black, transparent 76%);
 }
 
 .fs-shell-bg {
@@ -155,4 +166,73 @@ h1, h2, h3, .font-brand-black, .font-brand-heavy {
 .paper-lift:hover {
   transform: translateY(-2px);
   box-shadow: 0 22px 60px rgba(36, 48, 52, 0.105);
+}
+
+.hero-ledger {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    linear-gradient(115deg, rgba(255,255,255,0.92), rgba(221,239,232,0.72) 48%, rgba(255,255,255,0.8)),
+    repeating-linear-gradient(90deg, rgba(36,48,52,0.06) 0 1px, transparent 1px 4.5rem);
+}
+
+.hero-ledger::before {
+  content: "";
+  position: absolute;
+  inset: auto -8rem -13rem auto;
+  width: 28rem;
+  height: 28rem;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(196, 22, 103, 0.2), transparent 64%);
+  z-index: -1;
+}
+
+.hero-ledger::after {
+  content: "";
+  position: absolute;
+  inset: -12rem auto auto -10rem;
+  width: 26rem;
+  height: 26rem;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(76, 189, 176, 0.24), transparent 64%);
+  z-index: -1;
+}
+
+.finance-slip {
+  border: 1px solid rgba(36, 48, 52, 0.12);
+  border-radius: 1.8rem;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.9), rgba(247,248,244,0.88)),
+    repeating-linear-gradient(0deg, transparent 0 2.55rem, rgba(36,48,52,0.055) 2.55rem calc(2.55rem + 1px));
+  padding: 1.25rem;
+  box-shadow: 0 24px 70px rgba(36, 48, 52, 0.12);
+}
+
+.sticky-note {
+  border: 1px solid rgba(196, 22, 103, 0.18);
+  border-radius: 1.8rem;
+  background: linear-gradient(145deg, rgba(255,255,255,0.9), rgba(221,239,232,0.42));
+  padding: 1.5rem;
+  box-shadow: 0 18px 54px rgba(36, 48, 52, 0.075);
+}
+
+.edge-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.edge-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0.35rem;
+  background: linear-gradient(180deg, var(--sage), var(--rose));
+}
+
+.impact-band {
+  background:
+    radial-gradient(circle at 12% 15%, rgba(76,189,176,0.22), transparent 24rem),
+    radial-gradient(circle at 86% 18%, rgba(196,22,103,0.18), transparent 22rem),
+    #243034;
 }
