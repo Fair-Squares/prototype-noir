@@ -6,9 +6,36 @@ This file is the canonical agent guide for this repo. [AGENTS.md](./AGENTS.md) i
 
 This is an Aztec smart contract project. Always use the `aztec` CLI wrapper instead of calling `nargo` directly:
 
-- **Compile**: `aztec compile` (NOT `nargo compile`). Using `nargo compile` alone produces incomplete artifacts.
+- **Compile (full artifact, for deploy)**: `aztec compile` (NOT `nargo compile`). Using `nargo compile` alone produces ACIR without the AVM transpilation + VK generation that the wallet/deploy flow needs.
 - **Test**: `aztec test` (NOT `nargo test`).
 - **Other nargo commands** like `nargo fmt` and `nargo doc` are fine to use directly.
+
+### Fast iteration loop on the host
+
+For fast typecheck / syntax loops during contract development, the `nargo` binary pinned to the same v4.3.0 build the Docker image ships is installed at `~/.local/bin/nargo`. Use it directly:
+
+```bash
+cd contracts/<name> && nargo compile
+```
+
+Warm-cache compile is **~3 s per contract** (vs ~10 s per contract through Docker). The host nargo writes its dep cache to `~/nargo/`. For full artifact generation (transpile + VK) you still need `aztec compile` via Docker.
+
+For all-7-contracts compile via Docker, use the persistent nargo cache volume:
+
+```bash
+docker run --rm --entrypoint /bin/bash \
+  -v aztec-nargo-cache:/root/nargo \
+  -v "$PWD:/workspace" \
+  aztecprotocol/aztec:4.3.0 -lc '
+    export PATH=/usr/src/noir/noir-repo/target/release:$PATH
+    for c in kyc_verifier fund_token defi_vault governance housing_fund fsft_dex protocol_rewards; do
+      cd /workspace/contracts/$c && rm -rf target
+      node --no-warnings /usr/src/yarn-project/aztec/dest/bin/index.js compile \
+        2>&1 | grep -E "^error:|Compilation complete"
+    done'
+```
+
+The named `aztec-nargo-cache` volume persists git deps across runs (~1 min full-suite vs 12 min cold).
 
 ## Error Handling
 
