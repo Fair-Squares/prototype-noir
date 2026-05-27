@@ -49,24 +49,60 @@ export async function POST(request: NextRequest) {
     const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, actor.wallet);
     const actorAddress = AztecAddress.fromString(actor.address);
 
-    const claimableAmount = Number(
-      await hfContract.methods
-        .get_claimable_amount(Number(proposalId), actorAddress)
-        .simulate({ from: actorAddress })
-    );
-    if (claimableAmount <= 0) {
-      return NextResponse.json({ error: "No claimable distribution amount for this account" }, { status: 400 });
+    // V2 path: claim_distribution_private needs a hinted DepositNote the
+    // caller already owns plus the public distribution params (amount +
+    // snapshot total) which the public tail re-verifies against storage.
+    const depositsResult = (await hfContract.methods
+      .get_my_deposit_notes(actorAddress, 0)
+      .simulate({ from: actorAddress })) as {
+      len: bigint;
+      storage: unknown[];
+    };
+    if (depositsResult.len === 0n) {
+      return NextResponse.json(
+        { error: "No private deposit note for this account; deposit before claiming." },
+        { status: 403 }
+      );
+    }
+    const hintedDepositNote = depositsResult.storage[0];
+
+    const status = (await hfContract.methods
+      .get_distribution_status(Number(proposalId))
+      .simulate({ from: actorAddress })) as {
+      open: boolean;
+      amount: bigint;
+      total_deposits_snapshot: bigint;
+      claimed_total: bigint;
+    };
+    if (!status.open) {
+      return NextResponse.json({ error: "Distribution not open for this proposal" }, { status: 400 });
+    }
+    if (status.total_deposits_snapshot === 0n) {
+      return NextResponse.json({ error: "Distribution snapshot is zero" }, { status: 400 });
+    }
+    const distributionAmount = BigInt(status.amount);
+    const snapshotTotal = BigInt(status.total_deposits_snapshot);
+
+    const fundTokenAddr = process.env.NEXT_PUBLIC_FUND_TOKEN_ADDRESS ?? "";
+    if (!fundTokenAddr) {
+      return NextResponse.json({ error: "NEXT_PUBLIC_FUND_TOKEN_ADDRESS not set" }, { status: 500 });
     }
 
     const receipt = await hfContract.methods
-      .claim_distribution(Number(proposalId))
+      .claim_distribution_private(
+        Number(proposalId),
+        hintedDepositNote,
+        AztecAddress.fromString(fundTokenAddr),
+        distributionAmount,
+        snapshotTotal,
+      )
       .send({ from: actorAddress });
 
     return NextResponse.json({
       success: true,
-      claimedAmount: claimableAmount,
+      claimedAmount: Number(distributionAmount),
       txHash: requireAztecTxHash(receipt),
-      message: "Distribution claimed",
+      message: "Distribution claimed privately",
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);

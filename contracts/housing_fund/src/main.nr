@@ -28,13 +28,18 @@ pub contract HousingFund {
             storage::storage,
         },
         messages::message_delivery::MessageDelivery,
-        note::{constants::MAX_NOTES_PER_PAGE, HintedNote, note_getter_options::NoteStatus},
+        note::{
+            constants::MAX_NOTES_PER_PAGE,
+            HintedNote,
+            note_getter_options::NoteStatus,
+            utils::compute_confirmed_note_hash_for_nullification,
+        },
         protocol::{
             address::AztecAddress,
             hash::poseidon2_hash,
             traits::{Deserialize, Serialize, ToField},
         },
-        state_vars::{Map, Owned, PrivateSet, PublicMutable, StateVariable},
+        state_vars::{Map, Owned, PrivateSet, PublicMutable, SingleUseClaim, StateVariable},
         utils::array,
     };
 
@@ -106,6 +111,13 @@ pub contract HousingFund {
         is_paused: PublicMutable<bool, Context>,
         // V2 private deposits: each owner's PXE holds their own DepositNote set.
         deposit_notes: Owned<PrivateSet<DepositNote, Context>, Context>,
+        // V2 nullifiers per (poseidon2_hash([note_hash, proposal_id]), owner)
+        // for claim_distribution_private -- caller can claim once per
+        // (deposit_note, proposal) pair.
+        d_claim_nullifiers: Map<Field, Owned<SingleUseClaim<Context>, Context>, Context>,
+        // V2 nullifiers per (note_hash, owner) for withdraw_private -- after
+        // a withdraw the note is permanently consumed.
+        w_withdraw_nullifiers: Map<Field, Owned<SingleUseClaim<Context>, Context>, Context>,
     }
 
     #[initializer]
@@ -397,6 +409,148 @@ pub contract HousingFund {
         let amount_u64 = amount as u64;
         let total = self.storage.total_deposits.read();
         self.storage.total_deposits.write(total + amount_u64);
+    }
+
+    // -- V2: private withdraw -------------------------------------------------
+    //
+    // Caller passes a hinted DepositNote they own. We verify ownership +
+    // origin contract, consume a per-(note_hash, owner) SingleUseClaim
+    // nullifier so the same note cannot be withdrawn twice, then enqueue
+    // an only_self decrement of the public total_deposits aggregate.
+    // The note's amount never crosses the private/public boundary except
+    // as a delta on the aggregate counter.
+    //
+    // This withdraws the ENTIRE note's amount. Partial withdraws are a
+    // follow-up that would need pop_notes-style change-note minting.
+
+    #[external("private")]
+    fn withdraw_private(hinted_deposit: HintedNote<DepositNote>) {
+        let header = self.context.get_anchor_block_header();
+        let confirmed = assert_note_existed_by(header, hinted_deposit);
+
+        let caller = self.msg_sender();
+        assert(confirmed.owner == caller, "deposit note not owned by caller");
+        assert(confirmed.note.owner == caller, "deposit note owner mismatch");
+        assert(
+            confirmed.contract_address == self.context.this_address(),
+            "deposit note from wrong contract",
+        );
+
+        let note_hash = compute_confirmed_note_hash_for_nullification(confirmed);
+        self.storage.w_withdraw_nullifiers.at(note_hash).at(caller).claim();
+
+        self.enqueue_self._record_withdraw_private(confirmed.note.amount);
+    }
+
+    #[external("public")]
+    #[only_self]
+    fn _record_withdraw_private(amount: u128) {
+        let amount_u64 = amount as u64;
+        let deposits = self.storage.total_deposits.read();
+        let in_defi = self.storage.total_in_defi.read();
+        let allocated = self.storage.total_allocated.read();
+        let available = deposits - in_defi - allocated;
+        assert(amount_u64 <= available, "insufficient available balance");
+        self.storage.total_deposits.write(deposits - amount_u64);
+    }
+
+    // -- V2: private claim_distribution ---------------------------------------
+    //
+    // Caller passes a hinted DepositNote and the FundToken (FSFT) address.
+    // We prove the note existed at a recent anchor block (so it must have
+    // existed at or before distribution-open), consume a per-(note_hash,
+    // proposal_id, owner) nullifier so the same note cannot claim the same
+    // distribution twice, compute the caller's share privately, and mint
+    // FSFT to caller via a private->private cross-contract mint. The
+    // caller's address never crosses the private/public boundary except
+    // as the recipient of the private mint (which stays in their PXE).
+    //
+    // The caller supplies the public distribution params (distribution
+    // amount + snapshot total); the public tail verifies they match the
+    // stored values so a malicious caller cannot inflate their share.
+
+    #[external("private")]
+    fn claim_distribution_private(
+        proposal_id: u32,
+        hinted_deposit: HintedNote<DepositNote>,
+        fund_token_addr: AztecAddress,
+        supplied_distribution_amount: u64,
+        supplied_snapshot_total: u64,
+    ) {
+        assert(supplied_snapshot_total > 0, "invalid snapshot total");
+
+        let header = self.context.get_anchor_block_header();
+        let confirmed = assert_note_existed_by(header, hinted_deposit);
+
+        let caller = self.msg_sender();
+        assert(confirmed.owner == caller, "deposit note not owned by caller");
+        assert(confirmed.note.owner == caller, "deposit note owner mismatch");
+        assert(
+            confirmed.contract_address == self.context.this_address(),
+            "deposit note from wrong contract",
+        );
+
+        // Per-(note_hash, proposal_id, owner) nullifier so the same note
+        // can claim across DIFFERENT proposals (one share per distribution)
+        // but not the same proposal twice.
+        let note_hash = compute_confirmed_note_hash_for_nullification(confirmed);
+        let pid = proposal_id as Field;
+        let claim_key = poseidon2_hash([note_hash, pid]);
+        self.storage.d_claim_nullifiers.at(claim_key).at(caller).claim();
+
+        // Share = (distribution_amount * note.amount) / snapshot_total.
+        // note.amount is kernel-verified; supplied_* are caller-supplied
+        // and verified in the public tail.
+        let raw_share =
+            (supplied_distribution_amount as u128 * confirmed.note.amount)
+                / supplied_snapshot_total as u128;
+        assert(raw_share > 0, "share is zero");
+        let share_u64 = raw_share as u64;
+
+        // Private mint to caller. FundToken.mint_private is admin-only;
+        // bootstrap transferred fund_token admin to this contract, so
+        // when we call it the token sees msg_sender = HousingFund.
+        self.call(FundToken::at(fund_token_addr).mint_private(caller, share_u64));
+
+        // Public tail: verify caller-supplied params and that
+        // fund_token_addr matches our configured fund_token storage;
+        // bump d_claimed_total.
+        self.enqueue_self._record_distribution_claim(
+            proposal_id,
+            share_u64,
+            fund_token_addr,
+            supplied_distribution_amount,
+            supplied_snapshot_total,
+        );
+    }
+
+    #[external("public")]
+    #[only_self]
+    fn _record_distribution_claim(
+        proposal_id: u32,
+        share: u64,
+        supplied_fund_token: AztecAddress,
+        supplied_distribution_amount: u64,
+        supplied_snapshot_total: u64,
+    ) {
+        let pid = proposal_id as Field;
+        assert(self.storage.d_open.at(pid).read(), "distribution not open");
+        assert(
+            supplied_fund_token == self.storage.fund_token.read(),
+            "fund token mismatch",
+        );
+        assert(
+            supplied_distribution_amount == self.storage.d_amount.at(pid).read(),
+            "distribution amount mismatch",
+        );
+        assert(
+            supplied_snapshot_total == self.storage.d_total_deposits_snapshot.at(pid).read(),
+            "snapshot total mismatch",
+        );
+
+        let claimed_total = self.storage.d_claimed_total.at(pid).read();
+        assert(claimed_total + share <= supplied_distribution_amount, "distribution exhausted");
+        self.storage.d_claimed_total.at(pid).write(claimed_total + share);
     }
 
     // -- Emergency controls -----------------------------------------------

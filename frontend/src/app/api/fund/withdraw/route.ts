@@ -53,13 +53,43 @@ export async function POST(request: NextRequest) {
       wallet
     );
 
+    const accountAddress = AztecAddress.fromString(account.address);
+
+    // V2 path: withdraw_private consumes a whole DepositNote. Fetch the
+    // caller's first note whose amount matches the requested withdraw.
+    // Partial-withdraw / change-note minting is a follow-up.
+    const depositsResult = (await hfContract.methods
+      .get_my_deposit_notes(accountAddress, 0)
+      .simulate({ from: accountAddress })) as {
+      len: bigint;
+      storage: { note: { amount: bigint } }[];
+    };
+    if (depositsResult.len === 0n) {
+      return NextResponse.json(
+        { error: "No private deposit notes available to withdraw" },
+        { status: 403 }
+      );
+    }
+    const target = depositsResult.storage.find(
+      (h) => h?.note?.amount === BigInt(amount),
+    );
+    if (!target) {
+      return NextResponse.json(
+        {
+          error:
+            "No DepositNote with the exact requested amount. V2 withdraw consumes a whole note; partial withdrawals are not yet implemented.",
+        },
+        { status: 400 }
+      );
+    }
+
     const receipt = await hfContract.methods
-      .withdraw(BigInt(amount))
-      .send({ from: AztecAddress.fromString(account.address) });
+      .withdraw_private(target)
+      .send({ from: accountAddress });
 
     return NextResponse.json({
       success: true,
-      message: `Withdrew €${amount.toLocaleString()} from housing fund`,
+      message: `Privately withdrew €${amount.toLocaleString()} from housing fund`,
       txHash: requireAztecTxHash(receipt),
     });
   } catch (error: unknown) {
