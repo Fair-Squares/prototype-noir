@@ -68,14 +68,38 @@ export async function POST(request: NextRequest) {
     const kycArtifact = loadContractArtifact(KycArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, adminWallet);
 
+    const adminAddress = AztecAddress.fromString(admin.address);
+    const userAddr = AztecAddress.fromString(userAddress);
+
+    // 1. Public registration (legacy path, used by downstream V1 callers).
     const receipt = await kycContract.methods
-      .register_kyc(AztecAddress.fromString(userAddress))
-      .send({ from: AztecAddress.fromString(admin.address) });
+      .register_kyc(userAddr)
+      .send({ from: adminAddress });
+
+    // 2. V2 private credential: deliver a KycCredentialNote to the user's PXE.
+    // Nonce is a current-ms timestamp; verifier records it off-chain at issuance
+    // so it can compute the revocation commitment later via
+    // KYCVerifier.compute_revocation_commitment(owner, nonce).
+    const credentialNonce = BigInt(Date.now());
+    let credentialTxHash: string | undefined;
+    try {
+      const credentialReceipt = await kycContract.methods
+        .issue_credential(userAddr, credentialNonce)
+        .send({ from: adminAddress });
+      credentialTxHash = requireAztecTxHash(credentialReceipt);
+    } catch (credentialError: unknown) {
+      // Do not fail the whole request — public registration already succeeded.
+      // The user can re-issue later; downstream V1 contracts still see them as
+      // verified via the public maps.
+      console.warn("[kyc/register] private credential issuance failed:", credentialError);
+    }
 
     return NextResponse.json({
       success: true,
       message: devMode ? "KYC verified instantly (dev mode). Investor role granted." : "KYC verified on-chain. Investor role granted.",
       txHash: requireAztecTxHash(receipt),
+      credentialTxHash,
+      credentialNonce: credentialNonce.toString(),
       verified: true,
       isInvestor: true,
       roles: ["investor"],

@@ -12,18 +12,20 @@ use aztec::macros::aztec;
 #[aztec]
 pub contract Governance {
     use fund_token::FundToken;
-    use kyc_verifier::KYCVerifier;
+    use kyc_verifier::{KYCVerifier, credential_note::KycCredentialNote};
     use aztec::{
+        history::note::assert_note_existed_by,
         macros::{
-            functions::{external, initializer, view},
+            functions::{external, initializer, only_self, view},
             storage::storage,
         },
+        note::HintedNote,
         protocol::{
             address::AztecAddress,
             hash::poseidon2_hash,
-            traits::ToField,
+            traits::{Deserialize, Serialize, ToField},
         },
-        state_vars::{Map, PublicMutable},
+        state_vars::{Map, Owned, PublicMutable, SingleUseClaim},
     };
 
     // Proposal status constants
@@ -31,6 +33,26 @@ pub contract Governance {
     global STATUS_PASSED: u8 = 1;
     global STATUS_FAILED: u8 = 2;
     global STATUS_EXECUTED: u8 = 3;
+
+    #[derive(Serialize, Deserialize)]
+    pub struct VotingEligibility {
+        pub investor_role: bool,
+        pub has_deposit_ticket: bool,
+        pub has_public_fsft: bool,
+        pub has_private_holder_proof: bool,
+        pub can_vote: bool,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct ProposalView {
+        pub desc_hash: Field,
+        pub amount: u64,
+        pub yes_votes: u32,
+        pub no_votes: u32,
+        pub status: u8,
+        pub created_block: u32,
+        pub deadline_block: u32,
+    }
 
     #[storage]
     struct Storage<Context> {
@@ -59,6 +81,8 @@ pub contract Governance {
         has_voted: Map<Field, PublicMutable<bool, Context>, Context>,
         // Mirrored deposit tickets synced from HousingFund.
         user_deposit_ticket: Map<AztecAddress, PublicMutable<u64, Context>, Context>,
+        // V2: nullifier per (proposal_id, voter) for secret-ballot private voting.
+        vote_claims: Map<Field, Owned<SingleUseClaim<Context>, Context>, Context>,
     }
 
     #[initializer]
@@ -153,6 +177,67 @@ pub contract Governance {
         }
     }
 
+    // -- V2: private cast_vote (secret ballot via SingleUseClaim nullifier) ----
+    //
+    // The caller passes a hinted KycCredentialNote that proves they hold a
+    // valid KYC credential issued by KYCVerifier. We verify ownership privately,
+    // then claim a single-use nullifier scoped to (proposal_id, msg_sender) so
+    // each voter can vote at most once per proposal. Only the aggregate tally
+    // (yes/no counters) is updated publicly; the voter's address and choice
+    // are unlinkable from on-chain state.
+
+    #[external("private")]
+    fn cast_vote_private(
+        proposal_id: u32,
+        vote_yes: bool,
+        hinted_kyc_note: HintedNote<KycCredentialNote>,
+    ) {
+        let header = self.context.get_anchor_block_header();
+        let confirmed = assert_note_existed_by(header, hinted_kyc_note);
+
+        let caller = self.msg_sender();
+        assert(confirmed.owner == caller, "kyc note not owned by caller");
+        assert(confirmed.note.owner == caller, "kyc note owner mismatch");
+
+        // Consume the per-(proposal, voter) single-use nullifier.
+        let pid = proposal_id as Field;
+        self.storage.vote_claims.at(pid).at(caller).claim();
+
+        // Tally publicly. Args are only proposal_id, vote choice, and the
+        // hinted note's contract address (for the KYC verification). The
+        // voter's address never crosses the private/public boundary.
+        self.enqueue_self._tally_vote_private(
+            proposal_id,
+            vote_yes,
+            confirmed.contract_address,
+        );
+    }
+
+    #[external("public")]
+    #[only_self]
+    fn _tally_vote_private(
+        proposal_id: u32,
+        vote_yes: bool,
+        kyc_note_contract: AztecAddress,
+    ) {
+        let kyc_addr = self.storage.kyc_verifier.read();
+        assert(kyc_note_contract == kyc_addr, "kyc note from wrong contract");
+
+        let pid = proposal_id as Field;
+        assert(
+            self.storage.p_status.at(pid).read() == STATUS_ACTIVE,
+            "proposal is not active",
+        );
+
+        if vote_yes {
+            let current = self.storage.p_yes_votes.at(pid).read();
+            self.storage.p_yes_votes.at(pid).write(current + 1);
+        } else {
+            let current = self.storage.p_no_votes.at(pid).read();
+            self.storage.p_no_votes.at(pid).write(current + 1);
+        }
+    }
+
     // -- Finalize a proposal ----------------------------------------------
 
     #[external("public")]
@@ -201,17 +286,17 @@ pub contract Governance {
     }
 
     #[external("utility")]
-    unconstrained fn get_proposal(proposal_id: u32) -> pub (Field, u64, u32, u32, u8, u32, u32) {
+    unconstrained fn get_proposal(proposal_id: u32) -> pub ProposalView {
         let pid = proposal_id as Field;
-        (
-            self.storage.p_desc_hash.at(pid).read(),
-            self.storage.p_amount.at(pid).read(),
-            self.storage.p_yes_votes.at(pid).read(),
-            self.storage.p_no_votes.at(pid).read(),
-            self.storage.p_status.at(pid).read(),
-            self.storage.p_created_block.at(pid).read(),
-            self.storage.p_deadline_block.at(pid).read(),
-        )
+        ProposalView {
+            desc_hash: self.storage.p_desc_hash.at(pid).read(),
+            amount: self.storage.p_amount.at(pid).read(),
+            yes_votes: self.storage.p_yes_votes.at(pid).read(),
+            no_votes: self.storage.p_no_votes.at(pid).read(),
+            status: self.storage.p_status.at(pid).read(),
+            created_block: self.storage.p_created_block.at(pid).read(),
+            deadline_block: self.storage.p_deadline_block.at(pid).read(),
+        }
     }
 
     #[external("utility")]
@@ -242,7 +327,7 @@ pub contract Governance {
 
     #[external("public")]
     #[view]
-    fn get_voting_eligibility(user: AztecAddress) -> pub (bool, bool, bool, bool, bool) {
+    fn get_voting_eligibility(user: AztecAddress) -> pub VotingEligibility {
         let kyc_contract = KYCVerifier::at(self.storage.kyc_verifier.read());
         let fund_token = FundToken::at(self.storage.fund_token.read());
 
@@ -252,13 +337,13 @@ pub contract Governance {
         let has_private_holder_proof = self.view(fund_token.has_private_holder_proof(user));
         let can_vote = investor_role & (has_deposit_ticket | has_public_fsft | has_private_holder_proof);
 
-        (
+        VotingEligibility {
             investor_role,
             has_deposit_ticket,
             has_public_fsft,
             has_private_holder_proof,
             can_vote,
-        )
+        }
     }
 
     #[external("utility")]

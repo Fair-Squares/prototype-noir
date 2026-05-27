@@ -38,8 +38,6 @@ export interface FundStats {
   tokenPriceBps?: number;
   navEur?: number;
   navPerFsftEur?: number;
-  valuationProofMode?: "public-accounting" | "recursive-verified-path-configured";
-  valuationRecursiveVkConfigured?: boolean;
   parkedAllocationBps?: number;
   parkedMinBps?: number;
   parkedMaxBps?: number;

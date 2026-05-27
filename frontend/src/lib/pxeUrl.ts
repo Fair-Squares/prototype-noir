@@ -1,9 +1,23 @@
 import { existsSync } from "node:fs";
 
-const DEFAULT_PXE_URL = "http://localhost:8080";
+const DEFAULT_LOCAL_PXE_URL = "http://localhost:8080";
+const DEFAULT_TESTNET_PXE_URL = "https://rpc.testnet.aztec-labs.com";
+
+/**
+ * Resolve which network we're targeting. `AZTEC_NETWORK=testnet` selects the
+ * public Aztec testnet; anything else (default) keeps local-network behaviour.
+ */
+export function getAztecNetwork(): "local-network" | "testnet" {
+  const value = (process.env.AZTEC_NETWORK ?? process.env.NEXT_PUBLIC_AZTEC_NETWORK ?? "")
+    .trim()
+    .toLowerCase();
+  return value === "testnet" ? "testnet" : "local-network";
+}
 
 function getConfiguredPxeUrl(): string {
-  return process.env.AZTEC_PXE_URL ?? process.env.NEXT_PUBLIC_AZTEC_PXE_URL ?? DEFAULT_PXE_URL;
+  const explicit = process.env.AZTEC_PXE_URL ?? process.env.NEXT_PUBLIC_AZTEC_PXE_URL;
+  if (explicit) return explicit;
+  return getAztecNetwork() === "testnet" ? DEFAULT_TESTNET_PXE_URL : DEFAULT_LOCAL_PXE_URL;
 }
 
 function isDockerRuntime(): boolean {

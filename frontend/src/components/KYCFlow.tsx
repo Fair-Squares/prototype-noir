@@ -110,7 +110,7 @@ export default function KYCFlow({ userAddress, isVerified, isInvestor, onVerifie
 
   if (isVerified) {
     return (
-      <div className="rounded-2xl border border-fs-teal/20 bg-fs-mint/60 p-6 text-center">
+      <div className="rounded-md border border-fs-teal/20 bg-fs-mint/60 p-6 text-center">
         <h2 className="text-lg font-semibold text-fs-teal-dark">You are verified</h2>
         <p className="mt-1 text-sm text-fs-teal-dark/80">Status: {isInvestor ? "Investor" : "Verified"}</p>
         <Link
@@ -124,7 +124,7 @@ export default function KYCFlow({ userAddress, isVerified, isInvestor, onVerifie
   }
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+    <div className="surface p-5 space-y-4">
       <div>
         <h2 className="text-lg font-semibold text-text-1">Verify once, then invest</h2>
         <p className="text-sm text-text-2">This takes just a few steps.</p>

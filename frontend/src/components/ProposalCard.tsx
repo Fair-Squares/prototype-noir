@@ -58,7 +58,7 @@ export default function ProposalCard({
   }
 
   return (
-    <article className="rounded-2xl border border-border bg-card p-5">
+    <article className="surface p-5">
       <div className="flex items-start justify-between gap-2">
         <h2 className="text-xl font-semibold text-text-1">{proposal.title || `Proposal #${proposal.id}`}</h2>
         <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass(proposal.status)}`}>

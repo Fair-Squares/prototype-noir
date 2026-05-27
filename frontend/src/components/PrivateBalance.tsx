@@ -53,7 +53,7 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
 
   return (
     <div className="space-y-4">
-      <section className="rounded-2xl border border-border bg-card overflow-hidden">
+      <section className="surface overflow-hidden">
         <div className="grid lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-border">
           <div className="p-6">
             <div className="flex items-center justify-between mb-3">
@@ -87,7 +87,7 @@ export default function PrivateBalance({ portfolio, isLoading }: PrivateBalanceP
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border bg-card p-4 md:p-5">
+      <section className="surface p-4 md:p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-text-1">Fund snapshot</h3>
           <span className="text-[11px] text-text-3">Private portfolio overview</span>

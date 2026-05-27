@@ -18,10 +18,6 @@ GOVERNANCE_MIN_QUORUM_VOTES="${GOVERNANCE_MIN_QUORUM_VOTES:-2}"
 DEX_PRICE_BAND_BPS="${DEX_PRICE_BAND_BPS:-200}"
 DEX_MAX_TTL_BLOCKS="${DEX_MAX_TTL_BLOCKS:-120}"
 PROTOCOL_REWARDS_CLAIM_MIN="${PROTOCOL_REWARDS_CLAIM_MIN:-1}"
-FUND_TOKEN_PRIVATE_HOLDER_VK_HASH="${FUND_TOKEN_PRIVATE_HOLDER_VK_HASH:-0}"
-HOUSING_FUND_VALUATION_VK_HASH="${HOUSING_FUND_VALUATION_VK_HASH:-0}"
-PROTOCOL_REWARDS_WEIGHTS_VK_HASH="${PROTOCOL_REWARDS_WEIGHTS_VK_HASH:-0}"
-REQUIRE_RECURSIVE_PROOFS="${REQUIRE_RECURSIVE_PROOFS:-false}"
 BOOTSTRAP_RETRY_ATTEMPTS="${BOOTSTRAP_RETRY_ATTEMPTS:-8}"
 BOOTSTRAP_RETRY_DELAY_SECONDS="${BOOTSTRAP_RETRY_DELAY_SECONDS:-6}"
 WALLET_MIN_FEE_PADDING="${WALLET_MIN_FEE_PADDING:-30}"
@@ -363,30 +359,6 @@ wire_contracts() {
 
   # Transfer FSFT admin to HousingFund so claim_distribution can mint
   # permissionlessly via contract logic.
-  if [ "${FUND_TOKEN_PRIVATE_HOLDER_VK_HASH}" != "0" ]; then
-    wallet_send_with_retries required "FundToken.set_private_holder_vk_hash" \
-      $AZTEC_WALLET_BIN send set_private_holder_vk_hash \
-      --from accounts:test0 \
-      --contract-address "${TOKEN_ADDR}" \
-      --args "${FUND_TOKEN_PRIVATE_HOLDER_VK_HASH}"
-  fi
-
-  if [ "${HOUSING_FUND_VALUATION_VK_HASH}" != "0" ]; then
-    wallet_send_with_retries required "HousingFund.set_valuation_vk_hash" \
-      $AZTEC_WALLET_BIN send set_valuation_vk_hash \
-      --from accounts:test0 \
-      --contract-address "${FUND_ADDR}" \
-      --args "${HOUSING_FUND_VALUATION_VK_HASH}"
-  fi
-
-  if [ "${PROTOCOL_REWARDS_WEIGHTS_VK_HASH}" != "0" ]; then
-    wallet_send_with_retries required "ProtocolRewards.set_rewards_weights_vk_hash" \
-      $AZTEC_WALLET_BIN send set_rewards_weights_vk_hash \
-      --from accounts:test0 \
-      --contract-address "${REWARDS_ADDR}" \
-      --args "${PROTOCOL_REWARDS_WEIGHTS_VK_HASH}"
-  fi
-
   log "Transferring FSFT admin to housing fund..."
   wallet_send_with_retries required "FundToken.set_admin(housing_fund)" \
     $AZTEC_WALLET_BIN send set_admin \
@@ -424,6 +396,32 @@ wire_contracts() {
       --from accounts:test0 \
       --contract-address "${KYC_ADDR}" \
       --args "${TEST2_ADDR}"
+  fi
+
+  # -- V2: issue private KYC credential notes (delivered to each user's PXE) ----
+  # Verifier-only call. Nonce is deterministic per test account so revocation
+  # tooling can recompute commitments via KYCVerifier.compute_revocation_commitment.
+  log "Issuing private KYC credentials..."
+  wallet_send_with_retries required "KYCVerifier.issue_credential(test0)" \
+    $AZTEC_WALLET_BIN send issue_credential \
+    --from accounts:test0 \
+    --contract-address "${KYC_ADDR}" \
+    --args "${ADMIN_ADDR}" 1
+
+  if [ -n "${TEST1_ADDR:-}" ]; then
+    wallet_send_with_retries required "KYCVerifier.issue_credential(test1)" \
+      $AZTEC_WALLET_BIN send issue_credential \
+      --from accounts:test0 \
+      --contract-address "${KYC_ADDR}" \
+      --args "${TEST1_ADDR}" 2
+  fi
+
+  if [ -n "${TEST2_ADDR:-}" ]; then
+    wallet_send_with_retries required "KYCVerifier.issue_credential(test2)" \
+      $AZTEC_WALLET_BIN send issue_credential \
+      --from accounts:test0 \
+      --contract-address "${KYC_ADDR}" \
+      --args "${TEST2_ADDR}" 3
   fi
 
   # -- Mint EUR stablecoin to all test accounts (public balances) ---------------
@@ -522,10 +520,6 @@ GOVERNANCE_MIN_QUORUM_VOTES=${GOVERNANCE_MIN_QUORUM_VOTES}
 DEX_PRICE_BAND_BPS=${DEX_PRICE_BAND_BPS}
 DEX_MAX_TTL_BLOCKS=${DEX_MAX_TTL_BLOCKS}
 PROTOCOL_REWARDS_CLAIM_MIN=${PROTOCOL_REWARDS_CLAIM_MIN}
-FUND_TOKEN_PRIVATE_HOLDER_VK_HASH=${FUND_TOKEN_PRIVATE_HOLDER_VK_HASH}
-HOUSING_FUND_VALUATION_VK_HASH=${HOUSING_FUND_VALUATION_VK_HASH}
-PROTOCOL_REWARDS_WEIGHTS_VK_HASH=${PROTOCOL_REWARDS_WEIGHTS_VK_HASH}
-REQUIRE_RECURSIVE_PROOFS=${REQUIRE_RECURSIVE_PROOFS}
 
 # Contract addresses
 NEXT_PUBLIC_KYC_VERIFIER_ADDRESS=${kyc_addr}

@@ -99,7 +99,6 @@ export async function GET(request: NextRequest) {
     let rewardsClaimable = 0;
     let investorRole = false;
     let hasPrivateHolderProof = false;
-    let privateHolderVkConfigured = false;
 
     const KycJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
     const kycArtifact = loadContractArtifact(KycJson as Parameters<typeof loadContractArtifact>[0]);
@@ -135,18 +134,6 @@ export async function GET(request: NextRequest) {
     hasPrivateHolderProof = Boolean(
       await ftContract.methods.has_private_holder_proof(ownerAddr).simulate({ from: selectedAddr })
     );
-    const privateHolderVkHash = await ftContract.methods
-      .get_private_holder_vk_hash()
-      .simulate({ from: selectedAddr });
-    privateHolderVkConfigured = (() => {
-      if (typeof privateHolderVkHash === "bigint") return privateHolderVkHash !== 0n;
-      if (typeof privateHolderVkHash === "number") return privateHolderVkHash !== 0;
-      if (typeof privateHolderVkHash === "string") return privateHolderVkHash !== "0";
-      if (privateHolderVkHash && typeof privateHolderVkHash === "object" && "toString" in privateHolderVkHash) {
-        return (privateHolderVkHash as { toString: () => string }).toString() !== "0";
-      }
-      return false;
-    })();
 
     const HfJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
     const hfArtifact = loadContractArtifact(HfJson as Parameters<typeof loadContractArtifact>[0]);
@@ -217,11 +204,7 @@ export async function GET(request: NextRequest) {
     const hasDepositTicket = depositTicket > 0;
     const hasFsftExposure = publicFsftBalance > 0 || hasPrivateHolderProof;
     const canVote = investorRole && (hasDepositTicket || hasFsftExposure);
-    const privateFsftProofMode = hasPrivateHolderProof
-      ? privateHolderVkConfigured
-        ? "recursive-verified"
-        : "aztec-private-proven"
-      : "none";
+    const privateFsftProofMode = hasPrivateHolderProof ? "aztec-private-proven" : "none";
     const governanceReason = !investorRole
       ? "Investor role required. Complete KYC first."
       : canVote
@@ -258,7 +241,6 @@ export async function GET(request: NextRequest) {
         hasFsftExposure,
         hasFsftVotingAttestation: hasPrivateHolderProof,
         privateFsftProofMode,
-        recursiveVkConfigured: privateHolderVkConfigured,
         canVote,
         reason: governanceReason,
       },

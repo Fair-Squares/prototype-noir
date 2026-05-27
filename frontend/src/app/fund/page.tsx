@@ -60,7 +60,7 @@ export default function FundPage() {
       <MetricRow items={metrics} />
 
       <section className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-2xl border border-border bg-card p-5">
+        <div className="surface p-5">
           <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Fund Breakdown</p>
           <div className="space-y-2 text-sm text-text-2">
             <p>In DeFi: <strong className="text-text-1">{formatEUR(stats.totalInDefi)}</strong></p>
@@ -68,7 +68,7 @@ export default function FundPage() {
             <p>Yield: <strong className="text-text-1">{formatEUR(stats.totalYield)}</strong></p>
           </div>
         </div>
-        <div className="rounded-2xl border border-border bg-card p-5">
+        <div className="surface p-5">
           <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Health Check</p>
           <div className="space-y-2 text-sm text-text-2">
             <p>Investor count: <strong className="text-text-1">{stats.investorCount.toLocaleString()}</strong></p>

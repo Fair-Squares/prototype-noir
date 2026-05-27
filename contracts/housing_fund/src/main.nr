@@ -1,33 +1,72 @@
+pub mod deposit_note;
+
 use aztec::macros::aztec;
 
 /// HousingFund -- the core Fair Squares protocol contract.
 ///
 /// PUBLIC state: total deposits, total in DeFi, total allocated, pause status
+/// PRIVATE state (V2 additive): per-user DepositNotes in each owner's PXE.
 ///
-/// Flow (prototype -- public-only for compilation safety):
-///   1. User calls deposit(amount)
-///   2. Total deposits increment
-///   3. Admin/governance can deploy to DeFi or reserve for property
-///
-/// Future: private deposit/withdraw with KYC checks and FSFT minting.
+/// Flow:
+///   - Legacy public deposit(amount) -- keeps the per-user deposit_tickets
+///     map; used by V1 frontend paths.
+///   - V2 private deposit_private(amount, hinted_kyc_note) -- proves the
+///     caller holds a valid KycCredentialNote via assert_note_existed_by,
+///     mints a DepositNote to the caller's PXE, enqueues an only_self
+///     _record_deposit_private(amount) so the public total_deposits
+///     counter is updated WITHOUT the user's address crossing the boundary.
 #[aztec]
 pub contract HousingFund {
+    use crate::deposit_note::DepositNote;
     use fund_token::FundToken;
     use governance::Governance;
-    use kyc_verifier::KYCVerifier;
+    use kyc_verifier::{KYCVerifier, credential_note::KycCredentialNote};
     use aztec::{
+        history::note::assert_note_existed_by,
         macros::{
             functions::{external, initializer, only_self, view},
             storage::storage,
         },
+        messages::message_delivery::MessageDelivery,
+        note::HintedNote,
         protocol::{
             address::AztecAddress,
             hash::poseidon2_hash,
-            traits::ToField,
+            traits::{Deserialize, Serialize, ToField},
         },
-        state_vars::{Map, PublicMutable},
+        state_vars::{Map, Owned, PrivateSet, PublicMutable},
     };
-    use bb_proof_verification::{UltraHonkVerificationKey, UltraHonkZKProof, verify_honk_proof};
+
+    #[derive(Serialize, Deserialize)]
+    pub struct FundStatsView {
+        pub total_deposits: u64,
+        pub total_in_defi: u64,
+        pub total_allocated: u64,
+        pub available: u64,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct Valuation {
+        pub last_asset_sale_price: u64,
+        pub last_fsft_minted: u64,
+        pub last_token_price_bps: u64,
+        pub last_valuation_block: u32,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct DistributionStatus {
+        pub open: bool,
+        pub amount: u64,
+        pub total_deposits_snapshot: u64,
+        pub claimed_total: u64,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct ParkedCapitalPolicy {
+        pub target_bps: u32,
+        pub min_bps: u32,
+        pub max_bps: u32,
+    }
 
     #[storage]
     struct Storage<Context> {
@@ -52,8 +91,6 @@ pub contract HousingFund {
         // EUR per FSFT in basis points (10000 = 1.0000 EUR/FSFT)
         last_token_price_bps: PublicMutable<u64, Context>,
         last_valuation_block: PublicMutable<u32, Context>,
-        // Recursive verifier key hash for valuation proof checks.
-        valuation_vk_hash: PublicMutable<Field, Context>,
         // Parked-capital policy for idle EUR allocations (basis points)
         parked_target_bps: PublicMutable<u32, Context>,
         parked_min_bps: PublicMutable<u32, Context>,
@@ -66,6 +103,8 @@ pub contract HousingFund {
         d_has_claimed: Map<Field, PublicMutable<bool, Context>, Context>,
         // Emergency pause
         is_paused: PublicMutable<bool, Context>,
+        // V2 private deposits: each owner's PXE holds their own DepositNote set.
+        deposit_notes: Owned<PrivateSet<DepositNote, Context>, Context>,
     }
 
     #[initializer]
@@ -81,7 +120,6 @@ pub contract HousingFund {
         self.storage.last_fsft_minted.write(0);
         self.storage.last_token_price_bps.write(0);
         self.storage.last_valuation_block.write(0);
-        self.storage.valuation_vk_hash.write(0 as Field);
         self.storage.parked_target_bps.write(3000);
         self.storage.parked_min_bps.write(2000);
         self.storage.parked_max_bps.write(5000);
@@ -207,15 +245,6 @@ pub contract HousingFund {
         self.storage.parked_max_bps.write(max_bps);
     }
 
-    #[external("public")]
-    fn set_valuation_vk_hash(vk_hash: Field) {
-        let caller = self.msg_sender();
-        let admin = self.storage.admin.read();
-        let gov = self.storage.governance.read();
-        assert(admin.eq(caller) | gov.eq(caller), "not authorized");
-        self.storage.valuation_vk_hash.write(vk_hash);
-    }
-
     // -- Governance: Property reservation ---------------------------------
 
     #[external("public")]
@@ -318,59 +347,44 @@ pub contract HousingFund {
         self.storage.last_valuation_block.write(self.context.block_number());
     }
 
-    #[external("private")]
-    fn record_asset_sale_recursive(
-        asset_sale_price: u64,
-        minted_fsft: u64,
-        vk_hash: Field,
-        verification_key: UltraHonkVerificationKey,
-        proof: UltraHonkZKProof,
-        public_inputs: [Field; 3],
-    ) {
-        let caller = self.msg_sender();
-        verify_honk_proof(verification_key, proof, public_inputs, vk_hash);
+    // -- V2: private deposit ---------------------------------------------------
+    // The caller passes a hinted KycCredentialNote that they own; we prove it
+    // existed in KYCVerifier's note set at a recent anchor block. The deposit
+    // itself is stored privately as a DepositNote in the caller's set; only
+    // the aggregate total_deposits counter is updated publicly (via an
+    // only_self enqueue so the caller's address does not cross into public).
 
-        self.enqueue_self._record_asset_sale_recursive_public(
-            caller,
-            asset_sale_price,
-            minted_fsft,
-            vk_hash,
-            public_inputs[0],
-            public_inputs[1],
-            public_inputs[2],
+    #[external("private")]
+    fn deposit_private(amount: u128, hinted_kyc_note: HintedNote<KycCredentialNote>) {
+        assert(amount > 0, "amount must be positive");
+
+        let header = self.context.get_anchor_block_header();
+        let confirmed = assert_note_existed_by(header, hinted_kyc_note);
+
+        let caller = self.msg_sender();
+        assert(confirmed.owner == caller, "kyc note not owned by caller");
+        assert(confirmed.note.owner == caller, "kyc note owner mismatch");
+
+        // Mint a DepositNote into the caller's own PrivateSet.
+        let note = DepositNote::new(caller, amount);
+        self.storage.deposit_notes.at(caller).insert(note).deliver(
+            MessageDelivery.ONCHAIN_CONSTRAINED,
         );
+
+        // Bump the public aggregate + verify the credential came from our
+        // configured KYCVerifier contract. Args are only the amount and the
+        // hinted note's contract address; caller's address never crosses.
+        self.enqueue_self._record_deposit_private(amount, confirmed.contract_address);
     }
 
     #[external("public")]
     #[only_self]
-    fn _record_asset_sale_recursive_public(
-        caller: AztecAddress,
-        asset_sale_price: u64,
-        minted_fsft: u64,
-        vk_hash: Field,
-        proof_caller: Field,
-        proof_asset_sale: Field,
-        proof_minted_fsft: Field,
-    ) {
-        let configured_vk_hash = self.storage.valuation_vk_hash.read();
-        assert(configured_vk_hash != 0 as Field, "valuation vk hash not configured");
-        assert(vk_hash == configured_vk_hash, "valuation vk hash mismatch");
-
-        let gov = self.storage.governance.read();
-        let admin = self.storage.admin.read();
-        assert(gov.eq(caller) | admin.eq(caller), "not authorized");
-        assert(asset_sale_price > 0, "asset sale price must be positive");
-        assert(minted_fsft > 0, "minted fsft must be positive");
-
-        assert(proof_caller == caller.to_field(), "proof caller mismatch");
-        assert(proof_asset_sale == asset_sale_price as Field, "proof asset sale mismatch");
-        assert(proof_minted_fsft == minted_fsft as Field, "proof minted mismatch");
-
-        let token_price_bps = (asset_sale_price * 10000) / minted_fsft;
-        self.storage.last_asset_sale_price.write(asset_sale_price);
-        self.storage.last_fsft_minted.write(minted_fsft);
-        self.storage.last_token_price_bps.write(token_price_bps);
-        self.storage.last_valuation_block.write(self.context.block_number());
+    fn _record_deposit_private(amount: u128, kyc_note_contract: AztecAddress) {
+        let kyc_addr = self.storage.kyc_verifier.read();
+        assert(kyc_note_contract == kyc_addr, "kyc note from wrong contract");
+        let amount_u64 = amount as u64;
+        let total = self.storage.total_deposits.read();
+        self.storage.total_deposits.write(total + amount_u64);
     }
 
     // -- Emergency controls -----------------------------------------------
@@ -410,33 +424,38 @@ pub contract HousingFund {
     }
 
     #[external("utility")]
-    unconstrained fn get_fund_stats() -> pub (u64, u64, u64, u64) {
+    unconstrained fn get_fund_stats() -> pub FundStatsView {
         let total = self.storage.total_deposits.read();
         let in_defi = self.storage.total_in_defi.read();
         let allocated = self.storage.total_allocated.read();
         let available = total - in_defi - allocated;
-        (total, in_defi, allocated, available)
+        FundStatsView {
+            total_deposits: total,
+            total_in_defi: in_defi,
+            total_allocated: allocated,
+            available,
+        }
     }
 
     #[external("utility")]
-    unconstrained fn get_valuation() -> pub (u64, u64, u64, u32) {
-        (
-            self.storage.last_asset_sale_price.read(),
-            self.storage.last_fsft_minted.read(),
-            self.storage.last_token_price_bps.read(),
-            self.storage.last_valuation_block.read(),
-        )
+    unconstrained fn get_valuation() -> pub Valuation {
+        Valuation {
+            last_asset_sale_price: self.storage.last_asset_sale_price.read(),
+            last_fsft_minted: self.storage.last_fsft_minted.read(),
+            last_token_price_bps: self.storage.last_token_price_bps.read(),
+            last_valuation_block: self.storage.last_valuation_block.read(),
+        }
     }
 
     #[external("public")]
     #[view]
-    fn get_valuation_public() -> pub (u64, u64, u64, u32) {
-        (
-            self.storage.last_asset_sale_price.read(),
-            self.storage.last_fsft_minted.read(),
-            self.storage.last_token_price_bps.read(),
-            self.storage.last_valuation_block.read(),
-        )
+    fn get_valuation_public() -> pub Valuation {
+        Valuation {
+            last_asset_sale_price: self.storage.last_asset_sale_price.read(),
+            last_fsft_minted: self.storage.last_fsft_minted.read(),
+            last_token_price_bps: self.storage.last_token_price_bps.read(),
+            last_valuation_block: self.storage.last_valuation_block.read(),
+        }
     }
 
     #[external("utility")]
@@ -467,14 +486,14 @@ pub contract HousingFund {
     }
 
     #[external("utility")]
-    unconstrained fn get_distribution_status(proposal_id: u32) -> pub (bool, u64, u64, u64) {
+    unconstrained fn get_distribution_status(proposal_id: u32) -> pub DistributionStatus {
         let pid = proposal_id as Field;
-        (
-            self.storage.d_open.at(pid).read(),
-            self.storage.d_amount.at(pid).read(),
-            self.storage.d_total_deposits_snapshot.at(pid).read(),
-            self.storage.d_claimed_total.at(pid).read(),
-        )
+        DistributionStatus {
+            open: self.storage.d_open.at(pid).read(),
+            amount: self.storage.d_amount.at(pid).read(),
+            total_deposits_snapshot: self.storage.d_total_deposits_snapshot.at(pid).read(),
+            claimed_total: self.storage.d_claimed_total.at(pid).read(),
+        }
     }
 
     #[external("utility")]
@@ -483,18 +502,12 @@ pub contract HousingFund {
     }
 
     #[external("utility")]
-    unconstrained fn get_parked_capital_policy() -> pub (u32, u32, u32) {
-        (
-            self.storage.parked_target_bps.read(),
-            self.storage.parked_min_bps.read(),
-            self.storage.parked_max_bps.read(),
-        )
-    }
-
-    #[external("public")]
-    #[view]
-    fn get_valuation_vk_hash() -> pub Field {
-        self.storage.valuation_vk_hash.read()
+    unconstrained fn get_parked_capital_policy() -> pub ParkedCapitalPolicy {
+        ParkedCapitalPolicy {
+            target_bps: self.storage.parked_target_bps.read(),
+            min_bps: self.storage.parked_min_bps.read(),
+            max_bps: self.storage.parked_max_bps.read(),
+        }
     }
 
     #[external("utility")]

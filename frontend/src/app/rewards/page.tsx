@@ -94,7 +94,7 @@ export default function RewardsPage() {
 
       <MetricRow items={metrics} />
 
-      <section className="rounded-2xl border border-border bg-card p-5">
+      <section className="surface p-5">
         <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Progress</p>
         <p className="text-sm text-text-2">
           Emitted to date: <strong className="text-text-1">{overview.emittedToDate.toLocaleString()} {overview.token.symbol}</strong>

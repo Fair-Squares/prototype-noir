@@ -54,7 +54,7 @@
 - [x] Fund/portfolio views now surface NAV and NAV per FSFT
 
 ### Verification
-- [x] `aztec compile` passes for all contracts on Aztec 4.2.1
+- [x] `aztec compile` passes for all contracts on Aztec 4.3.0
 - [x] `aztec test` runs for all contracts (0 in-repo Noir tests currently)
 - [x] `npx tsc --noEmit --incremental false` (frontend) passes
 - [x] `npm run build` (frontend) passes
@@ -72,11 +72,11 @@
 - [x] **Governance** — private voting with nullifiers, proposal creation, finalization, public results
 - [x] **FSFTDex** — investor-gated secondary FSFT/EUR orderbook prototype
 - [x] **ProtocolRewards** — epoch rewards allocation/claiming prototype
-- [x] **Nargo.toml** for all 7 contracts with pinned Aztec v4.2.1 dependencies
+- [x] **Nargo.toml** for all 7 contracts with pinned Aztec v4.3.0 dependencies
 
 ### Deployment
 - [x] **deploy.ts** — deploys contracts in dependency order, saves addresses to frontend/.env.local
-- [x] **docker-compose.yml** — Aztec local network (Docker image v4.2.1) + local Anvil L1 (`ETHEREUM_HOSTS`) + healthchecks
+- [x] **docker-compose.yml** — Aztec local network (Docker image v4.3.0) + local Anvil L1 (`ETHEREUM_HOSTS`) + healthchecks
 - [x] **bootstrap-local-network.sh** — waits for PXE, compiles contracts, runs deploy script in Docker profile `aztec`
 
 ### Frontend (Next.js)

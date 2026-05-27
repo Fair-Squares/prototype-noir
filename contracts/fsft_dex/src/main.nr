@@ -1,29 +1,65 @@
+pub mod order_intent_note;
+
 use aztec::macros::aztec;
 
 /// FSFTDex -- investor-only FSFT/EUR orderbook for secondary trading.
 ///
-/// v3 prototype:
-/// - investor-only order placement/matching/cancel
-/// - NAV band checks (default +/-2%)
-/// - taker-match with partial fills
-/// - expiry support
+/// V1 prototype: public per-order map for owner/amount/price + NAV band checks
+/// + partial-fill matching.
 ///
-/// Settlement is private-note based and deterministic:
-/// EUR and FSFT legs are transferred via delegated private spend,
-/// then public orderbook state is finalized through an only_self step.
+/// V2 additive: per-user OrderIntentNotes in the owner's PXE; on-chain map
+/// keys off the commitment so the public orderbook reveals only that some
+/// commitment exists (status OPEN/FILLED/CANCELLED) but not who/how much.
+/// Match + settlement flow over commitments is staged for a follow-up.
 #[aztec]
 pub contract FSFTDex {
+    use crate::order_intent_note::OrderIntentNote;
     use fund_token::FundToken;
     use housing_fund::HousingFund;
-    use kyc_verifier::KYCVerifier;
+    use kyc_verifier::{KYCVerifier, credential_note::KycCredentialNote};
     use aztec::{
+        history::note::assert_note_existed_by,
         macros::{
             functions::{external, initializer, only_self, view},
             storage::storage,
         },
-        protocol::address::AztecAddress,
-        state_vars::{Map, PublicImmutable, PublicMutable},
+        messages::message_delivery::MessageDelivery,
+        note::HintedNote,
+        protocol::{
+            address::AztecAddress,
+            hash::poseidon2_hash,
+            traits::{Deserialize, Serialize, ToField},
+        },
+        state_vars::{Map, Owned, PrivateSet, PublicImmutable, PublicMutable},
     };
+
+    #[derive(Serialize, Deserialize)]
+    pub struct OrderInfo {
+        pub owner: AztecAddress,
+        pub side: u8,
+        pub amount: u64,
+        pub remaining: u64,
+        pub price_bps: u64,
+        pub status: u8,
+        pub expiry_block: u32,
+        pub created_block: u32,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct OrderbookSnapshot {
+        pub ref_price_bps: u64,
+        pub min_price_bps: u64,
+        pub max_price_bps: u64,
+        pub order_count: u32,
+        pub price_band_bps: u32,
+        pub max_ttl_blocks: u32,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct SettlementTokens {
+        pub fsft_token: AztecAddress,
+        pub eur_token: AztecAddress,
+    }
 
     global SIDE_BUY: u8 = 0;
     global SIDE_SELL: u8 = 1;
@@ -56,6 +92,13 @@ pub contract FSFTDex {
         o_status: Map<Field, PublicMutable<u8, Context>, Context>,
         o_expiry_block: Map<Field, PublicMutable<u32, Context>, Context>,
         o_created_block: Map<Field, PublicMutable<u32, Context>, Context>,
+
+        // V2 additive: per-owner private order intents + commitment-keyed
+        // public status map. Owner / amount / price stay in the user's PXE;
+        // only the commitment and its status (OPEN / FILLED / CANCELLED) are
+        // visible on chain.
+        order_intents: Owned<PrivateSet<OrderIntentNote, Context>, Context>,
+        order_status_v2: Map<Field, PublicMutable<u8, Context>, Context>,
     }
 
     #[initializer]
@@ -110,7 +153,7 @@ pub contract FSFTDex {
         assert(ttl_blocks <= self.storage.max_ttl_blocks.read(), "ttl exceeds max");
 
         let fund = HousingFund::at(self.storage.housing_fund.read());
-        let (_, _, token_price_bps, _) = self.view(fund.get_valuation_public());
+        let token_price_bps = self.view(fund.get_valuation_public()).last_token_price_bps;
         let ref_price_bps = if token_price_bps > 0 { token_price_bps } else { 10000 };
         let band = self.storage.price_band_bps.read() as u64;
         let min_price_bps = (ref_price_bps * (10000 - band)) / 10000;
@@ -311,43 +354,97 @@ pub contract FSFTDex {
 
     // -- Views -------------------------------------------------------------
 
+    // -- V2: private order intents --------------------------------------------
+    //
+    // The caller passes a hinted KycCredentialNote proving they are KYC'd.
+    // A private OrderIntentNote is minted into their PXE-side set. The public
+    // map order_status_v2 keys off poseidon2(owner, side, amount, price_bps,
+    // expiry, salt) so the orderbook can be reasoned about publicly without
+    // revealing the per-order owner / amount / price.
+    //
+    // Match + settlement over commitments is staged for a follow-up.
+
+    #[external("private")]
+    fn place_order_private(
+        side: u8,
+        amount: u128,
+        price_bps: u64,
+        expiry_block: u32,
+        salt: Field,
+        hinted_kyc_note: HintedNote<KycCredentialNote>,
+    ) {
+        assert(amount > 0, "amount must be positive");
+        assert((side == SIDE_BUY) | (side == SIDE_SELL), "invalid side");
+
+        let header = self.context.get_anchor_block_header();
+        let confirmed = assert_note_existed_by(header, hinted_kyc_note);
+
+        let caller = self.msg_sender();
+        assert(confirmed.owner == caller, "kyc note not owned by caller");
+
+        let intent = OrderIntentNote::new(caller, side, amount, price_bps, expiry_block, salt);
+        self.storage.order_intents.at(caller).insert(intent).deliver(
+            MessageDelivery.ONCHAIN_CONSTRAINED,
+        );
+
+        // Compute the public commitment without revealing owner identity.
+        let commitment = poseidon2_hash([
+            caller.to_field(),
+            side as Field,
+            amount as Field,
+            price_bps as Field,
+            expiry_block as Field,
+            salt,
+        ]);
+        self.enqueue_self._register_intent_commitment(commitment, confirmed.contract_address);
+    }
+
+    #[external("public")]
+    #[only_self]
+    fn _register_intent_commitment(commitment: Field, kyc_note_contract: AztecAddress) {
+        let kyc_addr = self.storage.kyc_verifier.read();
+        assert(kyc_note_contract == kyc_addr, "kyc note from wrong contract");
+        self.storage.order_status_v2.at(commitment).write(STATUS_OPEN);
+    }
+
     #[external("utility")]
     unconstrained fn get_order_count() -> pub u32 {
         self.storage.order_count.read()
     }
 
     #[external("utility")]
-    unconstrained fn get_order(order_id: u32) -> pub (AztecAddress, u8, u64, u64, u64, u8, u32, u32) {
+    unconstrained fn get_order(order_id: u32) -> pub OrderInfo {
         let oid = order_id as Field;
-        (
-            self.storage.o_owner.at(oid).read(),
-            self.storage.o_side.at(oid).read(),
-            self.storage.o_amount.at(oid).read(),
-            self.storage.o_remaining.at(oid).read(),
-            self.storage.o_price_bps.at(oid).read(),
-            self.storage.o_status.at(oid).read(),
-            self.storage.o_expiry_block.at(oid).read(),
-            self.storage.o_created_block.at(oid).read(),
-        )
+        OrderInfo {
+            owner: self.storage.o_owner.at(oid).read(),
+            side: self.storage.o_side.at(oid).read(),
+            amount: self.storage.o_amount.at(oid).read(),
+            remaining: self.storage.o_remaining.at(oid).read(),
+            price_bps: self.storage.o_price_bps.at(oid).read(),
+            status: self.storage.o_status.at(oid).read(),
+            expiry_block: self.storage.o_expiry_block.at(oid).read(),
+            created_block: self.storage.o_created_block.at(oid).read(),
+        }
     }
 
     #[external("public")]
     #[view]
-    fn get_orderbook_snapshot() -> pub (u64, u64, u64, u32, u32, u32) {
+    fn get_orderbook_snapshot() -> pub OrderbookSnapshot {
         let fund = HousingFund::at(self.storage.housing_fund.read());
-        let (_, _, token_price_bps, _) = self.view(fund.get_valuation_public());
+        let valuation = self.view(fund.get_valuation_public());
+        let token_price_bps = valuation.last_token_price_bps;
         let ref_price_bps = if token_price_bps > 0 { token_price_bps } else { 10000 };
         let band = self.storage.price_band_bps.read() as u64;
         let min_price_bps = (ref_price_bps * (10000 - band)) / 10000;
         let max_price_bps = (ref_price_bps * (10000 + band)) / 10000;
-        (
+        OrderbookSnapshot {
             ref_price_bps,
             min_price_bps,
             max_price_bps,
-            self.storage.order_count.read(),
-            self.storage.price_band_bps.read(),
-            self.storage.max_ttl_blocks.read(),
-        )
+            order_count: self.storage.order_count.read(),
+            price_band_bps: self.storage.price_band_bps.read(),
+            max_ttl_blocks: self.storage.max_ttl_blocks.read(),
+        }
     }
 
     #[external("public")]
@@ -359,10 +456,10 @@ pub contract FSFTDex {
 
     #[external("public")]
     #[view]
-    fn get_settlement_tokens() -> pub (AztecAddress, AztecAddress) {
-        (
-            self.storage.fsft_token.read(),
-            self.storage.eur_token.read(),
-        )
+    fn get_settlement_tokens() -> pub SettlementTokens {
+        SettlementTokens {
+            fsft_token: self.storage.fsft_token.read(),
+            eur_token: self.storage.eur_token.read(),
+        }
     }
 }

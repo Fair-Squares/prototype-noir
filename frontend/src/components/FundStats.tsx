@@ -15,8 +15,6 @@ interface FundStatsProps {
   tokenPriceBps?: number;
   navEur?: number;
   navPerFsftEur?: number;
-  valuationProofMode?: "public-accounting" | "recursive-verified-path-configured";
-  valuationRecursiveVkConfigured?: boolean;
   fundTokenSymbol?: string;
   eurTokenSymbol?: string;
 }
@@ -57,7 +55,7 @@ export default function FundStats(props: FundStatsProps) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl bg-card border border-border overflow-hidden">
+      <div className="surface overflow-hidden">
         <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-y lg:divide-y-0 divide-border">
           {STAT_CARDS.map((card) => (
             <div key={card.key} className="p-5 bg-card">
@@ -71,7 +69,7 @@ export default function FundStats(props: FundStatsProps) {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-border bg-card p-4">
+      <div className="surface p-4">
         <div className="grid md:grid-cols-[1fr_180px] gap-4 items-end">
           <div className="space-y-2">
             <div className="flex items-center gap-6 text-[14px] text-text-3 flex-wrap">
@@ -108,13 +106,6 @@ export default function FundStats(props: FundStatsProps) {
 
       <div className="rounded-xl border border-border bg-bg px-4 py-3 text-xs text-text-2">
         When no purchase is active, the fund may place part of unused EUR in lending to avoid idle cash.
-      </div>
-
-      <div className="rounded-xl border border-border bg-bg px-4 py-3 text-xs text-text-2">
-        Verification status:{" "}
-        {props.valuationRecursiveVkConfigured
-          ? "advanced proof checks are enabled for valuation updates."
-          : "valuation is based on transparent on-chain totals."}
       </div>
 
       {props.isPaused && (

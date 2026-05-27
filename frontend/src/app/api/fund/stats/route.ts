@@ -30,15 +30,6 @@ function expectTuple(value: unknown, expectedLength: number, methodName: string)
   return value;
 }
 
-function isNonZeroField(value: unknown): boolean {
-  if (typeof value === "bigint") return value !== 0n;
-  if (typeof value === "number") return value !== 0;
-  if (typeof value === "string") return value !== "0";
-  if (value && typeof value === "object" && "toString" in value) {
-    return (value as { toString: () => string }).toString() !== "0";
-  }
-  return false;
-}
 
 function buildV3FeatureMeta() {
   return {
@@ -62,8 +53,6 @@ export async function GET() {
   if (!isLiveModeEnabled() && isVercelSimulationMode()) {
     return NextResponse.json({
       ...simGetFundStats(),
-      valuationProofMode: "public-accounting",
-      valuationRecursiveVkConfigured: false,
       ...buildV3FeatureMeta(),
     });
   }
@@ -112,8 +101,6 @@ export async function GET() {
       .get_parked_capital_policy()
       .simulate({ from });
     const parkedPolicy = expectTuple(parkedPolicyRaw, 3, "HousingFund.get_parked_capital_policy");
-    const valuationVkHashRaw = await hfContract.methods.get_valuation_vk_hash().simulate({ from });
-    const valuationRecursiveVkConfigured = isNonZeroField(valuationVkHashRaw);
 
     const investorCount = toNumberStrict(
       await hfContract.methods.get_investor_count().simulate({ from }),
@@ -151,8 +138,6 @@ export async function GET() {
       lastFsftMinted: toNumberStrict(valuation[1], "HousingFund.get_valuation.last_fsft_minted"),
       tokenPriceBps: toNumberStrict(valuation[2], "HousingFund.get_valuation.last_token_price_bps"),
       valuationBlock: toNumberStrict(valuation[3], "HousingFund.get_valuation.last_valuation_block"),
-      valuationProofMode: valuationRecursiveVkConfigured ? "recursive-verified-path-configured" : "public-accounting",
-      valuationRecursiveVkConfigured,
       navEur,
       navPerFsftEur,
       parkedAllocationBps: toNumberStrict(parkedPolicy[0], "HousingFund.get_parked_capital_policy.target_bps"),

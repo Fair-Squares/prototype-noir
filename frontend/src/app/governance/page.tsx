@@ -216,7 +216,7 @@ export default function GovernancePage() {
       </ActionPanel>
 
       {showCreate && (
-        <section className="rounded-2xl border border-border bg-card p-5">
+        <section className="surface p-5">
           <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Create Proposal</p>
           <form onSubmit={handleCreate} className="space-y-3">
             <label className="block">
@@ -261,7 +261,7 @@ export default function GovernancePage() {
         </section>
       )}
 
-      <section className="rounded-2xl border border-border bg-card p-5">
+      <section className="surface p-5">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="text-lg font-semibold">Proposals</h2>
           <Link href="/explain" className="text-xs font-semibold text-fs-teal hover:underline">

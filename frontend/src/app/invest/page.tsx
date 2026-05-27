@@ -128,7 +128,7 @@ export default function InvestPage() {
         />
       </ActionPanel>
 
-      <section className="rounded-2xl border border-border bg-card p-5">
+      <section className="surface p-5">
         <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Quick Checklist</p>
         <ol className="space-y-2 text-sm text-text-2">
           <li>1. Connect your account.</li>

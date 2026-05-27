@@ -3,26 +3,11 @@ import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simAttestFsftForRewards } from "@/lib/simulationStore";
 import { requireAztecTxHash } from "@/lib/txHash";
 
-function isNonZeroField(value: unknown): boolean {
-  if (typeof value === "bigint") return value !== 0n;
-  if (typeof value === "number") return value !== 0;
-  if (typeof value === "string") return value !== "0";
-  if (value && typeof value === "object" && "toString" in value) {
-    return (value as { toString: () => string }).toString() !== "0";
-  }
-  return false;
-}
-
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { address, accountIndex = 0, recursiveProof } = body as {
+  const { address, accountIndex = 0 } = body as {
     address?: string;
     accountIndex?: number;
-    recursiveProof?: {
-      verificationKey?: unknown;
-      proof?: unknown;
-      publicInputs?: unknown;
-    };
   };
 
   if (!address) {
@@ -66,48 +51,15 @@ export async function POST(request: NextRequest) {
 
     const actorAddress = AztecAddress.fromString(actor.address);
     let holderProofGenerated = false;
-    let holderProofMode: "none" | "aztec-private-proven" | "recursive-verified" = "none";
-    let recursiveVkConfigured = false;
+    let holderProofMode: "none" | "aztec-private-proven" = "none";
 
     if (fundTokenAddr) {
       try {
         const FtJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
         const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);
         const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, actor.wallet);
-        const privateHolderVkHash = await ftContract.methods
-          .get_private_holder_vk_hash()
-          .simulate({ from: actorAddress });
-        recursiveVkConfigured = isNonZeroField(privateHolderVkHash);
-        const requireRecursive = process.env.REQUIRE_RECURSIVE_PROOFS === "true";
-        const hasRecursivePayload =
-          Boolean(recursiveProof?.verificationKey) &&
-          Boolean(recursiveProof?.proof) &&
-          Array.isArray(recursiveProof?.publicInputs);
-
-        if (requireRecursive && recursiveVkConfigured && !hasRecursivePayload) {
-          return NextResponse.json(
-            {
-              error:
-                "Recursive proof bundle required. Send recursiveProof={verificationKey, proof, publicInputs} in this request.",
-            },
-            { status: 400 }
-          );
-        }
-
-        if (hasRecursivePayload) {
-          await ftContract.methods
-            .attest_private_holder_recursive(
-              privateHolderVkHash,
-              recursiveProof!.verificationKey,
-              recursiveProof!.proof,
-              recursiveProof!.publicInputs
-            )
-            .send({ from: actorAddress });
-          holderProofMode = "recursive-verified";
-        } else {
-          await ftContract.methods.attest_private_holder().send({ from: actorAddress });
-          holderProofMode = "aztec-private-proven";
-        }
+        await ftContract.methods.attest_private_holder().send({ from: actorAddress });
+        holderProofMode = "aztec-private-proven";
         holderProofGenerated = true;
       } catch {
         // Public FSFT holders can still attest rewards eligibility without this private-holder proof.
@@ -122,16 +74,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: holderProofGenerated
-        ? holderProofMode === "recursive-verified"
-          ? "Private FSFT proof generated with recursive verification and rewards eligibility recorded"
-          : recursiveVkConfigured
-          ? "Private FSFT proof generated (recursive verifier configured) and rewards eligibility recorded"
-          : "Private FSFT proof generated and rewards eligibility recorded"
+        ? "Private FSFT proof generated and rewards eligibility recorded"
         : "FSFT rewards eligibility recorded",
       txHash: requireAztecTxHash(receipt),
       holderProofGenerated,
       fsftProofMode: holderProofMode,
-      recursiveVkConfigured,
       source: "live",
     });
   } catch (error: unknown) {

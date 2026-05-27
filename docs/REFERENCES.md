@@ -10,7 +10,7 @@ Links to essential documentation for developing Fair Squares.
 - **Counter Contract Tutorial:** https://docs.aztec.network/developers/docs/tutorials/contract_tutorials/counter_contract
 - **Token Contract Tutorial:** https://docs.aztec.network/developers/docs/tutorials/contract_tutorials/token_contract
 - **Foundational Topics:** https://docs.aztec.network/developers/docs/foundational-topics
-- **Aztec.nr Framework:** https://github.com/AztecProtocol/aztec-nr (tag: v4.2.1)
+- **Aztec.nr Framework:** https://github.com/AztecProtocol/aztec-nr (tag: v4.3.0)
 - **Aztec Monorepo:** https://github.com/AztecProtocol/aztec-packages
 
 ### Aztec v4 Key Patterns
@@ -18,8 +18,8 @@ Links to essential documentation for developing Fair Squares.
 ```toml
 # Nargo.toml dependencies (use aztec-nr repo, NOT aztec-packages)
 [dependencies]
-aztec = { git = "https://github.com/AztecProtocol/aztec-nr/", tag = "v4.2.1", directory = "aztec" }
-balance_set = { git = "https://github.com/AztecProtocol/aztec-nr/", tag = "v4.2.1", directory = "balance-set" }
+aztec = { git = "https://github.com/AztecProtocol/aztec-nr/", tag = "v4.3.0", directory = "aztec" }
+balance_set = { git = "https://github.com/AztecProtocol/aztec-nr/", tag = "v4.3.0", directory = "balance-set" }
 ```
 
 ```rust
@@ -52,8 +52,8 @@ unconstrained fn view_fn() -> pub Type { ... }
 
 ```bash
 # Install Aztec toolchain
-aztec-up install 4.2.1
-aztec-up use 4.2.1
+aztec-up install 4.3.0
+aztec-up use 4.3.0
 
 # Start local network
 aztec start --local-network
@@ -129,11 +129,11 @@ onResult(({ verified, result }) => {
 
 | Component | Version |
 |-----------|---------|
-| Aztec Docker | `aztecprotocol/aztec:4.2.1` |
-| Aztec CLI | `4.2.1` |
-| aztec-nr (Nargo) | `v4.2.1` |
-| @aztec/aztec.js | `4.2.1` |
-| @aztec/accounts | `4.2.1` |
-| @aztec/wallets | `4.2.1` |
+| Aztec Docker | `aztecprotocol/aztec:4.3.0` |
+| Aztec CLI | `4.3.0` |
+| aztec-nr (Nargo) | `v4.3.0` |
+| @aztec/aztec.js | `4.3.0` |
+| @aztec/accounts | `4.3.0` |
+| @aztec/wallets | `4.3.0` |
 | zkPassport SDK | Latest (`@zkpassport/sdk`) |
 | Noir compiler | Bundled with Aztec CLI |

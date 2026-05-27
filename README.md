@@ -610,7 +610,7 @@ artifact function names don't have `__aztec_nr_internals__` prefix:
 # Inside bootstrap container:
 docker run --rm --entrypoint bash \
   -v ./contracts:/workspace/contracts \
-  aztecprotocol/aztec:4.2.1 \
+  aztecprotocol/aztec:4.3.0 \
   -c "cat /workspace/contracts/housing_fund/target/housing_fund.json | \
       python3 -c \"import json,sys; a=json.load(sys.stdin); \
       print([f['name'] for f in a['functions'][:10]])\""
@@ -636,7 +636,7 @@ docker compose --profile aztec up
 The package wasn't installed:
 
 ```bash
-cd frontend && npm install @aztec/wallets@4.2.1
+cd frontend && npm install @aztec/wallets@4.3.0
 # Then rebuild:
 docker compose --profile aztec build frontend
 ```
@@ -754,13 +754,13 @@ fair-squares-noir/
 
 | Component | Technology | Version |
 |-----------|-----------|---------|
-| Smart contracts | Noir / Aztec.nr | `aztec-packages@v4.2.1` |
-| ZK runtime | Aztec Network (devnet) | `aztecprotocol/aztec:4.2.1` |
+| Smart contracts | Noir / Aztec.nr | `aztec-packages@v4.3.0` |
+| ZK runtime | Aztec Network (devnet) | `aztecprotocol/aztec:4.3.0` |
 | L1 chain | Anvil (Foundry) | bundled in Aztec image |
 | Frontend | Next.js 15, React 19 | — |
 | Styling | Tailwind CSS 4 | — |
 | Language | TypeScript | — |
-| Wallet (browser) | `@aztec/wallets/embedded` (WASM) | `4.2.1` |
+| Wallet (browser) | `@aztec/wallets/embedded` (WASM) | `4.3.0` |
 | Identity | zkPassport SDK (dev mode) | `@zkpassport/sdk` |
 
 ---

@@ -5,7 +5,7 @@ authors = ["Fair Squares"]
 compiler_version = ">=0.18.0"
 
 [dependencies]
-aztec = { git = "https://github.com/AztecProtocol/aztec-nr/", tag = "v4.2.1", directory = "aztec" }
+aztec = { git = "https://github.com/AztecProtocol/aztec-nr/", tag = "v4.3.0", directory = "aztec" }
 fund_token = { path = "../fund_token" }
 kyc_verifier = { path = "../kyc_verifier" }
 housing_fund = { path = "../housing_fund" }

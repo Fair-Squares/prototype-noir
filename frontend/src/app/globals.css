@@ -8,21 +8,23 @@
   --color-fs-teal-light: #6DD4C8;
   --color-fs-teal-dark: #3A9A8F;
   --color-fs-anthracite: #243034;
+  --color-fs-anthracite-soft: #3A4A4F;
   --color-fs-mint: #DDEFE8;
 
-  --color-bg: #F7F8F4;
+  --color-bg: #F5F6F2;
   --color-card: #FFFFFF;
   --color-card-hover: #F3FBF8;
   --color-border: rgba(36, 48, 52, 0.13);
+  --color-border-strong: rgba(36, 48, 52, 0.22);
 
   --color-text-1: #243034;
   --color-text-2: #4A585C;
   --color-text-3: #687578;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; }
 
 body {
   background: var(--color-bg);
@@ -30,15 +32,17 @@ body {
   font-family: "Plus Jakarta Sans", -apple-system, "Segoe UI", sans-serif;
   font-size: 1rem;
   line-height: 1.6;
-  font-feature-settings: "kern", "liga";
+  font-feature-settings: "kern", "liga", "ss01";
   -webkit-font-smoothing: antialiased;
 }
 
 button, a, input, [role="button"] {
-  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, opacity 160ms ease;
+  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, opacity 160ms ease, transform 160ms ease;
 }
 
-/* Four-step type scale. Use these classes; do not invent new sizes. */
+/* ───────────────────────────────────────────────────────────────────────────
+   Type scale — four sizes total. Use these. Do not invent new ones.
+   ─────────────────────────────────────────────────────────────────────── */
 
 h1, .text-display {
   font-size: 1.75rem;
@@ -65,12 +69,171 @@ h3 {
   color: var(--color-text-3);
 }
 
-/* Page background — soft cream with two faint color washes. */
+/* Engineering label — uppercase, tracked, used for route slugs, build stamps,
+   and TOC numbers. Reuses the Plus Jakarta Sans family at smaller size +
+   letterspacing to feel like a stencil tag without loading a new font.       */
+.text-tag {
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.text-num {
+  font-size: 0.6875rem;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Page background — blueprint grid, very faint
+   ─────────────────────────────────────────────────────────────────────── */
 
 .fs-site-bg {
-  background:
-    radial-gradient(circle at 10% 8%, rgba(76, 189, 176, 0.10), transparent 28rem),
-    radial-gradient(circle at 88% 12%, rgba(196, 22, 103, 0.06), transparent 28rem),
-    var(--color-bg);
+  background-color: var(--color-bg);
+  background-image:
+    linear-gradient(rgba(36, 48, 52, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(36, 48, 52, 0.045) 1px, transparent 1px),
+    radial-gradient(circle at 100% 0%, rgba(76, 189, 176, 0.08), transparent 38%),
+    radial-gradient(circle at 0% 100%, rgba(196, 22, 103, 0.05), transparent 42%);
+  background-size: 32px 32px, 32px 32px, 100% 100%, 100% 100%;
+  background-position: 0 0, 0 0, 0 0, 0 0;
   min-height: 100vh;
 }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Surface — used by every card. Sharper than rounded-2xl, hairline border,
+   subtle shadow to lift off the blueprint grid.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.surface {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 0 rgba(36, 48, 52, 0.02);
+}
+
+.surface-muted {
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Prototype stamp — dashed-border chip for the persistent "this is a working
+   draft" signal. Used in the sidebar header.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.proto-stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px dashed var(--color-fs-magenta);
+  background: rgba(196, 22, 103, 0.06);
+  color: var(--color-fs-magenta);
+  padding: 0.15rem 0.5rem 0.2rem;
+  border-radius: 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.proto-stamp::before {
+  content: "";
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: var(--color-fs-magenta);
+  box-shadow: 0 0 0 3px rgba(196, 22, 103, 0.18);
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Sidebar nav row — desktop. Active state uses a left rule + colored num.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.nav-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 2.25rem 1fr;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem 0.5rem 1rem;
+  border-radius: 0.375rem;
+  color: var(--color-text-2);
+}
+
+.nav-row:hover {
+  background: rgba(76, 189, 176, 0.08);
+  color: var(--color-text-1);
+}
+
+.nav-row[data-active="true"] {
+  background: rgba(76, 189, 176, 0.12);
+  color: var(--color-text-1);
+}
+
+.nav-row[data-active="true"]::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 0.4rem;
+  bottom: 0.4rem;
+  width: 2px;
+  background: var(--color-fs-magenta);
+  border-radius: 2px;
+}
+
+.nav-row .num {
+  color: var(--color-text-3);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.nav-row[data-active="true"] .num {
+  color: var(--color-fs-magenta);
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Mobile route strip — horizontal scrollable chip list
+   ─────────────────────────────────────────────────────────────────────── */
+
+.route-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  padding: 0.35rem 0.7rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--color-text-2);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.route-chip[data-active="true"] {
+  background: var(--color-fs-anthracite);
+  color: #fff;
+  border-color: var(--color-fs-anthracite);
+}
+
+.route-chip .num {
+  font-size: 0.625rem;
+  letter-spacing: 0.05em;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Hide scrollbar on horizontal route strip (mobile)
+   ─────────────────────────────────────────────────────────────────────── */
+
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
