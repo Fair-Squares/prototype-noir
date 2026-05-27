@@ -78,12 +78,15 @@ async function main() {
 
     log("✅ Testnet PXE reachable and aztec.js v4.3.0 compatible.");
     log("");
-    log("Next milestones (Stage 6.5):");
-    log(" 1. Run scripts/testnet-deploy-account.ts to bring up a Schnorr account");
-    log("    via SponsoredFPC (SPONSORED_FPC_ADDRESS env required).");
-    log(" 2. Port scripts/bootstrap-local-network.sh deploy logic to TS,");
-    log("    reusing the persisted testnet account.");
-    log(" 3. Emit frontend/.env.testnet with the deployed contract addresses.");
+    log("Stage 6.5 pipeline:");
+    log(" 1. AZTEC_NETWORK=testnet npx tsx scripts/testnet-deploy-account.ts");
+    log("    -- creates / reuses a Schnorr account paid for by SponsoredFPC.");
+    log(" 2. AZTEC_NETWORK=testnet npx tsx scripts/testnet-deploy-contracts.ts");
+    log("    -- deploys all 9 contract instances, wires set_contracts /");
+    log("       set_admin links, issues a private KYC credential to the");
+    log("       deployer, emits frontend/.env.testnet.");
+    log(" 3. Start the frontend with AZTEC_LIVE=true AZTEC_NETWORK=testnet,");
+    log("    using the freshly written frontend/.env.testnet.");
   } catch (err) {
     log(`❌ PXE call failed: ${err instanceof Error ? err.message : String(err)}`);
     log("");

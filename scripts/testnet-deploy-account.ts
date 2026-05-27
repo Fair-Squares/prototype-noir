@@ -6,17 +6,16 @@
  * tuple to scripts/.testnet/account.json so the same account is reused
  * across runs (testnet quotas are per-address).
  *
+ * The SponsoredFPC address is derived deterministically from the
+ * upstream artifact + salt=0 (canonical deployment on every Aztec
+ * network); no env lookup needed.
+ *
  * Usage:
- *   AZTEC_NETWORK=testnet \
- *   SPONSORED_FPC_ADDRESS=0x... \
- *     npx tsx scripts/testnet-deploy-account.ts
+ *   AZTEC_NETWORK=testnet npx tsx scripts/testnet-deploy-account.ts
  *
  * Env:
  *   AZTEC_NETWORK         must be "testnet" (guardrail; refuses otherwise).
  *   AZTEC_NODE_URL        PXE endpoint. Defaults to https://rpc.testnet.aztec-labs.com.
- *   SPONSORED_FPC_ADDRESS Address of the SponsoredFPC instance on this
- *                         network. Required. Look it up on
- *                         https://docs.aztec.network/networks (testnet entry).
  *   FS_TESTNET_ACCOUNT    Optional path override for the persisted account file.
  *                         Defaults to scripts/.testnet/account.json.
  *
@@ -34,10 +33,11 @@
 import * as fs from "fs";
 import * as path from "path";
 import { createAztecNodeClient } from "@aztec/aztec.js/node";
-import { AztecAddress } from "@aztec/aztec.js/addresses";
+import { getContractInstanceFromInstantiationParams } from "@aztec/aztec.js/contracts";
 import { SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee";
 import { Fr } from "@aztec/foundation/curves/bn254";
 import { EmbeddedWallet } from "@aztec/wallets/embedded";
+import { SponsoredFPCContract } from "@aztec/noir-contracts.js/SponsoredFPC";
 
 const DEFAULT_TESTNET_PXE = "https://rpc.testnet.aztec-labs.com";
 
@@ -77,14 +77,6 @@ async function main() {
     );
   }
 
-  const sponsoredFpcAddr = process.env.SPONSORED_FPC_ADDRESS ?? "";
-  if (!sponsoredFpcAddr) {
-    throw new Error(
-      "SPONSORED_FPC_ADDRESS not set. Look up the testnet SponsoredFPC address on https://docs.aztec.network/networks and re-run.",
-    );
-  }
-  const sponsoredFpc = AztecAddress.fromString(sponsoredFpcAddr);
-
   const pxeUrl =
     process.env.AZTEC_NODE_URL ??
     process.env.PXE_URL ??
@@ -92,10 +84,23 @@ async function main() {
 
   log(`network = ${network}`);
   log(`pxe     = ${pxeUrl}`);
-  log(`fpc     = ${sponsoredFpc.toString()}`);
 
   const node = createAztecNodeClient(pxeUrl);
   const wallet = await EmbeddedWallet.create(node);
+
+  // Derive the canonical SponsoredFPC address (salt=0). The contract
+  // is pre-deployed by network ops on every Aztec network (testnet,
+  // devnet, local-network) at this deterministic address.
+  const sponsoredFpcInstance = await getContractInstanceFromInstantiationParams(
+    SponsoredFPCContract.artifact,
+    { salt: new Fr(0) },
+  );
+  await wallet.registerContract(
+    sponsoredFpcInstance,
+    SponsoredFPCContract.artifact,
+  );
+  const sponsoredFpc = sponsoredFpcInstance.address;
+  log(`fpc     = ${sponsoredFpc.toString()} (derived from artifact, salt=0)`);
 
   const existing = loadAccount();
   const secret = existing

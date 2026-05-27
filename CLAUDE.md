@@ -78,7 +78,29 @@ AZTEC_NETWORK=testnet npx tsx smoke-testnet.ts
 
 Expected output: chain_id 11155111 (Sepolia), a current block number, and a non-zero version field. Anything else means PXE quota / version mismatch.
 
-Full testnet deploy (SponsoredFPC + Schnorr account + all 7 contracts via TS SDK) is Stage 6.5; see scripts/smoke-testnet.ts comments for the next-milestones checklist.
+### Full testnet deploy (Stage 6.5)
+
+```bash
+# 1. Create / fund a Schnorr account via SponsoredFPC (~1-3 min).
+AZTEC_NETWORK=testnet npx tsx scripts/testnet-deploy-account.ts
+#    Output: scripts/.testnet/account.json (gitignored; contains secret).
+
+# 2. Deploy all 9 contract instances + wire set_contracts / set_admin links
+#    + issue a private KYC credential to the deployer (~5-15 min).
+AZTEC_NETWORK=testnet npx tsx scripts/testnet-deploy-contracts.ts
+#    Output: scripts/.testnet/contracts.json
+#            frontend/.env.testnet  (NEXT_PUBLIC_* keys ready to use)
+
+# 3. Run the frontend pointing at testnet (Vercel or local).
+#    cp frontend/.env.testnet frontend/.env.local
+#    cd frontend && AZTEC_NETWORK=testnet AZTEC_LIVE=true npm run dev
+```
+
+The SponsoredFPC address is derived deterministically from the upstream
+artifact at salt=0 -- no env lookup needed. `testnet-deploy-contracts.ts`
+refuses to overwrite an existing `scripts/.testnet/contracts.json`
+unless `FS_TESTNET_FORCE_REDEPLOY=1` is set, so reruns don't
+accidentally orphan previous deploys.
 
 ## Running `aztec test` (Task 22)
 

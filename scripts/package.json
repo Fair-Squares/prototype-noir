@@ -6,13 +6,14 @@
     "deploy": "npx tsx deploy.ts"
   },
   "dependencies": {
-    "@aztec/aztec.js": "4.3.0",
     "@aztec/accounts": "4.3.0",
+    "@aztec/aztec.js": "4.3.0",
+    "@aztec/noir-contracts.js": "^4.3.0",
     "@aztec/wallets": "4.3.0"
   },
   "devDependencies": {
+    "@types/node": "^20.11.0",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.3",
-    "@types/node": "^20.11.0"
+    "typescript": "^5.3.3"
   }
 }
