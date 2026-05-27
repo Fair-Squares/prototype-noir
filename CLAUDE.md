@@ -2,40 +2,48 @@
 
 This file is the canonical agent guide for this repo. [AGENTS.md](./AGENTS.md) is a stub that points here so Codex (and any other tool that reads `AGENTS.md`) gets the same instructions.
 
-## Critical: Use `aztec` CLI, not `nargo` directly
+## Critical: Use the host `aztec` CLI, not `nargo` directly
 
-This is an Aztec smart contract project. Always use the `aztec` CLI wrapper instead of calling `nargo` directly:
+This is an Aztec smart contract project. The host CLI is installed at
+`$HOME/.aztec/current/bin` (added to PATH via `.bashrc`). Always use the
+`aztec` wrapper instead of calling `nargo` directly:
 
-- **Compile (full artifact, for deploy)**: `aztec compile` (NOT `nargo compile`). Using `nargo compile` alone produces ACIR without the AVM transpilation + VK generation that the wallet/deploy flow needs.
-- **Test**: `aztec test` (NOT `nargo test`).
-- **Other nargo commands** like `nargo fmt` and `nargo doc` are fine to use directly.
+- **Compile (full artifact, for deploy)**: `aztec compile` (NOT `nargo
+  compile`). Using `nargo compile` alone produces ACIR without the AVM
+  transpilation + VK generation that the wallet/deploy flow needs.
+- **Test**: `aztec test`. Host CLI bundles its own TXE and handles the
+  oracle resolver automatically -- no docker needed.
+- **Wallet ops**: `aztec-wallet` (also on PATH).
+- **Other nargo commands** like `aztec-nargo fmt` and `aztec-nargo doc`
+  are fine to use directly.
 
-### Fast iteration loop on the host
-
-For fast typecheck / syntax loops during contract development, the `nargo` binary pinned to the same v4.3.0 build the Docker image ships is installed at `~/.local/bin/nargo`. Use it directly:
-
-```bash
-cd contracts/<name> && nargo compile
-```
-
-Warm-cache compile is **~3 s per contract** (vs ~10 s per contract through Docker). The host nargo writes its dep cache to `~/nargo/`. For full artifact generation (transpile + VK) you still need `aztec compile` via Docker.
-
-For all-7-contracts compile via Docker, use the persistent nargo cache volume:
+Install / reinstall:
 
 ```bash
-docker run --rm --entrypoint /bin/bash \
-  -v aztec-nargo-cache:/root/nargo \
-  -v "$PWD:/workspace" \
-  aztecprotocol/aztec:4.3.0 -lc '
-    export PATH=/usr/src/noir/noir-repo/target/release:$PATH
-    for c in kyc_verifier fund_token defi_vault governance housing_fund fsft_dex protocol_rewards; do
-      cd /workspace/contracts/$c && rm -rf target
-      node --no-warnings /usr/src/yarn-project/aztec/dest/bin/index.js compile \
-        2>&1 | grep -E "^error:|Compilation complete"
-    done'
+VERSION=4.3.0 bash -i <(curl -sL https://install.aztec.network/4.3.0)
 ```
 
-The named `aztec-nargo-cache` volume persists git deps across runs (~1 min full-suite vs 12 min cold).
+Confirms with `aztec --version` -> `4.3.0`, `aztec-nargo --version` ->
+`1.0.0-beta.21`, `aztec-wallet --version` -> `4.3.0`.
+
+### Iteration timings (host CLI, warm cache)
+
+- Single-contract `aztec compile`: ~20-25 s (full transpile + VK gen).
+- Single-contract `aztec test` (compile cached): ~5-6 s.
+- Full 5-contract V2 test suite via `./scripts/aztec-test.sh`: ~30 s.
+
+There is a separate `~/.local/bin/nargo` left over from an earlier
+extraction -- still works, but prefer `aztec-nargo` (or just `aztec
+compile` / `aztec test`) so the artifact paths match what TXE and the
+deploy tooling expect.
+
+### Docker fallback
+
+The previous docker-based test script is kept opt-in for environments
+where the host CLI cannot be installed (e.g. CI without internet
+access during the install step). Run with `FS_AZTEC_TEST_DOCKER=1
+./scripts/aztec-test.sh`. The named `aztec-nargo-cache` docker volume
+still persists git deps across runs for that path.
 
 ## Error Handling
 
@@ -77,13 +85,23 @@ Full testnet deploy (SponsoredFPC + Schnorr account + all 7 contracts via TS SDK
 Use the wrapper:
 
 ```bash
-./scripts/aztec-test.sh                 # all 5 V2 contracts
+./scripts/aztec-test.sh                 # all 5 V2 contracts (~30 s warm)
 ./scripts/aztec-test.sh kyc_verifier    # single contract
 ```
 
-The script spawns TXE inside the pinned `aztecprotocol/aztec:4.3.0` image, runs `aztec compile` (full transpile + VK — needed by TXE; `nargo compile` alone is not enough), then `nargo test --oracle-resolver http://127.0.0.1:8080`. End-to-end run on a warm cache is ~1 min for the full suite.
+By default the script uses the host `aztec` CLI: each contract runs
+`aztec test`, which handles compile + TXE + oracle resolver
+internally. No docker required.
 
-If you ever see `Contract's public bytecode has not been transpiled` from TXE, the script's `aztec compile` step is the missing piece — running `nargo compile` alone produces an artifact that lacks AVM transpilation.
+Opt-in legacy docker path: `FS_AZTEC_TEST_DOCKER=1 ./scripts/aztec-test.sh`
+spawns TXE inside the pinned `aztecprotocol/aztec:4.3.0` image and runs
+`nargo test --oracle-resolver http://127.0.0.1:8080`. Slower (~65 s for
+the full suite) but useful for parity checks with CI.
+
+If you see `Contract's public bytecode has not been transpiled` from
+TXE, the offending artifact was produced by raw `nargo compile` instead
+of `aztec compile`. Re-run `aztec compile` (or just `aztec test`, which
+recompiles when sources change).
 
 ## Adding more `aztec test` coverage
 
