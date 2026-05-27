@@ -30,8 +30,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const rewardsAddr = process.env.NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS ?? "";
+    const protocolTokenAddr = process.env.NEXT_PUBLIC_PROTOCOL_TOKEN_ADDRESS ?? "";
     if (!rewardsAddr) {
       return NextResponse.json({ error: "NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS not set" }, { status: 500 });
+    }
+    if (!protocolTokenAddr) {
+      return NextResponse.json({ error: "NEXT_PUBLIC_PROTOCOL_TOKEN_ADDRESS not set" }, { status: 500 });
     }
 
     const { getTestAccount } = await import("@/lib/serverWallet");
@@ -52,18 +56,32 @@ export async function POST(request: NextRequest) {
     const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
     const rewardsContract = await Contract.at(AztecAddress.fromString(rewardsAddr), rewardsArtifact, actor.wallet);
 
-    const claimableBefore = Number(
-      await rewardsContract.methods.get_claimable(userAddress).simulate({ from: actorAddress })
-    );
-    if (claimableBefore < 1) {
-      return NextResponse.json({ error: "Claimable amount is below minimum (1 token)" }, { status: 400 });
+    // V2: fetch caller's RewardClaimNote hint from PXE. claim_reward_private
+    // consumes the note via SingleUseClaim and privately mints the
+    // protocol token to caller — recipient identity never crosses the
+    // private/public boundary.
+    const rewardNotesResult = (await rewardsContract.methods
+      .get_my_reward_notes(userAddress, 0)
+      .simulate({ from: actorAddress })) as { len: bigint; storage: unknown[] };
+    if (rewardNotesResult.len === 0n) {
+      return NextResponse.json(
+        {
+          error:
+            "No private RewardClaimNote found. The admin must allocate_reward_private(epoch, you, amount) before you can claim.",
+        },
+        { status: 400 }
+      );
     }
+    const hintedRewardNote = rewardNotesResult.storage[0] as { amount?: bigint };
+    const claimedAmount = Number(hintedRewardNote.amount ?? 0n);
 
-    const receipt = await rewardsContract.methods.claim().send({ from: actorAddress });
+    const receipt = await rewardsContract.methods
+      .claim_reward_private(hintedRewardNote, AztecAddress.fromString(protocolTokenAddr))
+      .send({ from: actorAddress });
     return NextResponse.json({
       success: true,
-      claimed: claimableBefore,
-      message: "Protocol rewards claimed",
+      claimed: claimedAmount,
+      message: "Protocol rewards privately claimed",
       txHash: requireAztecTxHash(receipt),
       source: "live",
     });

@@ -86,14 +86,16 @@ export async function GET(request: NextRequest) {
     const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet);
 
     const userAddress = AztecAddress.fromString(address);
-    const verified = await kycContract.methods
-      .is_verified(AztecAddress.fromString(address))
-      .simulate({ from });
-    const isInvestor = await kycContract.methods
-      .is_investor(userAddress)
-      .simulate({ from });
+    // V2: a user is "verified investor" iff they own a non-revoked KYC
+    // credential note. Replaces the V1 public is_verified / is_investor
+    // map lookups, which leaked address→KYC linkage in public state.
+    const credentialsResult = (await kycContract.methods
+      .get_my_kyc_credentials(userAddress, 0)
+      .simulate({ from })) as { len: bigint };
+    const isInvestor = credentialsResult.len > 0n;
+    const verified = isInvestor;
     const roles: string[] = [];
-    if (Boolean(isInvestor)) roles.push("investor");
+    if (isInvestor) roles.push("investor");
 
     let hasDepositTicket = false;
     let hasFsftExposure = false;
@@ -106,12 +108,17 @@ export async function GET(request: NextRequest) {
       const ftArtifact = loadContractArtifact(FtArtifactJson as Parameters<typeof loadContractArtifact>[0]);
       const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, wallet);
       const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, wallet);
-      const [depositTicket, fsftPublicBalance, hasPrivateHolderProof] = await Promise.all([
-        hfContract.methods.get_user_deposit_ticket(userAddress).simulate({ from }),
+      // V2: deposit-ticket existence = "does the user own ≥1 DepositNote?"
+      const depositNotesResult = (await hfContract.methods
+        .get_my_deposit_notes(userAddress, 0)
+        .simulate({ from })) as { len: bigint };
+      hasDepositTicket = depositNotesResult.len > 0n;
+      // FSFT exposure still uses fund_token's public/private balance checks
+      // (FundToken V2 is staged for a later cleanup pass).
+      const [fsftPublicBalance, hasPrivateHolderProof] = await Promise.all([
         ftContract.methods.public_balance_of(userAddress).simulate({ from }),
         ftContract.methods.has_private_holder_proof(userAddress).simulate({ from }),
       ]);
-      hasDepositTicket = Number(depositTicket) > 0;
       hasFsftExposure = Number(fsftPublicBalance) > 0 || Boolean(hasPrivateHolderProof);
     }
     const canVote = Boolean(isInvestor) && (hasDepositTicket || hasFsftExposure);

@@ -55,18 +55,33 @@ export async function POST(request: NextRequest) {
     const accountAddress = AztecAddress.fromString(account.address);
     const userAddress = AztecAddress.fromString(address);
 
-    // Mirror contract guard with a clear API-level error for UX.
     const KycArtifactJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
     const kycArtifact = loadContractArtifact(KycArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet);
-    const isInvestor = await kycContract.methods
-      .is_investor(userAddress)
-      .simulate({ from: accountAddress });
-    if (!Boolean(isInvestor)) {
-      return NextResponse.json({ error: "Investor role required before deposit" }, { status: 403 });
-    }
 
-    // Step 1: Transfer EUR from caller to housing fund (if EUR token deployed)
+    // V2 path: fetch caller's KycCredentialNote hint from their PXE so we
+    // can pass it into HousingFund.deposit_private. Fails clearly if the
+    // user has not been issued a private credential yet.
+    const credentialsResult = (await kycContract.methods
+      .get_my_kyc_credentials(userAddress, 0)
+      .simulate({ from: accountAddress })) as {
+      len: bigint;
+      storage: unknown[];
+    };
+    if (credentialsResult.len === 0n) {
+      return NextResponse.json(
+        {
+          error:
+            "No private KYC credential found for this account. Re-run KYC verification (bootstrap issue_credential, or POST /api/kyc/register) before depositing.",
+        },
+        { status: 403 }
+      );
+    }
+    const hintedKycNote = credentialsResult.storage[0];
+
+    // Step 1: Transfer EUR from caller to housing fund (still public for
+    // the EUR stablecoin shadow; V2 privacy gain is on the housing-fund
+    // side where the deposit position becomes a private DepositNote).
     if (eurTokenAddr) {
       const EurArtifactJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
       const eurArtifact = loadContractArtifact(EurArtifactJson as Parameters<typeof loadContractArtifact>[0]);
@@ -76,7 +91,8 @@ export async function POST(request: NextRequest) {
         .send({ from: accountAddress });
     }
 
-    // Step 2: Increment housing fund deposit counter
+    // Step 2: V2 private deposit. The DepositNote lands in caller's PXE;
+    // only the aggregate total_deposits counter is updated publicly.
     const HfArtifactJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
     const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const hfContract = await Contract.at(
@@ -86,12 +102,12 @@ export async function POST(request: NextRequest) {
     );
 
     const receipt = await hfContract.methods
-      .deposit(BigInt(amount))
+      .deposit_private(BigInt(amount), hintedKycNote)
       .send({ from: accountAddress });
 
     return NextResponse.json({
       success: true,
-      message: `Deposited €${amount.toLocaleString()} to housing fund`,
+      message: `Privately deposited €${amount.toLocaleString()} to housing fund`,
       txHash: requireAztecTxHash(receipt),
     });
   } catch (error: unknown) {

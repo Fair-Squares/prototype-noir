@@ -103,7 +103,11 @@ export async function GET(request: NextRequest) {
     const KycJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
     const kycArtifact = loadContractArtifact(KycJson as Parameters<typeof loadContractArtifact>[0]);
     const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet);
-    investorRole = Boolean(await kycContract.methods.is_investor(ownerAddr).simulate({ from: selectedAddr }));
+    // V2: investor status = "does this account own a non-revoked KYC credential note?"
+    const credentialsResult = (await kycContract.methods
+      .get_my_kyc_credentials(ownerAddr, 0)
+      .simulate({ from: selectedAddr })) as { len: bigint };
+    investorRole = credentialsResult.len > 0n;
 
     const EurJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
     const eurArtifact = loadContractArtifact(EurJson as Parameters<typeof loadContractArtifact>[0]);
@@ -146,10 +150,22 @@ export async function GET(request: NextRequest) {
     totalAllocated = toNumberStrict(stats[2], "HousingFund.get_fund_stats.total_allocated");
     available = toNumberStrict(stats[3], "HousingFund.get_fund_stats.available");
 
-    depositTicket = toNumberStrict(
-      await hfContract.methods.get_user_deposit_ticket(ownerAddr).simulate({ from: selectedAddr }),
-      "HousingFund.get_user_deposit_ticket"
-    );
+    // V2: sum the caller's private DepositNotes from their PXE-side set.
+    // This replaces the V1 public deposit_tickets[ownerAddr] map read so
+    // the per-user deposit position is no longer exposed in public state.
+    const depositNotesResult = (await hfContract.methods
+      .get_my_deposit_notes(ownerAddr, 0)
+      .simulate({ from: selectedAddr })) as {
+      len: bigint;
+      storage: Array<{ amount?: bigint } | undefined>;
+    };
+    const depositNotesLen = Number(depositNotesResult.len);
+    let depositSum = 0;
+    for (let i = 0; i < depositNotesLen; i++) {
+      const noteAmount = depositNotesResult.storage[i]?.amount ?? 0n;
+      depositSum += Number(noteAmount);
+    }
+    depositTicket = depositSum;
 
     const valuationRaw = await hfContract.methods.get_valuation().simulate({ from: selectedAddr });
     const valuation = expectTuple(valuationRaw, 4, "HousingFund.get_valuation");

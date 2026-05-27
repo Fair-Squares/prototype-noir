@@ -45,11 +45,27 @@ export async function POST(request: NextRequest) {
     }
 
     const actorAddress = AztecAddress.fromString(actor.address);
+    const userAddress = AztecAddress.fromString(address);
     const DexArtifactJson = await loadGeneratedArtifactJson("fsft_dex-FSFTDex.json");
     const dexArtifact = loadContractArtifact(DexArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const dexContract = await Contract.at(AztecAddress.fromString(dexAddr), dexArtifact, actor.wallet);
 
-    const receipt = await dexContract.methods.cancel_order(Number(orderId)).send({ from: actorAddress });
+    // V2: fetch caller's OrderIntentNote hint. For now we cancel the first
+    // open intent; multi-intent identification (matching the `orderId`
+    // legacy arg) is a follow-up. `orderId` is accepted but ignored on
+    // the V2 path until per-intent identification is wired up.
+    void orderId;
+    const intentsResult = (await dexContract.methods
+      .get_my_order_intents(userAddress, 0)
+      .simulate({ from: actorAddress })) as { len: bigint; storage: unknown[] };
+    if (intentsResult.len === 0n) {
+      return NextResponse.json({ error: "No open private order intent to cancel." }, { status: 400 });
+    }
+    const hintedIntent = intentsResult.storage[0];
+
+    const receipt = await dexContract.methods
+      .cancel_order_private(hintedIntent)
+      .send({ from: actorAddress });
     return NextResponse.json({
       success: true,
       message: "Order cancelled",

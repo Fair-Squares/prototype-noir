@@ -53,70 +53,52 @@ export async function POST(request: NextRequest) {
 
     const KycArtifactJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
     const HfArtifactJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
-    const FtArtifactJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
     const kycArtifact = loadContractArtifact(KycArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
-    const ftArtifact = loadContractArtifact(FtArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet);
     const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, wallet);
-    const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, wallet);
-    const isInvestor = await kycContract.methods
-      .is_investor(userAddress)
-      .simulate({ from: accountAddress });
-    if (!Boolean(isInvestor)) {
-      return NextResponse.json(
-        {
-          error: "Investor role required to vote",
-          eligibility: {
-            investorRole: false,
-            hasDepositTicket: false,
-            hasFsftExposure: false,
-            hasPrivateHolderProof: false,
-            privateFsftProofMode: "none",
-            recursiveVkConfigured: false,
-            reason: "Complete KYC investor verification first.",
-          },
-        },
-        { status: 403 }
-      );
-    }
 
-    const [depositTicket, fsftBalance, hasPrivateHolderProof] = await Promise.all([
-      hfContract.methods.get_user_deposit_ticket(userAddress).simulate({ from: accountAddress }),
-      ftContract.methods.public_balance_of(userAddress).simulate({ from: accountAddress }),
-      ftContract.methods.has_private_holder_proof(userAddress).simulate({ from: accountAddress }),
-    ]);
-    const hasDepositTicket = Number(depositTicket) > 0;
-    const hasFsftExposure = Number(fsftBalance) > 0 || Boolean(hasPrivateHolderProof);
-    const privateFsftProofMode = Boolean(hasPrivateHolderProof) ? "aztec-private-proven" : "none";
-    if (!hasDepositTicket && !hasFsftExposure) {
+    // V2: fetch hinted KYC credential + hinted deposit note from caller's
+    // PXE. cast_vote_private requires both: KYC for eligibility, deposit
+    // note for fund-exposure proof. Both are kernel-verified inside the
+    // private circuit; voter identity is not revealed publicly.
+    const credentialsResult = (await kycContract.methods
+      .get_my_kyc_credentials(userAddress, 0)
+      .simulate({ from: accountAddress })) as { len: bigint; storage: unknown[] };
+    if (credentialsResult.len === 0n) {
+      return NextResponse.json(
+        { error: "No private KYC credential found. Re-run /api/kyc/register first." },
+        { status: 403 }
+      );
+    }
+    const hintedKycNote = credentialsResult.storage[0];
+
+    const depositsResult = (await hfContract.methods
+      .get_my_deposit_notes(userAddress, 0)
+      .simulate({ from: accountAddress })) as { len: bigint; storage: unknown[] };
+    if (depositsResult.len === 0n) {
       return NextResponse.json(
         {
-          error: "Voting requires an active position: a deposit or FSFT holdings.",
-          eligibility: {
-            investorRole: true,
-            hasDepositTicket,
-            hasFsftExposure,
-            hasPrivateHolderProof: Boolean(hasPrivateHolderProof),
-            privateFsftProofMode,
-            reason: "No deposit or FSFT position found for this account.",
-          },
+          error: "No private DepositNote found. /api/fund/deposit at least once before voting (fund exposure required).",
         },
         { status: 403 }
       );
     }
+    const hintedDepositNote = depositsResult.storage[0];
 
     const GovArtifactJson = await loadGeneratedArtifactJson("governance-Governance.json");
     const govArtifact = loadContractArtifact(GovArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const govContract = await Contract.at(AztecAddress.fromString(govAddr), govArtifact, wallet);
 
+    void fundTokenAddr; // legacy V1 readonly probe removed; kept env-var required so missing config errors stay actionable
+
     const receipt = await govContract.methods
-      .cast_vote(Number(proposalId), Boolean(voteYes))
+      .cast_vote_private(Number(proposalId), Boolean(voteYes), hintedKycNote, hintedDepositNote)
       .send({ from: accountAddress });
 
     return NextResponse.json({
       success: true,
-      message: `Vote on proposal #${proposalId} recorded`,
+      message: `Private vote on proposal #${proposalId} recorded`,
       txHash: requireAztecTxHash(receipt),
     });
   } catch (error: unknown) {

@@ -70,16 +70,18 @@ export async function GET(request: NextRequest) {
       actor.wallet
     );
 
-    const [isInvestor, depositTicket, fsftBalance, hasPrivateHolderProof] = await Promise.all([
-      kycContract.methods.is_investor(userAddress).simulate({ from: actorAddress }),
-      hfContract.methods.get_user_deposit_ticket(userAddress).simulate({ from: actorAddress }),
+    // V2 eligibility: count private notes instead of reading public maps.
+    const [credentialsResult, depositNotesResult, fsftBalance, hasPrivateHolderProof] = await Promise.all([
+      kycContract.methods.get_my_kyc_credentials(userAddress, 0).simulate({ from: actorAddress }) as Promise<{ len: bigint }>,
+      hfContract.methods.get_my_deposit_notes(userAddress, 0).simulate({ from: actorAddress }) as Promise<{ len: bigint }>,
       ftContract.methods.public_balance_of(userAddress).simulate({ from: actorAddress }),
       ftContract.methods.has_private_holder_proof(userAddress).simulate({ from: actorAddress }),
     ]);
 
-    const hasDepositTicket = Number(depositTicket) > 0;
+    const isInvestor = credentialsResult.len > 0n;
+    const hasDepositTicket = depositNotesResult.len > 0n;
     const hasFsftExposure = Number(fsftBalance) > 0 || Boolean(hasPrivateHolderProof);
-    const canVote = Boolean(isInvestor) && (hasDepositTicket || hasFsftExposure);
+    const canVote = isInvestor && (hasDepositTicket || hasFsftExposure);
     const privateFsftProofMode = Boolean(hasPrivateHolderProof) ? "aztec-private-proven" : "none";
 
     return NextResponse.json({
