@@ -19,13 +19,19 @@ pub contract ProtocolRewards {
             storage::storage,
         },
         messages::message_delivery::MessageDelivery,
-        note::{HintedNote, utils::compute_confirmed_note_hash_for_nullification},
+        note::{
+            constants::MAX_NOTES_PER_PAGE,
+            HintedNote,
+            note_getter_options::NoteStatus,
+            utils::compute_confirmed_note_hash_for_nullification,
+        },
         protocol::{
             address::AztecAddress,
             hash::poseidon2_hash,
             traits::{Deserialize, Serialize, ToField},
         },
-        state_vars::{Map, Owned, PrivateSet, PublicMutable, SingleUseClaim},
+        state_vars::{Map, Owned, PrivateSet, PublicMutable, SingleUseClaim, StateVariable},
+        utils::array,
     };
 
     #[derive(Serialize, Deserialize)]
@@ -473,5 +479,27 @@ pub contract ProtocolRewards {
         let attested = self.storage.fsft_rewards_attested.at(user).read();
 
         (public_balance > 0) | private_holder_proof | attested
+    }
+
+    /// PXE-side helper: fetch caller's RewardClaimNotes as paged HintedNote
+    /// vec. Used by the V2 claim flow: caller simulates this to find a
+    /// reward note, then passes the hint to claim_reward_private.
+    #[external("utility")]
+    unconstrained fn get_my_reward_notes(
+        owner: AztecAddress,
+        page_index: u32,
+    ) -> BoundedVec<HintedNote<RewardClaimNote>, MAX_NOTES_PER_PAGE> {
+        let storage_slot = self.storage.reward_notes.get_storage_slot();
+        let opt_notes = aztec::oracle::notes::get_notes(
+            Option::some(owner),
+            storage_slot,
+            0,
+            [], [], [], [], [], [], [], [],
+            [],
+            MAX_NOTES_PER_PAGE,
+            page_index * MAX_NOTES_PER_PAGE,
+            NoteStatus.ACTIVE,
+        );
+        array::collapse(opt_notes)
     }
 }

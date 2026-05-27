@@ -24,13 +24,19 @@ pub contract FSFTDex {
             storage::storage,
         },
         messages::message_delivery::MessageDelivery,
-        note::{HintedNote, utils::compute_confirmed_note_hash_for_nullification},
+        note::{
+            constants::MAX_NOTES_PER_PAGE,
+            HintedNote,
+            note_getter_options::NoteStatus,
+            utils::compute_confirmed_note_hash_for_nullification,
+        },
         protocol::{
             address::AztecAddress,
             hash::poseidon2_hash,
             traits::{Deserialize, Serialize, ToField},
         },
-        state_vars::{Map, Owned, PrivateSet, PublicImmutable, PublicMutable, SingleUseClaim},
+        state_vars::{Map, Owned, PrivateSet, PublicImmutable, PublicMutable, SingleUseClaim, StateVariable},
+        utils::array,
     };
 
     #[derive(Serialize, Deserialize)]
@@ -571,5 +577,26 @@ pub contract FSFTDex {
             fsft_token: self.storage.fsft_token.read(),
             eur_token: self.storage.eur_token.read(),
         }
+    }
+
+    /// PXE-side helper: fetch caller's OrderIntentNotes as paged HintedNote
+    /// vec. Used by V2 cancel/match flows.
+    #[external("utility")]
+    unconstrained fn get_my_order_intents(
+        owner: AztecAddress,
+        page_index: u32,
+    ) -> BoundedVec<HintedNote<OrderIntentNote>, MAX_NOTES_PER_PAGE> {
+        let storage_slot = self.storage.order_intents.get_storage_slot();
+        let opt_notes = aztec::oracle::notes::get_notes(
+            Option::some(owner),
+            storage_slot,
+            0,
+            [], [], [], [], [], [], [], [],
+            [],
+            MAX_NOTES_PER_PAGE,
+            page_index * MAX_NOTES_PER_PAGE,
+            NoteStatus.ACTIVE,
+        );
+        array::collapse(opt_notes)
     }
 }

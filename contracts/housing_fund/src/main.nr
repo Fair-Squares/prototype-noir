@@ -26,13 +26,14 @@ pub contract HousingFund {
             storage::storage,
         },
         messages::message_delivery::MessageDelivery,
-        note::HintedNote,
+        note::{constants::MAX_NOTES_PER_PAGE, HintedNote, note_getter_options::NoteStatus},
         protocol::{
             address::AztecAddress,
             hash::poseidon2_hash,
             traits::{Deserialize, Serialize, ToField},
         },
-        state_vars::{Map, Owned, PrivateSet, PublicMutable},
+        state_vars::{Map, Owned, PrivateSet, PublicMutable, StateVariable},
+        utils::array,
     };
 
     #[derive(Serialize, Deserialize)]
@@ -533,5 +534,29 @@ pub contract HousingFund {
     #[external("utility")]
     unconstrained fn get_admin() -> pub AztecAddress {
         self.storage.admin.read()
+    }
+
+    /// PXE-side helper: fetch caller's DepositNotes as paged HintedNote vec.
+    /// Used by V2 callers (e.g., Governance.cast_vote_private's
+    /// fund-exposure proof, frontend portfolio sum) via
+    /// .simulate({ from: owner }). Pattern matches
+    /// crowdfunding_contract.get_donation_notes.
+    #[external("utility")]
+    unconstrained fn get_my_deposit_notes(
+        owner: AztecAddress,
+        page_index: u32,
+    ) -> BoundedVec<HintedNote<DepositNote>, MAX_NOTES_PER_PAGE> {
+        let storage_slot = self.storage.deposit_notes.get_storage_slot();
+        let opt_notes = aztec::oracle::notes::get_notes(
+            Option::some(owner),
+            storage_slot,
+            0,
+            [], [], [], [], [], [], [], [],
+            [],
+            MAX_NOTES_PER_PAGE,
+            page_index * MAX_NOTES_PER_PAGE,
+            NoteStatus.ACTIVE,
+        );
+        array::collapse(opt_notes)
     }
 }

@@ -23,12 +23,14 @@ pub contract KYCVerifier {
             storage::storage,
         },
         messages::message_delivery::MessageDelivery,
+        note::{constants::MAX_NOTES_PER_PAGE, HintedNote, note_getter_options::NoteStatus},
         protocol::{
             address::AztecAddress,
             hash::poseidon2_hash,
             traits::ToField,
         },
-        state_vars::{Map, Owned, PrivateSet, PublicMutable},
+        state_vars::{Map, Owned, PrivateSet, PublicMutable, StateVariable},
+        utils::array,
     };
 
     #[storage]
@@ -193,5 +195,30 @@ pub contract KYCVerifier {
     #[external("utility")]
     unconstrained fn get_admin() -> pub AztecAddress {
         self.storage.admin.read()
+    }
+
+    /// PXE-side helper: fetch the owner's KycCredentialNotes as a paged
+    /// BoundedVec<HintedNote>. The caller invokes this via
+    /// .simulate({ from: owner }) to retrieve hints they can then pass
+    /// into V2 private entrypoints (e.g. HousingFund.deposit_private,
+    /// Governance.cast_vote_private). Pattern mirrors
+    /// crowdfunding_contract.get_donation_notes from aztec-packages.
+    #[external("utility")]
+    unconstrained fn get_my_kyc_credentials(
+        owner: AztecAddress,
+        page_index: u32,
+    ) -> BoundedVec<HintedNote<KycCredentialNote>, MAX_NOTES_PER_PAGE> {
+        let storage_slot = self.storage.kyc_credentials.get_storage_slot();
+        let opt_notes = aztec::oracle::notes::get_notes(
+            Option::some(owner),
+            storage_slot,
+            0,
+            [], [], [], [], [], [], [], [],
+            [],
+            MAX_NOTES_PER_PAGE,
+            page_index * MAX_NOTES_PER_PAGE,
+            NoteStatus.ACTIVE,
+        );
+        array::collapse(opt_notes)
     }
 }
