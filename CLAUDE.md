@@ -59,6 +59,29 @@ When writing Aztec.nr contract code that requires hashing, **always use Poseidon
 - **Do NOT** default to Pedersen (`pedersen_hash`). Pedersen is available but Poseidon2 is cheaper in circuits and is the standard across Aztec.
 - If you are unsure which hash to use, use Poseidon2.
 
+## Testnet smoke test
+
+To verify the pinned `@aztec/aztec.js` (v4.3.0) talks to the public Aztec testnet:
+
+```bash
+cd scripts
+AZTEC_NETWORK=testnet npx tsx smoke-testnet.ts
+```
+
+Expected output: chain_id 11155111 (Sepolia), a current block number, and a non-zero version field. Anything else means PXE quota / version mismatch.
+
+Full testnet deploy (SponsoredFPC + Schnorr account + all 7 contracts via TS SDK) is Stage 6.5; see scripts/smoke-testnet.ts comments for the next-milestones checklist.
+
+## Adding `aztec test` coverage (Task 22)
+
+Pattern lives in `noir-projects/noir-contracts/contracts/test/public_immutable_contract/src/main.nr` in the aztec-packages clone: a `mod tests { ... }` block inside the same file with `TestEnvironment::new()` + `env.deploy(...)` + `env.call_public(...)` / `env.call_private(...)`. Host nargo runs tests in ~5 s per contract. The order to add:
+
+1. KYCVerifier — issue → owner-can-prove-existence happy path; revoke → existence still proves but `is_credential_revoked` flips true.
+2. HousingFund — deposit_private → DepositNote present in caller's set; total_deposits aggregate bumps.
+3. Governance — cast_vote_private happy path; double-vote rejected (SingleUseClaim).
+4. ProtocolRewards — allocate_reward_private → RewardClaimNote present; claim_reward_private consumes and re-claim rejected.
+5. FSFTDex — place_order_private → commitment OPEN; cancel_order_private flips to CANCELLED.
+
 ## Frontend design system
 
 Use the type scale defined in `frontend/src/app/globals.css` and the primitives in `frontend/src/components/SimplePage.tsx`. Do not invent new sizes per page.
