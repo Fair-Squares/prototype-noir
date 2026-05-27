@@ -11,8 +11,7 @@ export const metadata: Metadata = {
 };
 
 const PUBLIC_NAV = [
-  { label: "Approach", href: "/research" },
-  { label: "Use case", href: "/pilot" },
+  { label: "How it works", href: "/explain" },
 ] as const;
 
 const APP_NAV = [
@@ -72,12 +71,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="rounded-[2rem] border border-fs-teal/20 bg-fs-anthracite px-6 py-7 text-white md:px-8">
               <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
                 <div>
-                  <p className="type-section">Fair Squares</p>
+                  <p className="type-section">Fair Squares Prototype</p>
                   <p className="type-body mt-2 max-w-xl text-white/65">
-                    Fair financing for affordable housing projects where capped rents create a documented project gap.
+                    Aztec/Noir working prototype. For the public project, see{" "}
+                    <a
+                      href="https://fair-squares.nl"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-bold text-fs-teal-light hover:underline"
+                    >
+                      fair-squares.nl
+                    </a>
+                    .
                   </p>
                 </div>
-                <p className="type-body font-bold text-fs-teal-light/80">Fair financing · CPB edge · Pilot protocol</p>
+                <p className="type-body font-bold text-fs-teal-light/80">Prototype · Aztec 4.2.1 · Noir</p>
               </div>
             </div>
           </footer>
