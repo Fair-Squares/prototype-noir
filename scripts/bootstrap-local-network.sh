@@ -463,15 +463,21 @@ wire_contracts() {
     --contract-address "${EUR_ADDR}" \
     --args "${FUND_ADDR}" 500000
 
-  # Then record the deposit in housing fund counter
-  log "Recording initial deposit in housing fund..."
-  wallet_send_with_retries required "HousingFund.deposit(500000)" \
-    $AZTEC_WALLET_BIN send deposit \
-    --from accounts:test0 \
-    --contract-address "${FUND_ADDR}" \
-    --args 500000
+  # Then record the deposit as a V2 private DepositNote in test0's PXE.
+  # aztec-wallet CLI cannot pass HintedNote<KycCredentialNote> args, so
+  # this step uses the TS SDK helper which fetches the KYC credential
+  # hint from PXE and threads it into HousingFund.deposit_private.
+  log "Recording initial deposit (V2 private path)..."
+  (
+    cd "${ROOT_DIR}/scripts" && \
+    AZTEC_NODE_URL="${AZTEC_NODE_URL}" \
+    NEXT_PUBLIC_KYC_VERIFIER_ADDRESS="${KYC_ADDR}" \
+    NEXT_PUBLIC_HOUSING_FUND_ADDRESS="${FUND_ADDR}" \
+    SEED_AMOUNT=500000 \
+    npx tsx seed-v2-deposit.ts
+  ) || die "V2 seed deposit failed"
 
-  log "Initial housing fund balance: 500 000 EUR (deposited by test0)"
+  log "Initial housing fund balance: 500 000 EUR (V2 private deposit by test0)"
 }
 
 # -- 5. Extract addresses and write env files ----------------------------------
