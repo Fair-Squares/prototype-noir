@@ -36,15 +36,6 @@ pub contract Governance {
     global STATUS_EXECUTED: u8 = 3;
 
     #[derive(Serialize, Deserialize)]
-    pub struct VotingEligibility {
-        pub investor_role: bool,
-        pub has_deposit_ticket: bool,
-        pub has_public_fsft: bool,
-        pub has_private_holder_proof: bool,
-        pub can_vote: bool,
-    }
-
-    #[derive(Serialize, Deserialize)]
     pub struct ProposalView {
         pub desc_hash: Field,
         pub amount: u64,
@@ -77,11 +68,6 @@ pub contract Governance {
         p_created_block: Map<Field, PublicMutable<u32, Context>, Context>,
         p_deadline_block: Map<Field, PublicMutable<u32, Context>, Context>,
 
-        // Track who has voted (voter_address + proposal_id -> bool)
-        // Key: hash of voter + proposal_id (stored as a Map<Field, ...>)
-        has_voted: Map<Field, PublicMutable<bool, Context>, Context>,
-        // Mirrored deposit tickets synced from HousingFund.
-        user_deposit_ticket: Map<AztecAddress, PublicMutable<u64, Context>, Context>,
         // V2: nullifier per (proposal_id, voter) for secret-ballot private voting.
         vote_claims: Map<Field, Owned<SingleUseClaim<Context>, Context>, Context>,
     }
@@ -134,48 +120,6 @@ pub contract Governance {
 
         self.storage.proposal_count.write(proposal_id + 1);
         proposal_id
-    }
-
-    // -- Cast a vote (public for prototype) -------------------------------
-    // Double-vote prevention uses a public map keyed by voter+proposal hash.
-    // Future: replace with private voting + nullifiers.
-
-    #[external("public")]
-    fn cast_vote(proposal_id: u32, vote_yes: bool) {
-        let pid = proposal_id as Field;
-        let voter = self.msg_sender();
-        let kyc_contract = KYCVerifier::at(self.storage.kyc_verifier.read());
-        let is_investor = self.view(kyc_contract.is_investor(voter));
-        assert(is_investor, "investor role required");
-
-        let fund_token = FundToken::at(self.storage.fund_token.read());
-        let has_deposit_ticket = self.storage.user_deposit_ticket.at(voter).read() > 0;
-        let has_public_fsft = self.view(fund_token.public_balance_of_public(voter)) > 0;
-        let has_private_holder_proof = self.view(fund_token.has_private_holder_proof(voter));
-        assert(
-            has_deposit_ticket | has_public_fsft | has_private_holder_proof,
-            "fund exposure required for voting",
-        );
-
-        // Check proposal is active
-        assert(
-            self.storage.p_status.at(pid).read() == STATUS_ACTIVE,
-            "proposal is not active",
-        );
-
-        // Simple double-vote prevention using a collision-resistant voter+proposal key.
-        let vote_key = poseidon2_hash([voter.to_field(), pid]);
-        assert(!self.storage.has_voted.at(vote_key).read(), "already voted");
-        self.storage.has_voted.at(vote_key).write(true);
-
-        // Tally the vote
-        if vote_yes {
-            let current = self.storage.p_yes_votes.at(pid).read();
-            self.storage.p_yes_votes.at(pid).write(current + 1);
-        } else {
-            let current = self.storage.p_no_votes.at(pid).read();
-            self.storage.p_no_votes.at(pid).write(current + 1);
-        }
     }
 
     // -- V2: private cast_vote (secret ballot via SingleUseClaim nullifier) ----
@@ -341,33 +285,6 @@ pub contract Governance {
     fn get_proposal_amount_public(proposal_id: u32) -> pub u64 {
         let pid = proposal_id as Field;
         self.storage.p_amount.at(pid).read()
-    }
-
-    #[external("public")]
-    fn sync_deposit_ticket(user: AztecAddress, ticket_amount: u64) {
-        assert_eq(self.msg_sender(), self.storage.housing_fund.read(), "only housing fund can sync tickets");
-        self.storage.user_deposit_ticket.at(user).write(ticket_amount);
-    }
-
-    #[external("public")]
-    #[view]
-    fn get_voting_eligibility(user: AztecAddress) -> pub VotingEligibility {
-        let kyc_contract = KYCVerifier::at(self.storage.kyc_verifier.read());
-        let fund_token = FundToken::at(self.storage.fund_token.read());
-
-        let investor_role = self.view(kyc_contract.is_investor(user));
-        let has_deposit_ticket = self.storage.user_deposit_ticket.at(user).read() > 0;
-        let has_public_fsft = self.view(fund_token.public_balance_of_public(user)) > 0;
-        let has_private_holder_proof = self.view(fund_token.has_private_holder_proof(user));
-        let can_vote = investor_role & (has_deposit_ticket | has_public_fsft | has_private_holder_proof);
-
-        VotingEligibility {
-            investor_role,
-            has_deposit_ticket,
-            has_public_fsft,
-            has_private_holder_proof,
-            can_vote,
-        }
     }
 
     #[external("utility")]

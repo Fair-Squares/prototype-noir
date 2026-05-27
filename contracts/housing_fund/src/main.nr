@@ -162,12 +162,6 @@ pub contract HousingFund {
             }
         }
         self.storage.deposit_tickets.at(caller).write(previous_ticket + amount);
-        let updated_ticket = previous_ticket + amount;
-        let governance_addr = self.storage.governance.read();
-        if !governance_addr.is_zero() {
-            let gov = Governance::at(governance_addr);
-            self.call(gov.sync_deposit_ticket(caller, updated_ticket));
-        }
 
         let current = self.storage.total_deposits.read();
         self.storage.total_deposits.write(current + amount);
@@ -189,11 +183,6 @@ pub contract HousingFund {
 
         let updated_ticket = ticket - amount;
         self.storage.deposit_tickets.at(caller).write(updated_ticket);
-        let governance_addr = self.storage.governance.read();
-        if !governance_addr.is_zero() {
-            let gov = Governance::at(governance_addr);
-            self.call(gov.sync_deposit_ticket(caller, updated_ticket));
-        }
         self.storage.total_deposits.write(deposits - amount);
     }
 
