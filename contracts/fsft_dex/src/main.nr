@@ -24,13 +24,13 @@ pub contract FSFTDex {
             storage::storage,
         },
         messages::message_delivery::MessageDelivery,
-        note::HintedNote,
+        note::{HintedNote, utils::compute_confirmed_note_hash_for_nullification},
         protocol::{
             address::AztecAddress,
             hash::poseidon2_hash,
             traits::{Deserialize, Serialize, ToField},
         },
-        state_vars::{Map, Owned, PrivateSet, PublicImmutable, PublicMutable},
+        state_vars::{Map, Owned, PrivateSet, PublicImmutable, PublicMutable, SingleUseClaim},
     };
 
     #[derive(Serialize, Deserialize)]
@@ -99,6 +99,9 @@ pub contract FSFTDex {
         // visible on chain.
         order_intents: Owned<PrivateSet<OrderIntentNote, Context>, Context>,
         order_status_v2: Map<Field, PublicMutable<u8, Context>, Context>,
+        // V2 cancel nullifiers: per (intent_note_hash, owner) single-use claim
+        // so a given intent can be cancelled at most once.
+        cancel_nullifiers: Map<Field, Owned<SingleUseClaim<Context>, Context>, Context>,
     }
 
     #[initializer]
@@ -362,7 +365,39 @@ pub contract FSFTDex {
     // expiry, salt) so the orderbook can be reasoned about publicly without
     // revealing the per-order owner / amount / price.
     //
-    // Match + settlement over commitments is staged for a follow-up.
+    // COMMITMENT SEMANTICS
+    // The commitment is an APPLICATION-LEVEL hash of order parameters, not
+    // the kernel-computed note_hash (which includes randomness and cannot
+    // be reproduced outside the originating private call). The commitment:
+    //   - is deterministic from owner + side + amount + price_bps + expiry +
+    //     salt so off-chain matchers can reproduce it from observed events
+    //   - is stored on chain in order_status_v2 to track OPEN / FILLED /
+    //     CANCELLED state
+    //   - allows external parties to verify "this intent corresponds to that
+    //     commitment" without decrypting the note
+    //
+    // FUTURE SETTLEMENT FLOW (match_order_private)
+    // Once Stage 5.5 lands, settlement will run as:
+    //   1. Taker supplies hinted OrderIntentNote from their own PXE.
+    //   2. Taker supplies the maker_commitment (publicly observed).
+    //   3. Re-derive commitment from the hinted note fields and assert
+    //      computed == taker's intent commitment.
+    //   4. Constrain price-band match + side-cross.
+    //   5. Atomic private settlement (EUR + FSFT transfer_private_from via
+    //      authwit) using the taker and maker's own delegated spends.
+    //   6. Enqueue only_self _apply_match_fill that flips both commitments
+    //      in order_status_v2 to FILLED (or PARTIAL) and bumps a public
+    //      matched-volume counter.
+    //
+    // NULLIFIER SEMANTICS
+    // The taker's OrderIntentNote is nullified by the kernel as part of
+    // settlement (notes consumed via PrivateSet operations emit nullifiers
+    // automatically), preventing double-spend of the same intent. The
+    // maker's note is NOT consumed -- only the public status map is updated
+    // -- because the maker's PXE has already authorised the settlement via
+    // authwit and the maker may want to keep the intent record privately.
+    //
+    // Match + settlement is staged for a follow-up.
 
     #[external("private")]
     fn place_order_private(
@@ -396,15 +431,90 @@ pub contract FSFTDex {
             expiry_block as Field,
             salt,
         ]);
-        self.enqueue_self._register_intent_commitment(commitment, confirmed.contract_address);
+
+        // Compute the credential's revocation commitment for the public tail.
+        let credential_commitment = poseidon2_hash([
+            confirmed.note.owner.to_field(),
+            confirmed.note.nonce,
+        ]);
+
+        self.enqueue_self._register_intent_commitment(
+            commitment,
+            confirmed.contract_address,
+            credential_commitment,
+        );
     }
 
     #[external("public")]
     #[only_self]
-    fn _register_intent_commitment(commitment: Field, kyc_note_contract: AztecAddress) {
+    fn _register_intent_commitment(
+        commitment: Field,
+        kyc_note_contract: AztecAddress,
+        credential_commitment: Field,
+    ) {
         let kyc_addr = self.storage.kyc_verifier.read();
         assert(kyc_note_contract == kyc_addr, "kyc note from wrong contract");
+        let kyc = KYCVerifier::at(kyc_addr);
+        let revoked = self.view(kyc.is_credential_revoked(credential_commitment));
+        assert(!revoked, "credential revoked");
         self.storage.order_status_v2.at(commitment).write(STATUS_OPEN);
+    }
+
+    // -- V2: private cancel ----------------------------------------------------
+    //
+    // Owner privately proves they hold a particular OrderIntentNote, consumes
+    // a single-use nullifier keyed by the note hash, and the public commitment
+    // status flips to CANCELLED. Caller identity is not revealed publicly;
+    // only the commitment changes state.
+    //
+    // Note: full atomic match_order_private + settlement requires authwit
+    // delegation to the DEX contract for EUR + FSFT transfers (see the
+    // settlement-semantics comment block above place_order_private). That
+    // flow is the natural next milestone; cancel arrives first because it
+    // doesn't need any token movement, only proof of intent ownership.
+
+    #[external("private")]
+    fn cancel_order_private(hinted_intent: HintedNote<OrderIntentNote>) {
+        let header = self.context.get_anchor_block_header();
+        let confirmed = assert_note_existed_by(header, hinted_intent);
+
+        let caller = self.msg_sender();
+        assert(confirmed.owner == caller, "intent not owned by caller");
+        assert(confirmed.note.owner == caller, "intent owner mismatch");
+        assert(
+            confirmed.contract_address == self.context.this_address(),
+            "intent from wrong contract",
+        );
+
+        // Single-use claim by note hash prevents double-cancel.
+        let note_hash_for_nullification =
+            compute_confirmed_note_hash_for_nullification(confirmed);
+        self.storage.cancel_nullifiers.at(note_hash_for_nullification).at(caller).claim();
+
+        // Re-derive the public commitment from the note's fields. This is
+        // safe because the note's contents are kernel-verified by
+        // assert_note_existed_by; the caller cannot lie about them.
+        let commitment = poseidon2_hash([
+            confirmed.note.owner.to_field(),
+            confirmed.note.side as Field,
+            confirmed.note.amount as Field,
+            confirmed.note.price_bps as Field,
+            confirmed.note.expiry_block as Field,
+            confirmed.note.salt,
+        ]);
+
+        self.enqueue_self._mark_cancelled_v2(commitment);
+    }
+
+    #[external("public")]
+    #[only_self]
+    fn _mark_cancelled_v2(commitment: Field) {
+        let current = self.storage.order_status_v2.at(commitment).read();
+        assert(
+            (current == STATUS_OPEN) | (current == STATUS_PARTIAL),
+            "order is not cancellable",
+        );
+        self.storage.order_status_v2.at(commitment).write(STATUS_CANCELLED);
     }
 
     #[external("utility")]

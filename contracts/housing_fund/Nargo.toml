@@ -6,6 +6,7 @@ compiler_version = ">=0.18.0"
 
 [dependencies]
 aztec = { git = "https://github.com/AztecProtocol/aztec-nr/", tag = "v4.3.0", directory = "aztec" }
+deposit_note = { path = "../deposit_note" }
 fund_token = { path = "../fund_token" }
 governance = { path = "../governance" }
 kyc_verifier = { path = "../kyc_verifier" }

@@ -11,6 +11,7 @@ use aztec::macros::aztec;
 ///   3. After deadline, anyone calls finalize_proposal() -- public
 #[aztec]
 pub contract Governance {
+    use deposit_note::DepositNote;
     use fund_token::FundToken;
     use kyc_verifier::{KYCVerifier, credential_note::KycCredentialNote};
     use aztec::{
@@ -191,25 +192,41 @@ pub contract Governance {
         proposal_id: u32,
         vote_yes: bool,
         hinted_kyc_note: HintedNote<KycCredentialNote>,
+        hinted_deposit_note: HintedNote<DepositNote>,
     ) {
         let header = self.context.get_anchor_block_header();
-        let confirmed = assert_note_existed_by(header, hinted_kyc_note);
+        let confirmed_kyc = assert_note_existed_by(header, hinted_kyc_note);
 
         let caller = self.msg_sender();
-        assert(confirmed.owner == caller, "kyc note not owned by caller");
-        assert(confirmed.note.owner == caller, "kyc note owner mismatch");
+        assert(confirmed_kyc.owner == caller, "kyc note not owned by caller");
+        assert(confirmed_kyc.note.owner == caller, "kyc note owner mismatch");
+
+        // Prove the caller has fund exposure. Any DepositNote owned by the
+        // caller suffices; amount is not revealed.
+        let confirmed_dep = assert_note_existed_by(header, hinted_deposit_note);
+        assert(confirmed_dep.owner == caller, "deposit note not owned by caller");
+        assert(confirmed_dep.note.owner == caller, "deposit note owner mismatch");
 
         // Consume the per-(proposal, voter) single-use nullifier.
         let pid = proposal_id as Field;
         self.storage.vote_claims.at(pid).at(caller).claim();
 
-        // Tally publicly. Args are only proposal_id, vote choice, and the
-        // hinted note's contract address (for the KYC verification). The
-        // voter's address never crosses the private/public boundary.
+        // Compute the credential's revocation commitment for the public tail.
+        let credential_commitment = poseidon2_hash([
+            confirmed_kyc.note.owner.to_field(),
+            confirmed_kyc.note.nonce,
+        ]);
+
+        // Tally publicly. Args are proposal_id, vote choice, both hinted
+        // notes' contract addresses (KYC and deposit origin checks), and
+        // the revocation commitment. The voter's address never crosses
+        // the private/public boundary.
         self.enqueue_self._tally_vote_private(
             proposal_id,
             vote_yes,
-            confirmed.contract_address,
+            confirmed_kyc.contract_address,
+            confirmed_dep.contract_address,
+            credential_commitment,
         );
     }
 
@@ -219,9 +236,16 @@ pub contract Governance {
         proposal_id: u32,
         vote_yes: bool,
         kyc_note_contract: AztecAddress,
+        deposit_note_contract: AztecAddress,
+        credential_commitment: Field,
     ) {
         let kyc_addr = self.storage.kyc_verifier.read();
         assert(kyc_note_contract == kyc_addr, "kyc note from wrong contract");
+        let housing_fund_addr = self.storage.housing_fund.read();
+        assert(deposit_note_contract == housing_fund_addr, "deposit note from wrong contract");
+        let kyc = KYCVerifier::at(kyc_addr);
+        let revoked = self.view(kyc.is_credential_revoked(credential_commitment));
+        assert(!revoked, "credential revoked");
 
         let pid = proposal_id as Field;
         assert(

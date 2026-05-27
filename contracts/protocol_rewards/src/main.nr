@@ -13,17 +13,19 @@ pub contract ProtocolRewards {
     use fund_token::FundToken;
     use kyc_verifier::KYCVerifier;
     use aztec::{
+        history::note::assert_note_existed_by,
         macros::{
             functions::{external, initializer, only_self, view},
             storage::storage,
         },
         messages::message_delivery::MessageDelivery,
+        note::{HintedNote, utils::compute_confirmed_note_hash_for_nullification},
         protocol::{
             address::AztecAddress,
             hash::poseidon2_hash,
             traits::{Deserialize, Serialize, ToField},
         },
-        state_vars::{Map, Owned, PrivateSet, PublicMutable},
+        state_vars::{Map, Owned, PrivateSet, PublicMutable, SingleUseClaim},
     };
 
     #[derive(Serialize, Deserialize)]
@@ -91,6 +93,9 @@ pub contract ProtocolRewards {
         fsft_rewards_attested: Map<AztecAddress, PublicMutable<bool, Context>, Context>,
         // V2: per-recipient private reward records
         reward_notes: Owned<PrivateSet<RewardClaimNote, Context>, Context>,
+        // V2: per (reward_note_hash, owner) single-use nullifier so a given
+        // reward allocation can be claimed at most once.
+        reward_claim_nullifiers: Map<Field, Owned<SingleUseClaim<Context>, Context>, Context>,
     }
 
     #[initializer]
@@ -267,9 +272,10 @@ pub contract ProtocolRewards {
         assert(amount > 0, "amount must be positive");
         assert(!recipient.is_zero(), "invalid recipient");
 
-        // Admin check happens in the enqueued public tail; private functions
-        // cannot read PublicMutable storage directly.
-        self.enqueue_self._assert_is_admin(self.msg_sender());
+        // Combined admin + epoch_open check in the enqueued public tail.
+        // Without the epoch check, an admin could allocate rewards to a
+        // closed epoch which a later claim flow would treat as valid.
+        self.enqueue_self._assert_admin_and_epoch_open(epoch, self.msg_sender());
 
         let note = RewardClaimNote::new(recipient, amount, epoch);
         self.storage.reward_notes.at(recipient).insert(note).deliver(
@@ -279,8 +285,68 @@ pub contract ProtocolRewards {
 
     #[external("public")]
     #[only_self]
-    fn _assert_is_admin(caller: AztecAddress) {
+    fn _assert_admin_and_epoch_open(epoch: u32, caller: AztecAddress) {
         assert_eq(caller, self.storage.admin.read(), "not admin");
+        let eid = epoch as Field;
+        assert(self.storage.epoch_open.at(eid).read(), "epoch not open");
+    }
+
+    // -- V2: private claim of a RewardClaimNote --------------------------------
+    //
+    // Consumes a RewardClaimNote via a per-(note_hash, owner) SingleUseClaim
+    // nullifier and privately mints the protocol token to the caller via a
+    // private-to-private cross-contract call. The recipient address never
+    // crosses the private/public boundary -- only the aggregate total_claimed
+    // counter is updated publicly.
+    //
+    // Requires ProtocolRewards to be the admin of protocol_token (set in
+    // bootstrap via FundToken.set_admin).
+    //
+    // `protocol_token_addr` is passed in as a parameter; the enqueued public
+    // tail verifies it matches the configured storage so a malicious caller
+    // cannot route the private mint through an attacker-controlled contract.
+
+    #[external("private")]
+    fn claim_reward_private(
+        hinted_reward_note: HintedNote<RewardClaimNote>,
+        protocol_token_addr: AztecAddress,
+    ) {
+        let header = self.context.get_anchor_block_header();
+        let confirmed = assert_note_existed_by(header, hinted_reward_note);
+
+        let caller = self.msg_sender();
+        assert(confirmed.owner == caller, "reward note not owned by caller");
+        assert(confirmed.note.owner == caller, "reward note owner mismatch");
+        assert(
+            confirmed.contract_address == self.context.this_address(),
+            "reward note from wrong contract",
+        );
+
+        // Single-use claim keyed by (note_hash, owner) prevents re-claim of
+        // the same allocation.
+        let note_hash_for_nullification =
+            compute_confirmed_note_hash_for_nullification(confirmed);
+        self.storage.reward_claim_nullifiers.at(note_hash_for_nullification).at(caller).claim();
+
+        // Private cross-contract mint of protocol token to caller.
+        // FundToken.mint_private will see msg_sender = ProtocolRewards
+        // contract address and pass its admin check.
+        let amount_u64 = confirmed.note.amount as u64;
+        self.call(FundToken::at(protocol_token_addr).mint_private(caller, amount_u64));
+
+        // Public aggregate bump + protocol_token_addr verification.
+        self.enqueue_self._record_private_claim(amount_u64, protocol_token_addr);
+    }
+
+    #[external("public")]
+    #[only_self]
+    fn _record_private_claim(amount: u64, supplied_protocol_token: AztecAddress) {
+        assert(
+            supplied_protocol_token == self.storage.protocol_token.read(),
+            "protocol token mismatch",
+        );
+        let total = self.storage.total_claimed.read();
+        self.storage.total_claimed.write(total + amount);
     }
 
     #[external("public")]

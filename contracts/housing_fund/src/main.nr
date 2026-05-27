@@ -1,5 +1,3 @@
-pub mod deposit_note;
-
 use aztec::macros::aztec;
 
 /// HousingFund -- the core Fair Squares protocol contract.
@@ -17,7 +15,7 @@ use aztec::macros::aztec;
 ///     counter is updated WITHOUT the user's address crossing the boundary.
 #[aztec]
 pub contract HousingFund {
-    use crate::deposit_note::DepositNote;
+    use deposit_note::DepositNote;
     use fund_token::FundToken;
     use governance::Governance;
     use kyc_verifier::{KYCVerifier, credential_note::KycCredentialNote};
@@ -371,17 +369,39 @@ pub contract HousingFund {
             MessageDelivery.ONCHAIN_CONSTRAINED,
         );
 
-        // Bump the public aggregate + verify the credential came from our
-        // configured KYCVerifier contract. Args are only the amount and the
-        // hinted note's contract address; caller's address never crosses.
-        self.enqueue_self._record_deposit_private(amount, confirmed.contract_address);
+        // Compute the credential's revocation commitment from the note's
+        // packed fields so the public tail can reject revoked credentials.
+        // poseidon2([owner, nonce]) matches KYCVerifier.compute_revocation_commitment.
+        let credential_commitment = poseidon2_hash([
+            confirmed.note.owner.to_field(),
+            confirmed.note.nonce,
+        ]);
+
+        // Bump the public aggregate + verify (a) the credential came from our
+        // configured KYCVerifier contract and (b) it has not been revoked.
+        // Args carry only the amount, the note's source contract, and the
+        // revocation commitment; the caller's address never crosses the
+        // private/public boundary.
+        self.enqueue_self._record_deposit_private(
+            amount,
+            confirmed.contract_address,
+            credential_commitment,
+        );
     }
 
     #[external("public")]
     #[only_self]
-    fn _record_deposit_private(amount: u128, kyc_note_contract: AztecAddress) {
+    fn _record_deposit_private(
+        amount: u128,
+        kyc_note_contract: AztecAddress,
+        credential_commitment: Field,
+    ) {
         let kyc_addr = self.storage.kyc_verifier.read();
         assert(kyc_note_contract == kyc_addr, "kyc note from wrong contract");
+        let kyc = KYCVerifier::at(kyc_addr);
+        let revoked = self.view(kyc.is_credential_revoked(credential_commitment));
+        assert(!revoked, "credential revoked");
+
         let amount_u64 = amount as u64;
         let total = self.storage.total_deposits.read();
         self.storage.total_deposits.write(total + amount_u64);
