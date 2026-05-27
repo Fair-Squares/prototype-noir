@@ -72,7 +72,20 @@ Expected output: chain_id 11155111 (Sepolia), a current block number, and a non-
 
 Full testnet deploy (SponsoredFPC + Schnorr account + all 7 contracts via TS SDK) is Stage 6.5; see scripts/smoke-testnet.ts comments for the next-milestones checklist.
 
-## Adding `aztec test` coverage (Task 22)
+## Running `aztec test` (Task 22)
+
+Use the wrapper:
+
+```bash
+./scripts/aztec-test.sh                 # all 5 V2 contracts
+./scripts/aztec-test.sh kyc_verifier    # single contract
+```
+
+The script spawns TXE inside the pinned `aztecprotocol/aztec:4.3.0` image, runs `aztec compile` (full transpile + VK — needed by TXE; `nargo compile` alone is not enough), then `nargo test --oracle-resolver http://127.0.0.1:8080`. End-to-end run on a warm cache is ~1 min for the full suite.
+
+If you ever see `Contract's public bytecode has not been transpiled` from TXE, the script's `aztec compile` step is the missing piece — running `nargo compile` alone produces an artifact that lacks AVM transpilation.
+
+## Adding more `aztec test` coverage
 
 Pattern lives in `noir-projects/noir-contracts/contracts/test/public_immutable_contract/src/main.nr` in the aztec-packages clone: a `mod tests { ... }` block inside the same file with `TestEnvironment::new()` + `env.deploy(...)` + `env.call_public(...)` / `env.call_private(...)`. Host nargo runs tests in ~5 s per contract. The order to add:
 
