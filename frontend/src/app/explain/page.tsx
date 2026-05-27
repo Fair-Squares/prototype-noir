@@ -2,20 +2,78 @@
 
 import { PageHero } from "@/components/SimplePage";
 
+const CORE_FLOW = [
+  "Verified investors deposit cash into the housing fund.",
+  "Governance proposes and votes on allocations.",
+  "Executed proposals open distribution and fund share flows.",
+  "Investors hold, trade, vote, and claim rewards.",
+];
+
+const CONCEPTS = [
+  {
+    term: "Cash (EURs)",
+    body: "Stable cash token used for deposits and settlement.",
+  },
+  {
+    term: "Fund Shares (FSFT)",
+    body: "Tokenised share exposure to fund performance.",
+  },
+  {
+    term: "Rewards (FSP)",
+    body: "Protocol rewards split across deposit, share-holding, and governance participation.",
+  },
+  {
+    term: "Share Price",
+    body: "Fund Value divided by Fund Shares in circulation.",
+  },
+  {
+    term: "DEX boundaries",
+    body: "Buy and sell orders must sit inside protocol risk bands; full market depth lives in API views.",
+  },
+  {
+    term: "Governance metadata",
+    body: "Proposal hashes, quorum traces, and execution metadata are kept out of voting screens; use API views for diagnostics.",
+  },
+];
+
 export default function ExplainPage() {
   return (
     <div className="space-y-6">
       <PageHero
-        title="How Fair Squares Works"
-        subtitle="Detailed mechanics, formulas, and glossary."
+        title="How it works"
+        subtitle="Prototype mechanics in one page. For the public project's how-it-works guide, visit fair-squares.nl/how-it-works."
         ctaHref="https://fair-squares.nl/how-it-works"
-        ctaLabel="Visit Full Website Guide"
+        ctaLabel="fair-squares.nl/how-it-works"
       />
 
       <section className="rounded-2xl border border-border bg-card p-5">
-        <h2 className="text-lg font-semibold mb-2">External Guide</h2>
-        <p className="text-sm text-text-2">
-          For the full public project walkthrough, open{" "}
+        <h2>Core flow</h2>
+        <ol className="mt-3 space-y-2 text-text-2">
+          {CORE_FLOW.map((step, i) => (
+            <li key={step} className="flex gap-3">
+              <span className="text-meta w-6 shrink-0">{i + 1}.</span>
+              <span>{step}</span>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="rounded-2xl border border-border bg-card p-5">
+        <h2>Key concepts</h2>
+        <dl className="mt-3 grid gap-4 sm:grid-cols-2">
+          {CONCEPTS.map(({ term, body }) => (
+            <div key={term}>
+              <dt className="font-semibold text-text-1">{term}</dt>
+              <dd className="mt-1 text-text-2">{body}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      <section className="rounded-2xl border border-border bg-card p-5">
+        <h2>External resources</h2>
+        <p className="mt-3 text-text-2">
+          For the full public-facing how-it-works guide, project mission, and pilot terms, open{" "}
           <a
             href="https://fair-squares.nl/how-it-works"
             target="_blank"
@@ -26,81 +84,6 @@ export default function ExplainPage() {
           </a>
           .
         </p>
-      </section>
-
-      <section className="rounded-2xl border border-border bg-card p-5">
-        <h2 className="text-lg font-semibold mb-3">Core Flow</h2>
-        <ol className="space-y-2 text-sm text-text-2">
-          <li>1. Verified users deposit cash into the housing fund.</li>
-          <li>2. Governance proposes and votes on allocations.</li>
-          <li>3. Executed proposals open distribution and fund share flows.</li>
-          <li>4. Users can hold, trade, vote, and claim rewards.</li>
-        </ol>
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-border bg-card p-5">
-          <h2 className="text-lg font-semibold mb-3">Fund Pricing Formula</h2>
-          <p className="text-sm text-text-2">
-            Estimated Fund Share price is calculated as:
-          </p>
-          <div className="mt-3 rounded-lg border border-border bg-bg p-3 text-sm font-semibold">
-            Fund Value / Fund Shares In Circulation
-          </div>
-          <p className="text-xs text-text-3 mt-3">
-            Main pages show only the final value. This page is the reference source for formula details.
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-5">
-          <h2 className="text-lg font-semibold mb-3">Rewards Allocation</h2>
-          <p className="text-sm text-text-2">
-            Epoch rewards are split into three buckets:
-          </p>
-          <ul className="mt-3 space-y-1 text-sm text-text-2">
-            <li>- Deposit participation</li>
-            <li>- Fund Share holder participation</li>
-            <li>- Governance participation</li>
-          </ul>
-          <p className="text-xs text-text-3 mt-3">
-            Account pages focus on your eligibility and claimable amount. Full mechanics stay here.
-          </p>
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-border bg-card p-5">
-        <h2 className="text-lg font-semibold mb-3">DEX Notes</h2>
-        <p className="text-sm text-text-2">
-          Trading accepts buy and sell orders within protocol risk boundaries. Main trade page focuses on placing and
-          managing your orders. Orderbook depth and detailed market interpretation should be treated as advanced
-          reference material.
-        </p>
-      </section>
-
-      <section className="rounded-2xl border border-border bg-card p-5">
-        <h2 className="text-lg font-semibold mb-3">Governance Metadata</h2>
-        <p className="text-sm text-text-2">
-          Proposal description hashes, quorum traces, and low-level execution metadata are intentionally removed from
-          main voting screens. Use API views and developer tools when you need deep governance diagnostics.
-        </p>
-      </section>
-
-      <section className="rounded-2xl border border-border bg-card p-5">
-        <h2 className="text-lg font-semibold mb-3">Glossary</h2>
-        <div className="grid gap-2 text-sm text-text-2 md:grid-cols-3">
-          <div className="rounded-lg border border-border bg-bg p-3">
-            <p className="font-semibold">Cash (EURs)</p>
-            <p className="text-xs text-text-3 mt-1">Stable cash token used for deposits and settlement.</p>
-          </div>
-          <div className="rounded-lg border border-border bg-bg p-3">
-            <p className="font-semibold">Fund Shares (FSFT)</p>
-            <p className="text-xs text-text-3 mt-1">Tokenized share exposure to fund performance.</p>
-          </div>
-          <div className="rounded-lg border border-border bg-bg p-3">
-            <p className="font-semibold">Rewards (FSP)</p>
-            <p className="text-xs text-text-3 mt-1">Protocol rewards distributed by participation rules.</p>
-          </div>
-        </div>
       </section>
     </div>
   );
