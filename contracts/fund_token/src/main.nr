@@ -13,7 +13,7 @@ use aztec::macros::aztec;
 pub contract FundToken {
     use aztec::{
         macros::{
-            functions::{external, initializer, only_self, view},
+            functions::{authorize_once, external, initializer, only_self, view},
             storage::storage,
         },
         messages::message_delivery::MessageDelivery,
@@ -158,6 +158,30 @@ pub contract FundToken {
         }
 
         self.storage.private_balances.at(owner).sub(amount as u128).deliver(
+            MessageDelivery.ONCHAIN_CONSTRAINED,
+        );
+        self.storage.private_balances.at(to).add(amount as u128).deliver(
+            MessageDelivery.ONCHAIN_CONSTRAINED,
+        );
+    }
+
+    // V2 authwit-based transfer. The #[authorize_once] macro injects a
+    // check that `from` has authorized this exact call (matching args +
+    // nonce); if from == msg_sender the nonce must be 0. This is the
+    // canonical Aztec.nr token pattern from v4.3.0 noir-contracts.
+    // FSFTDex.match_order_private uses this to settle EUR + FSFT
+    // atomically using maker/taker-issued private authwits.
+    #[authorize_once("from", "authwit_nonce")]
+    #[external("private")]
+    fn transfer_in_private(
+        from: AztecAddress,
+        to: AztecAddress,
+        amount: u64,
+        authwit_nonce: Field,
+    ) {
+        let _ = authwit_nonce;
+        assert(amount > 0, "amount must be positive");
+        self.storage.private_balances.at(from).sub(amount as u128).deliver(
             MessageDelivery.ONCHAIN_CONSTRAINED,
         );
         self.storage.private_balances.at(to).add(amount as u128).deliver(

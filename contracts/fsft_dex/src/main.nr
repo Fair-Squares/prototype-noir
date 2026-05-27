@@ -524,6 +524,134 @@ pub contract FSFTDex {
         self.storage.order_status_v2.at(commitment).write(STATUS_CANCELLED);
     }
 
+    // -- V2: private match + atomic settlement ---------------------------------
+    //
+    // Atomic FSFT/EUR swap across two private OrderIntentNotes via authwit.
+    // Both maker and taker must each have minted a private authwit
+    // authorizing this DEX contract to call FundToken.transfer_in_private
+    // on their respective tokens for the exact amount/nonce passed here.
+    //
+    // Leakage profile: the chain sees that taker_commit and maker_commit
+    // transitioned to FILLED / PARTIAL. Owner addresses, individual
+    // prices, and individual sizes stay private.
+
+    #[external("private")]
+    fn match_order_private(
+        hinted_taker_intent: HintedNote<OrderIntentNote>,
+        hinted_maker_intent: HintedNote<OrderIntentNote>,
+        fill_amount: u64,
+        taker_authwit_nonce: Field,
+        maker_authwit_nonce: Field,
+    ) {
+        assert(fill_amount > 0, "fill_amount must be positive");
+
+        let header = self.context.get_anchor_block_header();
+        let taker = assert_note_existed_by(header, hinted_taker_intent);
+        let maker = assert_note_existed_by(header, hinted_maker_intent);
+
+        let this_addr = self.context.this_address();
+        assert(
+            taker.contract_address == this_addr,
+            "taker intent from wrong contract",
+        );
+        assert(
+            maker.contract_address == this_addr,
+            "maker intent from wrong contract",
+        );
+
+        assert(taker.note.side == SIDE_BUY, "taker must be buy side");
+        assert(maker.note.side == SIDE_SELL, "maker must be sell side");
+
+        // Buy crosses sell when buy price >= sell price.
+        assert(
+            maker.note.price_bps <= taker.note.price_bps,
+            "prices do not cross",
+        );
+
+        // Fill must not exceed either side's intent amount.
+        let fill_u128 = fill_amount as u128;
+        assert(fill_u128 <= taker.note.amount, "fill exceeds taker amount");
+        assert(fill_u128 <= maker.note.amount, "fill exceeds maker amount");
+
+        // Settle at the maker's price (price-time priority style).
+        let eur_notional = (fill_u128 * maker.note.price_bps as u128) / 10000;
+        assert(eur_notional > 0, "trade has zero notional");
+        let eur_amount = eur_notional as u64;
+
+        let fsft_addr = self.storage.fsft_token.read();
+        let eur_addr = self.storage.eur_token.read();
+
+        // Atomic settlement: EUR taker->maker, FSFT maker->taker.
+        // FundToken.transfer_in_private has #[authorize_once] -- maker and
+        // taker each pre-issued private authwits that the wallet attaches
+        // at send time. If either authwit is missing or stale, the kernel
+        // rejects the whole tx and neither leg lands.
+        self.call(FundToken::at(eur_addr).transfer_in_private(
+            taker.note.owner,
+            maker.note.owner,
+            eur_amount,
+            taker_authwit_nonce,
+        ));
+        self.call(FundToken::at(fsft_addr).transfer_in_private(
+            maker.note.owner,
+            taker.note.owner,
+            fill_amount,
+            maker_authwit_nonce,
+        ));
+
+        let taker_commit = poseidon2_hash([
+            taker.note.owner.to_field(),
+            taker.note.side as Field,
+            taker.note.amount as Field,
+            taker.note.price_bps as Field,
+            taker.note.expiry_block as Field,
+            taker.note.salt,
+        ]);
+        let maker_commit = poseidon2_hash([
+            maker.note.owner.to_field(),
+            maker.note.side as Field,
+            maker.note.amount as Field,
+            maker.note.price_bps as Field,
+            maker.note.expiry_block as Field,
+            maker.note.salt,
+        ]);
+
+        let taker_fully_filled = fill_u128 == taker.note.amount;
+        let maker_fully_filled = fill_u128 == maker.note.amount;
+
+        self.enqueue_self._apply_match_fill_v2(
+            taker_commit,
+            maker_commit,
+            taker_fully_filled,
+            maker_fully_filled,
+        );
+    }
+
+    #[external("public")]
+    #[only_self]
+    fn _apply_match_fill_v2(
+        taker_commit: Field,
+        maker_commit: Field,
+        taker_filled: bool,
+        maker_filled: bool,
+    ) {
+        let taker_status = self.storage.order_status_v2.at(taker_commit).read();
+        assert(
+            (taker_status == STATUS_OPEN) | (taker_status == STATUS_PARTIAL),
+            "taker order not active",
+        );
+        let maker_status = self.storage.order_status_v2.at(maker_commit).read();
+        assert(
+            (maker_status == STATUS_OPEN) | (maker_status == STATUS_PARTIAL),
+            "maker order not active",
+        );
+
+        let new_taker = if taker_filled { STATUS_FILLED } else { STATUS_PARTIAL };
+        let new_maker = if maker_filled { STATUS_FILLED } else { STATUS_PARTIAL };
+        self.storage.order_status_v2.at(taker_commit).write(new_taker);
+        self.storage.order_status_v2.at(maker_commit).write(new_maker);
+    }
+
     #[external("utility")]
     unconstrained fn get_order_count() -> pub u32 {
         self.storage.order_count.read()
