@@ -18,15 +18,16 @@
  *   3. The pinned aztec.js (v4.3.0) and the testnet node agree.
  *
  * What this does NOT do yet (Stage 6.5 follow-up):
- *   - Create / fund a Schnorr account via SponsoredFPC.
- *     Requires `@aztec/noir-contracts.js` to import the SponsoredFPC
- *     artifact; add to scripts/package.json then port the
- *     aztec-starter/src/utils/deploy_account.ts pattern.
  *   - Deploy any Fair Squares contract.
  *     Bootstrap-local-network.sh has to be ported to TS for testnet
  *     since aztec-wallet's --local-network flag does not apply on
  *     testnet, and the seed flow has to use a fresh SchnorrAccount
  *     instead of the canned test0/1/2 accounts.
+ *
+ * Related scripts:
+ *   - scripts/testnet-deploy-account.ts -- creates / reuses a Schnorr
+ *     account on testnet funded entirely via SponsoredFPC. Run this
+ *     first; addresses + secret are persisted to scripts/.testnet/.
  */
 
 import { createAztecNodeClient } from "@aztec/aztec.js/node";
@@ -78,10 +79,11 @@ async function main() {
     log("✅ Testnet PXE reachable and aztec.js v4.3.0 compatible.");
     log("");
     log("Next milestones (Stage 6.5):");
-    log(" 1. Add @aztec/noir-contracts.js to scripts/package.json");
-    log(" 2. Port scripts/bootstrap-local-network.sh deploy logic to TS");
-    log(" 3. Use SponsoredFeePaymentMethod (see aztec-starter pattern)");
-    log(" 4. Emit frontend/.env.testnet with the deployed contract addresses");
+    log(" 1. Run scripts/testnet-deploy-account.ts to bring up a Schnorr account");
+    log("    via SponsoredFPC (SPONSORED_FPC_ADDRESS env required).");
+    log(" 2. Port scripts/bootstrap-local-network.sh deploy logic to TS,");
+    log("    reusing the persisted testnet account.");
+    log(" 3. Emit frontend/.env.testnet with the deployed contract addresses.");
   } catch (err) {
     log(`❌ PXE call failed: ${err instanceof Error ? err.message : String(err)}`);
     log("");
