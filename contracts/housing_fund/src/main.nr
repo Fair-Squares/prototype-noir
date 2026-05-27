@@ -1,3 +1,5 @@
+mod test;
+
 use aztec::macros::aztec;
 
 /// HousingFund -- the core Fair Squares protocol contract.

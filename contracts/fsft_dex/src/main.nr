@@ -1,4 +1,5 @@
 pub mod order_intent_note;
+mod test;
 
 use aztec::macros::aztec;
 

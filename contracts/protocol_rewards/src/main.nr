@@ -1,4 +1,5 @@
 pub mod reward_claim_note;
+mod test;
 
 use aztec::macros::aztec;
 

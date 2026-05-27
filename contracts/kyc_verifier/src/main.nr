@@ -1,5 +1,7 @@
 pub mod credential_note;
 
+mod test;
+
 use aztec::macros::aztec;
 
 /// KYCVerifier - registry of KYC-verified addresses.
