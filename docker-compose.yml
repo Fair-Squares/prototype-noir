@@ -3,12 +3,24 @@
 # One-line deploy (full Aztec network + contracts + frontend):
 #   docker compose --profile aztec up
 #
-# This boots Anvil (L1) -> Aztec node (PXE) -> compiles & deploys all 5 Noir
-# contracts -> writes contract addresses to a shared volume -> starts the
+# This boots a single Aztec local-network container (which runs its OWN
+# automine Anvil L1 + Aztec node + PXE in-process) -> compiles & deploys all
+# Noir contracts -> writes contract addresses to a shared volume -> starts the
 # frontend with live Aztec connectivity.
 #
 # Frontend-only (simulation mode, no Aztec needed):
 #   docker compose --profile sim up
+#
+# WHY ONE SERVICE (and why it's fast):
+#   `aztec start --local-network` is designed to manage its own L1. The node
+#   ships an `AnvilTestWatcher` that, WHEN ANVIL IS IN AUTOMINE MODE, warps L1
+#   time to the next L2 slot ~2 s after a tx is pending -- giving near-instant
+#   blocks. The previous setup ran a SEPARATE anvil with `--block-time 12`
+#   (interval mining), which makes `isAutoMining()` return false, so the watcher
+#   never starts and every tx waits a full wall-clock slot (~22 s). Across ~22
+#   bootstrap txs that was ~10 min. Here the entrypoint starts `anvil` with NO
+#   `--block-time` (automine) in the same container, so the watcher kicks in and
+#   the whole bootstrap lands in well under a minute.
 
 x-aztec-image: &aztec-image aztecprotocol/aztec:4.3.0
 
@@ -31,11 +43,14 @@ services:
       # Contract addresses are still loaded from /env/.env.contracts.
       - NEXT_PUBLIC_AZTEC_PXE_URL=http://aztec:8080
       - NEXT_TELEMETRY_DISABLED=1
-      # Proverless when running the fast dev profile (.env.fast); the server-side
-      # EmbeddedWallet reads this and skips ClientIVC proof generation (~4s/tx).
-      - PXE_PROVER_ENABLED=${PXE_PROVER_ENABLED:-true}
+      # Proverless by default (a local network never needs client proofs); the
+      # server-side EmbeddedWallet reads this and skips ClientIVC proof
+      # generation (~4 s/tx). Override to true only for proving-realism tests.
+      - PXE_PROVER_ENABLED=${PXE_PROVER_ENABLED:-false}
       # Surface the live chain timing so /api/chain/params (Reference page)
-      # reflects the active profile's slot duration, not the baked-in default.
+      # reflects the network's slot duration. local-network uses the protocol
+      # default (36 s L2 / 12 s L1); with automine the watcher warps across it,
+      # so this is a DISPLAY value only -- it does not gate wall-clock speed.
       - AZTEC_SLOT_DURATION=${AZTEC_SLOT_DURATION:-36}
       - ETHEREUM_SLOT_DURATION=${ETHEREUM_SLOT_DURATION:-12}
     volumes:
@@ -79,98 +94,58 @@ services:
       retries: 6
       start_period: 15s
 
-  # -- Local Ethereum L1 (Anvil) -----------------------------------------------
-  anvil:
-    image: *aztec-image
-    profiles: ["aztec"]
-    # Anvil ships inside the Aztec image at /opt/foundry/bin/anvil — no
-    # separate foundry image needed.
-    # Keep Anvil quiet by default. Override with e.g. ANVIL_LOG_ARG=-v when debugging.
-    #
-    # IMPORTANT:
-    # ANVIL_BLOCK_TIME must match ETHEREUM_SLOT_DURATION on the aztec service.
-    # Default 6s = 1 L1 block per L2 slot (AZTEC_SLOT_DURATION=6), giving ~6s
-    # deploys instead of the upstream 72s default. Override both together if
-    # you change one.
-    entrypoint: ["/opt/foundry/bin/anvil", "--host", "0.0.0.0", "--port", "8545", "--chain-id", "31337", "--block-time", "${ANVIL_BLOCK_TIME:-12}", "${ANVIL_LOG_ARG:---quiet}"]
-    # NOTE: keep block-time at 12 s — matches default ETHEREUM_SLOT_DURATION. Going
-    # below 12 s makes the sequencer's per-slot INIT allowance shrink to <1 s
-    # which causes SequencerTooSlowError + tx mining timeouts in createLocalNetwork.
-    ports:
-      - "8545:8545"
-    healthcheck:
-      test: ["CMD", "/opt/foundry/bin/cast", "block-number", "--rpc-url", "http://localhost:8545"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 5s
-
-  # -- Aztec Local Network (PXE + Node) ----------------------------------------
+  # -- Aztec Local Network (automine L1 + Node + PXE, single container) ---------
+  # The image ENTRYPOINT is the raw node binary, which does NOT auto-start anvil
+  # (only the `aztec.sh` host wrapper does). So we replicate the wrapper's
+  # local-network preamble here: start an AUTOMINE anvil (no --block-time) and
+  # point the node at it via ETHEREUM_HOSTS=127.0.0.1. Automine is the whole
+  # ballgame -- it's what activates the node's slot-warping watcher.
   aztec:
     image: *aztec-image
     profiles: ["aztec"]
-    depends_on:
-      anvil:
-        condition: service_healthy
-    command: start --local-network
     ports:
       - "8080:8080"
+      # Expose the in-container L1 for debugging (cast block-number, etc.).
+      - "8545:8545"
     environment:
-      # Use info by default for readability; override with AZTEC_LOG_LEVEL=debug if needed.
-      LOG_LEVEL: ${AZTEC_LOG_LEVEL:-info}
-      ETHEREUM_HOSTS: http://anvil:8545
+      # info, but silence the per-slot sequencer chatter for readable logs
+      # (matches the host wrapper's local-network default).
+      LOG_LEVEL: ${AZTEC_LOG_LEVEL:-info;silent:sequencer}
       L1_CHAIN_ID: "31337"
-      # Forge L1 deployment can take longer with longer block times; keep retries resilient.
-      FORGE_BROADCAST_TIMEOUT: ${FORGE_BROADCAST_TIMEOUT:-180}
-      # ---- Local-network slot tuning (fast iteration) ----------------------
-      # Default upstream: ETHEREUM_SLOT_DURATION=12, AZTEC_SLOT_DURATION=72
-      # (= 6 L1 blocks / L2 slot, ~72 s per deploy).
-      # We use AZTEC_SLOT_DURATION=36 (3 L1 blocks / L2 slot, ~36 s per deploy)
-      # — the value used in the official upgrade tutorial:
-      # https://docs.aztec.network/developers/docs/tutorials/testing_governance_rollup_upgrade
-      # Faster slots (12 s or 6 s) cause `SequencerTooSlowError` because the
-      # sequencer's INIT phase allowance shrinks with the slot, leading to
-      # tx mining timeouts in createLocalNetwork. 36 s is the documented
-      # safe-fast value. aztecSlotDuration must remain a multiple of
-      # ethereumSlotDuration.
-      ETHEREUM_SLOT_DURATION: ${ETHEREUM_SLOT_DURATION:-12}
-      AZTEC_SLOT_DURATION: ${AZTEC_SLOT_DURATION:-36}
-      # Local-network forces epochDuration=2, so epoch = 72 s with 36 s slots.
-      # Shrink governance voting window from the upstream 3600 s default.
+      # Point the node at the automine anvil started in the entrypoint below.
+      ETHEREUM_HOSTS: http://127.0.0.1:8545
+      # Ship the prefunded test accounts (test0/test1/test2) on start.
+      TEST_ACCOUNTS: "true"
+      # Fast polling intervals -- copied from the `aztec.sh` local-network path
+      # so the node reacts to new txs/blocks within ~500 ms.
+      ARCHIVER_POLLING_INTERVAL_MS: "500"
+      P2P_BLOCK_CHECK_INTERVAL_MS: "500"
+      SEQ_TX_POLLING_INTERVAL_MS: "500"
+      WS_BLOCK_CHECK_INTERVAL_MS: "500"
+      ARCHIVER_VIEM_POLLING_INTERVAL_MS: "500"
+      # Proverless client/wallet (the node already runs realProofs=false on a
+      # local network). Saves ~4 s/tx of ClientIVC proving. Set true for realism.
+      PXE_PROVER_ENABLED: ${PXE_PROVER_ENABLED:-false}
+      # Governance demo timing: shrink the voting window + zero the exit delay.
       AZTEC_GOVERNANCE_VOTING_DURATION: ${AZTEC_GOVERNANCE_VOTING_DURATION:-300}
-      # Exit delay default is ~2 days; zero it out so any cleanup is instant.
       AZTEC_EXIT_DELAY_SECONDS: ${AZTEC_EXIT_DELAY_SECONDS:-0}
-      # ---- Proving (dev-speed lever) ---------------------------------------
-      # Generating a real ClientIVC proof costs ~4 s per tx. On a local network
-      # proofs are not required, so the fast dev profile (.env.fast) sets
-      # PXE_PROVER_ENABLED=false to run proverless. Default true keeps the
-      # node testnet-realistic. Node, bootstrap, and frontend must agree.
-      PXE_PROVER_ENABLED: ${PXE_PROVER_ENABLED:-true}
-      # ---- L1 checkpoint publishing headroom --------------------------------
-      # Upstream default (SequencerConfig) for the L1 publishing allowance is
-      # "1 L1 slot" = ETHEREUM_SLOT_DURATION = 12 s. Because we run Anvil with
-      # `--block-time 12` (interval mining, required so L1 advances at the
-      # ethereumSlotDuration cadence for `start --local-network`), a checkpoint
-      # tx waits for the next 12 s L1 block and often needs ~16 s to land —
-      # overrunning the 12 s allowance, which the sequencer treats as a failed
-      # checkpoint and prunes the block (dropping user txs). Give the publish
-      # phase 24 s of the 36 s L2 slot (2 L1 blocks of headroom), leaving 12 s
-      # for block building + attestation. Lower this if heavy blocks overrun.
-      SEQ_L1_PUBLISHING_TIME_ALLOWANCE_IN_SLOT: ${SEQ_L1_PUBLISHING_TIME_ALLOWANCE_IN_SLOT:-24}
-      # NOTE on block production: we deliberately leave the sequencer in its
-      # default on-demand mode (minTxsPerBlock=1, buildCheckpointIfEmpty=false,
-      # the upstream DefaultSequencerConfig). Forcing steady per-slot blocks via
-      # SEQ_MIN_TX_PER_BLOCK=0 + SEQ_BUILD_CHECKPOINT_IF_EMPTY=true was tried to
-      # make voting deadlines map to wall-clock time, but it makes the sequencer
-      # publish an L1 checkpoint every slot, which intermittently misses the
-      # slot window → "Publishing checkpoint failed" → blocks pruned → user txs
-      # dropped/reorged. On-demand is the stable config.
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -e
+        echo "[aztec] starting automine anvil (no --block-time) on :8545"
+        anvil --silent --host 0.0.0.0 --port 8545 &
+        echo "[aztec] waiting for L1..."
+        until cast block-number --rpc-url http://127.0.0.1:8545 >/dev/null 2>&1; do sleep 0.2; done
+        echo "[aztec] L1 up; launching local-network node + PXE"
+        exec node --no-warnings /usr/src/yarn-project/aztec/dest/bin/index.js start --local-network
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/status"]
-      interval: 15s
+      interval: 5s
       timeout: 10s
-      retries: 40
-      start_period: 300s
+      retries: 60
+      start_period: 120s
 
   # -- Bootstrap (compile + deploy contracts) -----------------------------------
   aztec-bootstrap:
@@ -183,18 +158,17 @@ services:
     environment:
       - AZTEC_NODE_URL=http://aztec:8080
       - PXE_URL=http://aztec:8080
-      # Proverless deploys when running the fast dev profile (.env.fast). The
-      # cli-wallet reads PXE_PROVER (value "none"), NOT PXE_PROVER_ENABLED, so
-      # set both: PXE_PROVER=none disables the cli-wallet's ClientIVC proving
-      # (~4s/tx across ~22 bootstrap txs). Empty default keeps proving on.
-      - PXE_PROVER_ENABLED=${PXE_PROVER_ENABLED:-true}
-      - PXE_PROVER=${PXE_PROVER:-}
+      # Proverless deploys by default. The cli-wallet reads PXE_PROVER (value
+      # "none"), NOT PXE_PROVER_ENABLED, so set both: PXE_PROVER=none disables
+      # the cli-wallet's ClientIVC proving (~4 s/tx across ~22 bootstrap txs).
+      - PXE_PROVER_ENABLED=${PXE_PROVER_ENABLED:-false}
+      - PXE_PROVER=${PXE_PROVER:-none}
       # Short governance voting window for the local demo: 5 blocks. Blocks are
       # produced on-demand (only when there are txs), so the window advances
       # with on-chain activity rather than wall-clock time.
       - GOVERNANCE_VOTING_WINDOW_BLOCKS=${GOVERNANCE_VOTING_WINDOW_BLOCKS:-5}
       # cli-wallet sets maxFeesPerGas = currentMinFees * (1 + MIN_FEE_PADDING).
-      # Too low (default 0.5) → fee spikes break deploys. Too high (1000) →
+      # Too low (default 0.5) -> fee spikes break deploys. Too high (1000) ->
       # wallet pre-reservation exceeds account fee-juice balance and we get
       # "Insufficient fee payer balance". 30 is the working baseline; the
       # bootstrap script auto-retries spikes that exceed it.
