@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { notFound, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, use, useCallback, useEffect, useState } from "react";
 import { DeedTab } from "@/components/governance/DeedTab";
 import { DistributionTab } from "@/components/governance/DistributionTab";
@@ -289,6 +289,11 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
 export default function ProposalDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const proposalId = Number.parseInt(id, 10);
+
+  // A non-numeric id (e.g. /governance/abc) is a 404, not a perpetual skeleton.
+  if (Number.isNaN(proposalId) || proposalId < 0) {
+    notFound();
+  }
 
   return (
     <Suspense
