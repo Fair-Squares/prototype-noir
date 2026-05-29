@@ -53,3 +53,9 @@ export type { ActionBarProps } from "./ActionBar";
 
 export { ProofRail } from "./ProofRail";
 export type { ProofRailProps, ProofRailItem } from "./ProofRail";
+
+export { Tooltip, InfoDot } from "./Tooltip";
+export type { TooltipProps, InfoDotProps } from "./Tooltip";
+
+export { AdvancedDetails } from "./AdvancedDetails";
+export type { AdvancedDetailsProps } from "./AdvancedDetails";

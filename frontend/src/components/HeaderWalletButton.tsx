@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useWallet } from "@/contexts/WalletContext";
 import { fetchKYCProfile } from "@/lib/contracts";
 
@@ -9,6 +9,7 @@ export default function HeaderWalletButton() {
     useWallet();
   const [showDropdown, setShowDropdown] = useState(false);
   const [isInvestor, setIsInvestor] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!activeAccount?.address) {
@@ -20,93 +21,109 @@ export default function HeaderWalletButton() {
       .catch(() => setIsInvestor(false));
   }, [activeAccount?.address]);
 
+  useEffect(() => {
+    if (!showDropdown) return;
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setShowDropdown(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowDropdown(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [showDropdown]);
+
   // ── Loading ───────────────────────────────────────────────────────────────
   if (status === "loading") {
     return (
-      <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-fs-anthracite/60 text-white text-[14px] font-semibold cursor-wait">
-        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+      <span className="btn btn-secondary btn-sm" data-loading="true" aria-busy="true">
+        <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>
         Loading…
-      </div>
+      </span>
     );
   }
 
   // ── No account selected ───────────────────────────────────────────────────
   if (!activeAccount) {
-    // If we have accounts loaded, show a picker immediately
     if (accounts.length > 0) {
       return (
-        <div className="relative">
+        <div className="relative" ref={ref}>
           <button
+            type="button"
+            aria-expanded={showDropdown}
+            aria-haspopup="menu"
             onClick={() => setShowDropdown((v) => !v)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-fs-anthracite text-white text-[14px] font-semibold hover:bg-fs-anthracite/90 transition-colors"
+            className="btn btn-primary btn-sm"
+            style={{ touchAction: "manipulation" }}
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
-            </svg>
-            Select Account
-            <svg className="w-3.5 h-3.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-            </svg>
+            Select account
+            <span aria-hidden="true" className="opacity-60">
+              ▾
+            </span>
           </button>
 
           {showDropdown && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowDropdown(false)} />
-              <div className="absolute right-0 mt-1.5 w-64 rounded-xl bg-white border border-border shadow-lg z-50 overflow-hidden">
-                <div className="px-4 py-2.5 border-b border-border">
-                  <p className="text-[12px] text-text-3 font-medium uppercase tracking-wide">
-                    Accounts
-                  </p>
-                </div>
-                {accounts.map((acc) => (
-                  <button
-                    key={acc.index}
-                    onClick={() => { connect(acc.index); setShowDropdown(false); }}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-bg transition-colors border-b border-border last:border-0"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-fs-mint flex items-center justify-center shrink-0">
-                      <span className="text-fs-teal-dark text-[12px] font-bold">{acc.alias[0].toUpperCase()}</span>
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[13px] font-semibold text-text-1">
-                        {acc.alias}
-                        {acc.isAdmin && <span className="ml-1.5 text-[11px] font-bold text-fs-teal bg-fs-mint px-1.5 py-0.5 rounded-full">admin</span>}
-                        {acc.isGenerated && <span className="ml-1.5 text-[11px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full">dev</span>}
-                      </p>
-                      <p className="text-[12px] text-text-3 font-mono truncate">{acc.address.slice(0, 16)}…{acc.address.slice(-6)}</p>
-                    </div>
-                  </button>
-                ))}
-                <div className="p-2 border-t border-border">
-                  <button
-                    onClick={() => {
-                      generateDevAccount();
-                      setShowDropdown(false);
-                    }}
-                    className="w-full rounded-lg border border-border px-3 py-2 text-left text-[12px] font-semibold text-text-2 hover:bg-bg"
-                  >
-                    Generate dev account
-                  </button>
-                </div>
+            <div role="menu" className="surface absolute right-0 z-50 mt-2 w-64 overflow-hidden p-0 shadow-sm">
+              <p className="text-label border-b border-border px-4 py-2.5">Accounts</p>
+              {accounts.map((acc) => (
+                <button
+                  key={acc.index}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    connect(acc.index);
+                    setShowDropdown(false);
+                  }}
+                  className="flex w-full items-center gap-3 border-b border-border px-4 py-3 text-left last:border-0 hover:bg-bg"
+                >
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-fs-mint text-[12px] font-bold text-fs-teal-dark">
+                    {acc.alias[0].toUpperCase()}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1.5 text-[13px] font-semibold text-text-1">
+                      {acc.alias}
+                      {acc.isAdmin && <span className="chip chip-accent">admin</span>}
+                      {acc.isGenerated && <span className="chip chip-warning">dev</span>}
+                    </span>
+                    <span className="text-mono block truncate text-[12px] text-text-3">
+                      {acc.address.slice(0, 16)}…{acc.address.slice(-6)}
+                    </span>
+                  </span>
+                </button>
+              ))}
+              <div className="border-t border-border p-2">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    generateDevAccount();
+                    setShowDropdown(false);
+                  }}
+                  className="btn btn-secondary btn-sm w-full"
+                >
+                  Generate dev account
+                </button>
               </div>
-            </>
+            </div>
           )}
         </div>
       );
     }
 
-    // Accounts not loaded yet — show connect button
     return (
       <button
+        type="button"
         onClick={() => connect(0)}
-        className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-fs-anthracite text-white text-[14px] font-semibold hover:bg-fs-anthracite/90 transition-colors"
+        className="btn btn-primary btn-sm"
+        style={{ touchAction: "manipulation" }}
       >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
-        </svg>
         Connect
       </button>
     );
@@ -116,93 +133,94 @@ export default function HeaderWalletButton() {
   const { address, alias, isAdmin } = activeAccount;
 
   return (
-    <div className="relative">
+    <div className="relative" ref={ref}>
       <button
+        type="button"
+        aria-expanded={showDropdown}
+        aria-haspopup="menu"
         onClick={() => setShowDropdown((v) => !v)}
-        className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-fs-mint border border-fs-teal/20 text-fs-teal-dark text-[14px] font-semibold hover:bg-fs-teal/10 transition-colors"
+        className="btn btn-secondary btn-sm"
+        style={{ touchAction: "manipulation" }}
       >
-        <span className="w-2 h-2 rounded-full bg-fs-teal inline-block" />
+        <span aria-hidden="true" className="inline-block h-2 w-2 rounded-full bg-fs-teal" />
         {alias}
-        {isAdmin && (
-          <span className="text-[9px] font-bold text-fs-teal bg-white/60 px-1 py-0.5 rounded">admin</span>
-        )}
-        {activeAccount.isGenerated && (
-          <span className="text-[9px] font-bold text-amber-700 bg-white/70 px-1 py-0.5 rounded">dev</span>
-        )}
-        {isInvestor && (
-          <span className="text-[9px] font-bold text-blue-700 bg-white/70 px-1 py-0.5 rounded">investor</span>
-        )}
-        <svg className="w-3.5 h-3.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-        </svg>
+        {isAdmin && <span className="chip chip-accent">admin</span>}
+        {activeAccount.isGenerated && <span className="chip chip-warning">dev</span>}
+        {isInvestor && <span className="chip chip-accent">investor</span>}
+        <span aria-hidden="true" className="opacity-60">
+          ▾
+        </span>
       </button>
 
       {showDropdown && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setShowDropdown(false)} />
-          <div className="absolute right-0 mt-1.5 w-64 rounded-xl bg-white border border-border shadow-lg z-50 overflow-hidden">
-            {/* Active address */}
-            <div className="px-4 py-3 border-b border-border">
-              <p className="text-[12px] text-text-3 font-medium uppercase tracking-wide mb-1">Active address</p>
-              <p className="text-[13px] font-mono text-text-2 break-all">{address}</p>
-            </div>
-
-            {/* Switch account */}
-            {accounts.length > 1 && (
-              <div className="px-4 py-2 border-b border-border">
-                <p className="text-[12px] text-text-3 font-medium uppercase tracking-wide mb-1.5">Switch account</p>
-                <div className="space-y-1">
-                  {accounts.map((acc) => (
-                    <button
-                      key={acc.index}
-                      onClick={() => { switchAccount(acc.index); setShowDropdown(false); }}
-                      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-left transition-colors ${
-                        acc.index === activeAccount.index
-                          ? "bg-fs-mint text-fs-teal-dark font-semibold"
-                          : "text-text-2 hover:bg-bg"
-                      }`}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full ${acc.index === activeAccount.index ? "bg-fs-teal" : "bg-gray-300"}`} />
-                      {acc.alias}
-                      {acc.isGenerated && (
-                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-700">dev</span>
-                      )}
-                      <span className="ml-auto font-mono opacity-50">…{acc.address.slice(-6)}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="px-4 py-2 border-b border-border">
-              <button
-                onClick={() => {
-                  generateDevAccount();
-                  setShowDropdown(false);
-                }}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-text-2 hover:bg-bg hover:text-text-1 transition-colors"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-                Generate dev account
-              </button>
-            </div>
-
-            {/* Disconnect */}
-            <div className="px-4 py-2">
-              <button
-                onClick={() => { disconnect(); setShowDropdown(false); }}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-text-2 hover:bg-bg hover:text-text-1 transition-colors"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15m-3 0-3-3m0 0 3-3m-3 3H15" />
-                </svg>
-                Deselect account
-              </button>
-            </div>
+        <div role="menu" className="surface absolute right-0 z-50 mt-2 w-64 overflow-hidden p-0 shadow-sm">
+          <div className="border-b border-border px-4 py-3">
+            <p className="text-label mb-1">Active address</p>
+            <p className="text-mono break-all text-[13px] text-text-2">{address}</p>
           </div>
-        </>
+
+          {accounts.length > 1 && (
+            <div className="border-b border-border px-4 py-2">
+              <p className="text-label mb-1.5">Switch account</p>
+              <div className="space-y-1">
+                {accounts.map((acc) => (
+                  <button
+                    key={acc.index}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      switchAccount(acc.index);
+                      setShowDropdown(false);
+                    }}
+                    className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] transition-colors ${
+                      acc.index === activeAccount.index
+                        ? "bg-fs-mint font-semibold text-fs-teal-dark"
+                        : "text-text-2 hover:bg-bg"
+                    }`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        acc.index === activeAccount.index ? "bg-fs-teal" : "bg-border-strong"
+                      }`}
+                    />
+                    {acc.alias}
+                    {acc.isGenerated && <span className="chip chip-warning">dev</span>}
+                    <span className="text-mono ml-auto opacity-50">…{acc.address.slice(-6)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="border-b border-border px-4 py-2">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                generateDevAccount();
+                setShowDropdown(false);
+              }}
+              className="w-full rounded-md px-2 py-1.5 text-left text-[12px] text-text-2 transition-colors hover:bg-bg hover:text-text-1"
+            >
+              Generate dev account
+            </button>
+          </div>
+
+          <div className="px-4 py-2">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                disconnect();
+                setShowDropdown(false);
+              }}
+              className="w-full rounded-md px-2 py-1.5 text-left text-[12px] text-text-2 transition-colors hover:bg-bg hover:text-text-1"
+            >
+              Deselect account
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
