@@ -79,6 +79,43 @@ in_defi/allocated/is_paused→7/8/9/37) · [x] re-enable DEX matching (match_ord
 authwit Token.transfer_private_to_private) · [x] tsc 0 errors, 0 residual stale refs ·
 [x] seed-v2-deposit.ts deposit-cursor params · [x] .env.local.example dripper/property keys.
 
+## Runtime verification (local network, 2026-05-29)
+
+Verified on a proverless local network (`docker compose --env-file .env.fast --profile aztec`):
+
+- **Bootstrap (deploy gate):** all contracts deployed in the immutable-minter order,
+  `set_protocol_token` wired, EUR dripped, artifacts regenerated — `revertCode:0` throughout.
+- **Live reads:** every `/api/*` route returns `source:"live"` with correct values (fund stats,
+  tokens, kyc, portfolio, governance, rewards, dex, property). Storage-slot reads correct
+  (FSFT `total_supply`→slot 8; HousingFund `total_deposits/in_defi/allocated/is_paused`→7/8/9/37).
+- **Deposit:** `deposit_private` (FIFO cursor + supplied-then-verified tail) → `total_deposits` bumped.
+- **Governance → claim (headline):** create → 2× secret-ballot vote → finalize → execute →
+  `open_distribution` (PropertyNFT deed minted) → claim. The FIFO + small-floor allocation minted
+  **exactly** the predicted shares: early depositor `[0,5000)` → 887 (700 FIFO + 187 floor); late
+  depositor `[5000,8000)` (past `fifo_cap`) → 112 (floor only); total 999 ≤ pool 1000 (1 dust,
+  matching the no-over-mint proof). Double-claim rejected.
+- **Faucet:** EUR Dripper drip works. **UI pages:** all render (200, live content).
+- **DEX:** `place_order_private` works; `match_order_private` executes the AIP-20 authwit
+  `transfer_private_to_private` settlement legs correctly (reverts only on the taker's missing
+  *private* EUR — correct precondition, proving the path).
+
+Three bugs found + fixed during verification (commit after e944e77): `fund/tokens` raw slot 2→8;
+`dex/match` maker-intent read `from`; `seed-v2-deposit` missing `signingKey` (wrong-account cause of
+the non-fatal seed-deposit failure).
+
+## Known follow-ups (do not block the live app)
+
+- **DEX green-match needs private EUR.** The private-intents DEX settles over *private* balances;
+  a taker funded only with public (dripped) EUR must shield first (`transfer_public_to_private`).
+  Recommend adding a "shield EUR" UI action/route. The settlement path itself is verified.
+- **Simulation-mode parity.** The Vercel-only `simulationStore` demo path still models the old flat
+  pro-rata distribution, not FIFO+floor. The live/local app is unaffected (it uses real contracts).
+- **`sweep_dust` (optional).** `d_dust` is computed for audit at `open_distribution`, but no admin
+  sweep of the undistributed remainder exists; the dust is simply never minted (conservative).
+- **Host `scripts/` `@aztec` version skew.** Standalone host scripts (e.g. a shield helper) hit a
+  newer-oracle / different-account-derivation mismatch vs the 4.3.0 docker image; run such helpers
+  in-container or refresh `scripts/node_modules` to 4.3.0.
+
 ## Verification notes
 
 - All 5 V2 contracts compile under `aztec compile` and pass `aztec test` (host CLI, v4.3.0).
