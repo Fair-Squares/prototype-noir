@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
     if (housingFundAddr && fundTokenAddr) {
       const [HfArtifactJson, FtArtifactJson] = await Promise.all([
         loadGeneratedArtifactJson("housing_fund-HousingFund.json"),
-        loadGeneratedArtifactJson("fund_token-FundToken.json"),
+        loadGeneratedArtifactJson("token_contract-Token.json"),
       ]);
       const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
       const ftArtifact = loadContractArtifact(FtArtifactJson as Parameters<typeof loadContractArtifact>[0]);
@@ -121,13 +121,13 @@ export async function GET(request: NextRequest) {
         await hfContract.methods.get_my_deposit_notes(userAddress, 0).simulate({ from: readFrom })
       );
       hasDepositTicket = depositNotesResult.len > 0n;
-      // FSFT exposure still uses fund_token's public/private balance checks
-      // (FundToken V2 is staged for a later cleanup pass).
-      const [fsftPublicBalance, hasPrivateHolderProof] = await Promise.all([
-        ftContract.methods.public_balance_of(userAddress).simulate({ from: readFrom }),
-        ftContract.methods.has_private_holder_proof(userAddress).simulate({ from: readFrom }),
-      ]);
-      hasFsftExposure = Number(simResult(fsftPublicBalance)) > 0 || Boolean(simResult(hasPrivateHolderProof));
+      // FSFT exposure uses the AIP-20 token's public balance check. The V2
+      // token has no private-holder-proof primitive, so exposure is the
+      // public balance alone.
+      const fsftPublicBalance = await ftContract.methods
+        .balance_of_public(userAddress)
+        .simulate({ from: readFrom });
+      hasFsftExposure = Number(simResult(fsftPublicBalance)) > 0;
     }
     const canVote = Boolean(isInvestor) && (hasDepositTicket || hasFsftExposure);
     const voteEligibilityReason = !Boolean(isInvestor)

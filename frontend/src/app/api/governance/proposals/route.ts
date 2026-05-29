@@ -124,7 +124,10 @@ export async function GET(request: NextRequest) {
         const distribution = simResult<{
           open: boolean;
           amount: bigint;
-          total_deposits_snapshot: bigint;
+          snapshot_total: bigint;
+          small_total: bigint;
+          small_pool: bigint;
+          fifo_cap: bigint;
           claimed_total: bigint;
         }>(await hfContract.methods.get_distribution_status(id).simulate({ from }));
         const distributionOpened = Boolean(distribution.open);
@@ -132,21 +135,50 @@ export async function GET(request: NextRequest) {
           toBigIntStrict(distribution.amount, `HousingFund.get_distribution_status(${id}).amount`)
         );
         const distributionSnapshotDeposits = Number(
-          toBigIntStrict(distribution.total_deposits_snapshot, `HousingFund.get_distribution_status(${id}).snapshot_total`)
+          toBigIntStrict(distribution.snapshot_total, `HousingFund.get_distribution_status(${id}).snapshot_total`)
         );
         const distributionClaimed = Number(
           toBigIntStrict(distribution.claimed_total, `HousingFund.get_distribution_status(${id}).claimed_total`)
         );
 
+        // V2: public claims are PER deposit record (by global seq). Aggregate
+        // the requesting investor's public records: claimableAmount is the sum
+        // of the still-unclaimed per-record shares; hasClaimed is true only
+        // once EVERY one of their records has been claimed for this proposal.
         let hasClaimed = false;
         let claimableAmount = 0;
         if (requestedAddress) {
-          hasClaimed = Boolean(
-            simResult(await hfContract.methods.has_claimed(id, requestedAddress).simulate({ from }))
+          const recordCount = Number(
+            toBigIntStrict(
+              simResult(await hfContract.methods.get_my_deposit_record_count(requestedAddress).simulate({ from })),
+              `HousingFund.get_my_deposit_record_count(${id})`
+            )
           );
-          claimableAmount = Number(
-            simResult(await hfContract.methods.get_claimable_amount(id, requestedAddress).simulate({ from }))
-          );
+          if (recordCount > 0) {
+            let allClaimed = true;
+            for (let index = 0; index < recordCount; index += 1) {
+              const record = simResult<{
+                seq: bigint;
+                amount: bigint;
+                cum_before: bigint;
+                is_small: boolean;
+              }>(await hfContract.methods.get_my_deposit_record(requestedAddress, index).simulate({ from }));
+              const seq = toBigIntStrict(record.seq, `HousingFund.get_my_deposit_record(${id},${index}).seq`);
+              const recordClaimed = Boolean(
+                simResult(await hfContract.methods.has_claimed(id, requestedAddress, seq).simulate({ from }))
+              );
+              if (!recordClaimed) {
+                allClaimed = false;
+                claimableAmount += Number(
+                  toBigIntStrict(
+                    simResult(await hfContract.methods.get_claimable_amount(id, requestedAddress, seq).simulate({ from })),
+                    `HousingFund.get_claimable_amount(${id},${seq})`
+                  )
+                );
+              }
+            }
+            hasClaimed = allClaimed;
+          }
         }
 
         return {

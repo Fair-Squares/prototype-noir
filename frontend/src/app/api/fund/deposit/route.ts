@@ -109,8 +109,23 @@ export async function POST(request: NextRequest) {
       wallet
     );
 
+    // Read the public deposit cursor so we can stamp the private deposit with
+    // its immutable FIFO interval, global seq, and frozen small bit. The
+    // contract's only_self tail equality-asserts these against the live public
+    // cursors, so a stale read (or concurrent deposit) reverts the whole tx.
+    const cursor = simResult<{
+      cum_deposits: bigint;
+      cum_small_deposits: bigint;
+      deposit_seq: bigint;
+      small_threshold: bigint;
+    }>(await hfContract.methods.get_deposit_cursor_unconstrained().simulate({ from: accountAddress }));
+    const amountU128 = BigInt(amount);
+    const suppliedCumBefore = cursor.cum_deposits;
+    const suppliedSeq = cursor.deposit_seq;
+    const suppliedIsSmall = amountU128 <= cursor.small_threshold;
+
     const receipt = await hfContract.methods
-      .deposit_private(BigInt(amount), hintedKycNote)
+      .deposit_private(amountU128, hintedKycNote, suppliedCumBefore, suppliedSeq, suppliedIsSmall)
       .send({ from: accountAddress });
     const deposit = getAztecTxMeta(receipt);
 

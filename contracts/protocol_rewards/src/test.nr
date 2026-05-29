@@ -8,15 +8,15 @@ use aztec::{protocol::address::AztecAddress, test::helpers::test_environment::Te
 unconstrained fn setup() -> (TestEnvironment, AztecAddress, AztecAddress) {
     let mut env = TestEnvironment::new();
     let admin = env.create_light_account();
-    let protocol_token = env.create_light_account();
     let fsft_token = env.create_light_account();
     let housing_fund = env.create_light_account();
     let governance = env.create_light_account();
     let kyc_verifier = env.create_light_account();
 
+    // protocol_token is wired post-deploy via set_protocol_token (the AIP-20
+    // minter is immutable, so the token must be deployed after this contract).
     let initializer_call = ProtocolRewards::interface().constructor(
         admin,
-        protocol_token,
         fsft_token,
         housing_fund,
         governance,

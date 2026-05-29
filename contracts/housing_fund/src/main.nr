@@ -4,21 +4,33 @@ use aztec::macros::aztec;
 
 /// HousingFund -- the core Fair Squares protocol contract.
 ///
-/// PUBLIC state: total deposits, total in DeFi, total allocated, pause status
-/// PRIVATE state (V2 additive): per-user DepositNotes in each owner's PXE.
+/// PUBLIC state: total deposits, total in DeFi, total allocated, pause status,
+/// and the FIFO/allocation cursors (cum_deposits, cum_small_deposits,
+/// deposit_seq) + per-deposit public records.
+/// PRIVATE state (V2): per-user DepositNotes in each owner's PXE, each carrying
+/// its immutable FIFO interval (cum_before), global seq, and frozen is_small bit.
 ///
-/// Flow:
-///   - Legacy public deposit(amount) -- keeps the per-user deposit_tickets
-///     map; used by V1 frontend paths.
-///   - V2 private deposit_private(amount, hinted_kyc_note) -- proves the
-///     caller holds a valid KycCredentialNote via assert_note_existed_by,
-///     mints a DepositNote to the caller's PXE, enqueues an only_self
-///     _record_deposit_private(amount) so the public total_deposits
-///     counter is updated WITHOUT the user's address crossing the boundary.
+/// Phase 3: FSFT is the vendored AIP-20 `Token` (this fund is its immutable
+/// minter). FSFT is minted only when a property is voted in (executed proposal)
+/// and the distribution is claimed, allocated by a FIFO + small-depositor-floor
+/// scheme rather than flat pro-rata:
+///   - small_pool = 30% of the pool, pro-rata among small depositors
+///     (amount <= small_threshold), and
+///   - fifo_pool = 70% of the pool, filled earliest-deposit-first (1:1 over the
+///     deposit's FIFO interval [cum_before, cum_before+amount)) until exhausted.
+/// Each claimant's share is an order-independent pure function of their own
+/// immutable deposit data + the per-proposal snapshots, so permissionless
+/// arbitrary-order claims can never over-mint (Sum of claims <= pool).
+///
+/// Privacy note: a private deposit's public tail leaks (a) its exact amount as
+/// the cum_deposits aggregate delta -- which already leaked pre-Phase-3 -- and
+/// (b) ONE bit (small vs large) via whether cum_small_deposits moves. The
+/// caller's address never crosses the private/public boundary. This one-bit
+/// aggregate leak is an accepted trade-off for the prototype.
 #[aztec]
 pub contract HousingFund {
     use deposit_note::DepositNote;
-    use fund_token::FundToken;
+    use token_contract::Token;
     use governance::Governance;
     use kyc_verifier::{KYCVerifier, credential_note::KycCredentialNote};
     use nft_contract::NFT;
@@ -38,11 +50,16 @@ pub contract HousingFund {
         protocol::{
             address::AztecAddress,
             hash::poseidon2_hash,
-            traits::{Deserialize, Serialize, ToField},
+            traits::{Deserialize, Packable, Serialize, ToField},
         },
         state_vars::{Map, Owned, PrivateSet, PublicMutable, SingleUseClaim, StateVariable},
         utils::array,
     };
+
+    // Default "small depositor" cutoff (in whole EUR units). Configurable by admin.
+    global DEFAULT_SMALL_THRESHOLD: u128 = 10000;
+    // Allocation split: 30% reserved for the small-depositor pool, 70% FIFO.
+    global SMALL_POOL_BPS: u128 = 3000;
 
     #[derive(Serialize, Deserialize)]
     pub struct FundStatsView {
@@ -60,12 +77,44 @@ pub contract HousingFund {
         pub last_valuation_block: u32,
     }
 
+    // Per-proposal distribution snapshot, all in u128 FSFT units.
     #[derive(Serialize, Deserialize)]
     pub struct DistributionStatus {
         pub open: bool,
-        pub amount: u64,
-        pub total_deposits_snapshot: u64,
-        pub claimed_total: u64,
+        pub amount: u128,
+        pub snapshot_total: u128,
+        pub small_total: u128,
+        pub small_pool: u128,
+        pub fifo_cap: u128,
+        pub claimed_total: u128,
+    }
+
+    // The public deposit/allocation cursors a PXE caller must read to supply the
+    // stamping params for a private deposit (supplied-then-verified).
+    #[derive(Serialize, Deserialize)]
+    pub struct DepositCursor {
+        pub cum_deposits: u128,
+        pub cum_small_deposits: u128,
+        pub deposit_seq: u64,
+        pub small_threshold: u128,
+    }
+
+    // Public-path per-deposit record (the FIFO claim basis on the public path).
+    #[derive(Serialize, Deserialize, Packable, Eq)]
+    pub struct DepositRecord {
+        pub owner: AztecAddress,
+        pub amount: u128,
+        pub cum_before: u128,
+        pub is_small: bool,
+    }
+
+    // A user-facing view of one public deposit record (with its global seq).
+    #[derive(Serialize, Deserialize)]
+    pub struct DepositRecordView {
+        pub seq: u64,
+        pub amount: u128,
+        pub cum_before: u128,
+        pub is_small: bool,
     }
 
     #[derive(Serialize, Deserialize)]
@@ -86,11 +135,25 @@ pub contract HousingFund {
         // AIP-721 property-deed NFT (this fund is its minter). Optional: when
         // unset, distribution still works and no deed is minted.
         property_nft: PublicMutable<AztecAddress, Context>,
-        // Fund accounting (all public -- transparent to investors)
+        // Fund accounting (all public -- transparent to investors). total_deposits
+        // is NET of withdrawals and bounds available balance.
         total_deposits: PublicMutable<u64, Context>,
         total_in_defi: PublicMutable<u64, Context>,
         total_allocated: PublicMutable<u64, Context>,
-        // Investor deposit tickets (on-chain, later moved to private notes)
+        // FIFO / allocation cursors (gross, monotonic, u128, NEVER decremented).
+        // cum_deposits gives every deposit its immutable FIFO interval; the
+        // small/threshold cursor feeds the small-pool denominator.
+        small_threshold: PublicMutable<u128, Context>,
+        cum_deposits: PublicMutable<u128, Context>,
+        cum_small_deposits: PublicMutable<u128, Context>,
+        deposit_seq: PublicMutable<u64, Context>,
+        // Public-path per-deposit records, keyed poseidon2([owner, seq]).
+        deposit_records: Map<Field, PublicMutable<DepositRecord, Context>, Context>,
+        // Per-user enumeration of public deposit seqs so a caller can list their
+        // claimable records: count + indexed seq map keyed poseidon2([owner, idx]).
+        user_deposit_count: Map<AztecAddress, PublicMutable<u32, Context>, Context>,
+        user_deposit_seq: Map<Field, PublicMutable<u64, Context>, Context>,
+        // Investor deposit tickets (aggregate; used for legacy public withdraw).
         investor_count: PublicMutable<u32, Context>,
         investor_index: Map<Field, PublicMutable<AztecAddress, Context>, Context>,
         investor_seen: Map<AztecAddress, PublicMutable<bool, Context>, Context>,
@@ -105,23 +168,71 @@ pub contract HousingFund {
         parked_target_bps: PublicMutable<u32, Context>,
         parked_min_bps: PublicMutable<u32, Context>,
         parked_max_bps: PublicMutable<u32, Context>,
-        // Proposal distribution snapshots
+        // Per-proposal distribution snapshots (all u128 FSFT units).
         d_open: Map<Field, PublicMutable<bool, Context>, Context>,
-        d_amount: Map<Field, PublicMutable<u64, Context>, Context>,
-        d_total_deposits_snapshot: Map<Field, PublicMutable<u64, Context>, Context>,
-        d_claimed_total: Map<Field, PublicMutable<u64, Context>, Context>,
-        d_has_claimed: Map<Field, PublicMutable<bool, Context>, Context>,
+        d_amount: Map<Field, PublicMutable<u128, Context>, Context>,
+        d_snapshot_total: Map<Field, PublicMutable<u128, Context>, Context>,
+        d_small_total: Map<Field, PublicMutable<u128, Context>, Context>,
+        d_small_pool: Map<Field, PublicMutable<u128, Context>, Context>,
+        d_fifo_cap: Map<Field, PublicMutable<u128, Context>, Context>,
+        d_claimed_total: Map<Field, PublicMutable<u128, Context>, Context>,
+        // Structural undistributable dust at open (audit; fifo under-subscription
+        // + the whole small_pool when there are no small depositors).
+        d_dust: Map<Field, PublicMutable<u128, Context>, Context>,
+        // Public-path anti-double-claim, keyed poseidon2([owner, seq, proposal_id]).
+        d_record_has_claimed: Map<Field, PublicMutable<bool, Context>, Context>,
         // Emergency pause
         is_paused: PublicMutable<bool, Context>,
         // V2 private deposits: each owner's PXE holds their own DepositNote set.
         deposit_notes: Owned<PrivateSet<DepositNote, Context>, Context>,
         // V2 nullifiers per (poseidon2_hash([note_hash, proposal_id]), owner)
-        // for claim_distribution_private -- caller can claim once per
-        // (deposit_note, proposal) pair.
+        // for claim_distribution_private -- claim once per (deposit_note, proposal).
         d_claim_nullifiers: Map<Field, Owned<SingleUseClaim<Context>, Context>, Context>,
-        // V2 nullifiers per (note_hash, owner) for withdraw_private -- after
-        // a withdraw the note is permanently consumed.
+        // V2 nullifiers per (note_hash, owner) for withdraw_private.
         w_withdraw_nullifiers: Map<Field, Owned<SingleUseClaim<Context>, Context>, Context>,
+    }
+
+    // ====================================================================
+    // Allocation math -- one shared, order-independent, integer-exact set of
+    // pure functions used identically by the public and private claim paths.
+    // ====================================================================
+
+    // FIFO share: the 1:1 overlap of this deposit's interval [cum_before,
+    // cum_before+amount) with the FIFO window [0, fifo_cap). No division -> exact.
+    #[contract_library_method]
+    fn fifo_share(cum_before: u128, amount: u128, fifo_cap: u128) -> u128 {
+        let hi = cum_before + amount;
+        if cum_before >= fifo_cap {
+            0
+        } else {
+            let capped_hi = if hi < fifo_cap { hi } else { fifo_cap };
+            capped_hi - cum_before
+        }
+    }
+
+    // Small-pool share: pro-rata among small depositors. Floors down; guarded
+    // against an empty small population (no div-by-zero, no share).
+    #[contract_library_method]
+    fn small_share(amount: u128, is_small: bool, small_pool: u128, small_total: u128) -> u128 {
+        if !is_small | (small_total == 0) {
+            0
+        } else {
+            (small_pool * amount) / small_total
+        }
+    }
+
+    // A small early depositor earns BOTH the floor and the FIFO share.
+    #[contract_library_method]
+    fn total_claim(
+        amount: u128,
+        cum_before: u128,
+        is_small: bool,
+        small_pool: u128,
+        small_total: u128,
+        fifo_cap: u128,
+    ) -> u128 {
+        fifo_share(cum_before, amount, fifo_cap)
+            + small_share(amount, is_small, small_pool, small_total)
     }
 
     #[initializer]
@@ -132,6 +243,10 @@ pub contract HousingFund {
         self.storage.total_deposits.write(0);
         self.storage.total_in_defi.write(0);
         self.storage.total_allocated.write(0);
+        self.storage.small_threshold.write(DEFAULT_SMALL_THRESHOLD);
+        self.storage.cum_deposits.write(0);
+        self.storage.cum_small_deposits.write(0);
+        self.storage.deposit_seq.write(0);
         self.storage.investor_count.write(0);
         self.storage.last_asset_sale_price.write(0);
         self.storage.last_fsft_minted.write(0);
@@ -167,6 +282,14 @@ pub contract HousingFund {
         self.storage.property_nft.write(property_nft);
     }
 
+    // Admin-only: adjust the small-depositor cutoff. Only affects FUTURE
+    // deposits -- each deposit's is_small bit is frozen at deposit time.
+    #[external("public")]
+    fn set_small_threshold(threshold: u128) {
+        assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
+        self.storage.small_threshold.write(threshold);
+    }
+
     // -- Core operations --------------------------------------------------
 
     #[external("public")]
@@ -178,6 +301,40 @@ pub contract HousingFund {
         let is_investor = self.view(kyc_contract.is_investor(caller));
         assert(is_investor, "investor role required");
 
+        let amount_u128 = amount as u128;
+
+        // Stamp the deposit's immutable FIFO interval + frozen small bit, and
+        // write a per-deposit public record (the claim basis for the public path).
+        let cum_before = self.storage.cum_deposits.read();
+        let seq = self.storage.deposit_seq.read();
+        let threshold = self.storage.small_threshold.read();
+        let is_small = amount_u128 <= threshold;
+
+        let rec_key = poseidon2_hash([caller.to_field(), seq as Field]);
+        self.storage.deposit_records.at(rec_key).write(DepositRecord {
+            owner: caller,
+            amount: amount_u128,
+            cum_before,
+            is_small,
+        });
+
+        // Per-user enumeration so a caller can list their public records.
+        let dcount = self.storage.user_deposit_count.at(caller).read();
+        self.storage.user_deposit_seq.at(poseidon2_hash([caller.to_field(), dcount as Field])).write(
+            seq,
+        );
+        self.storage.user_deposit_count.at(caller).write(dcount + 1);
+
+        // Advance the global cursors.
+        self.storage.cum_deposits.write(cum_before + amount_u128);
+        if is_small {
+            self.storage.cum_small_deposits.write(
+                self.storage.cum_small_deposits.read() + amount_u128,
+            );
+        }
+        self.storage.deposit_seq.write(seq + 1);
+
+        // Legacy aggregate ticket + investor registry (used by public withdraw).
         let previous_ticket = self.storage.deposit_tickets.at(caller).read();
         if previous_ticket == 0 {
             if !self.storage.investor_seen.at(caller).read() {
@@ -210,6 +367,11 @@ pub contract HousingFund {
         let updated_ticket = ticket - amount;
         self.storage.deposit_tickets.at(caller).write(updated_ticket);
         self.storage.total_deposits.write(deposits - amount);
+        // NOTE: cum_deposits is monotonic (FIFO axis) and is NOT rolled back on
+        // withdraw; nor are the public deposit_records retracted. A public
+        // depositor who withdraws can still hold claim records for the FIFO
+        // position they originally took -- a known prototype limitation of the
+        // legacy public path. The canonical privacy path nullifies the note.
     }
 
     // -- DeFi management --------------------------------------------------
@@ -298,10 +460,31 @@ pub contract HousingFund {
         assert(proposal_amount <= available, "insufficient available balance");
 
         self.storage.total_allocated.write(allocated + proposal_amount);
+
+        // Distribution snapshot. proposal_amount is u64, so pool fits u64 (no
+        // overflow guard needed); all allocation math is u128.
+        let pool = proposal_amount as u128;
+        let snapshot_total = self.storage.cum_deposits.read();
+        assert(snapshot_total > 0, "no deposits to distribute");
+        let small_total = self.storage.cum_small_deposits.read();
+        let small_pool = (pool * SMALL_POOL_BPS) / 10000;
+        let fifo_pool = pool - small_pool;
+        let fifo_cap = fifo_pool;
+
+        // Structural dust (audit): FIFO under-subscription + whole small_pool if
+        // there are no small depositors.
+        let fifo_filled = if snapshot_total < fifo_cap { snapshot_total } else { fifo_cap };
+        let fifo_dust = fifo_cap - fifo_filled;
+        let small_dust_max = if small_total == 0 { small_pool } else { 0 };
+
         self.storage.d_open.at(pid).write(true);
-        self.storage.d_amount.at(pid).write(proposal_amount);
-        self.storage.d_total_deposits_snapshot.at(pid).write(deposits);
+        self.storage.d_amount.at(pid).write(pool);
+        self.storage.d_snapshot_total.at(pid).write(snapshot_total);
+        self.storage.d_small_total.at(pid).write(small_total);
+        self.storage.d_small_pool.at(pid).write(small_pool);
+        self.storage.d_fifo_cap.at(pid).write(fifo_cap);
         self.storage.d_claimed_total.at(pid).write(0);
+        self.storage.d_dust.at(pid).write(fifo_dust + small_dust_max);
 
         // Issue-time pricing snapshot: used as reference, not hard peg.
         self.storage.last_asset_sale_price.write(proposal_amount);
@@ -321,37 +504,38 @@ pub contract HousingFund {
         }
     }
 
+    // Public claim for a SPECIFIC deposit record (identified by its global seq).
+    // A multi-deposit public investor claims once per (seq, proposal).
     #[external("public")]
-    fn claim_distribution(proposal_id: u32) {
+    fn claim_distribution(proposal_id: u32, seq: u64) {
         let pid = proposal_id as Field;
         assert(self.storage.d_open.at(pid).read(), "distribution is not open");
 
         let caller = self.msg_sender();
-        let claim_key = poseidon2_hash([caller.to_field(), pid]);
-        assert(!self.storage.d_has_claimed.at(claim_key).read(), "already claimed");
+        let rec_key = poseidon2_hash([caller.to_field(), seq as Field]);
+        let rec = self.storage.deposit_records.at(rec_key).read();
+        assert(rec.owner == caller, "no deposit record for caller/seq");
+        assert(rec.amount > 0, "empty deposit record");
 
-        let snapshot_total = self.storage.d_total_deposits_snapshot.at(pid).read();
-        assert(snapshot_total > 0, "invalid distribution snapshot");
+        let claim_key = poseidon2_hash([caller.to_field(), seq as Field, pid]);
+        assert(!self.storage.d_record_has_claimed.at(claim_key).read(), "already claimed");
 
-        let ticket = self.storage.deposit_tickets.at(caller).read();
-        assert(ticket > 0, "no deposit ticket");
+        let small_pool = self.storage.d_small_pool.at(pid).read();
+        let small_total = self.storage.d_small_total.at(pid).read();
+        let fifo_cap = self.storage.d_fifo_cap.at(pid).read();
+        let claim = total_claim(rec.amount, rec.cum_before, rec.is_small, small_pool, small_total, fifo_cap);
+        assert(claim > 0, "nothing to claim");
 
-        let distribution_amount = self.storage.d_amount.at(pid).read();
-        let raw_claim = (distribution_amount * ticket) / snapshot_total;
-        assert(raw_claim > 0, "claim amount is zero");
-
+        // Fail-closed ceiling -- mathematically guaranteed by interval tiling.
         let claimed_total = self.storage.d_claimed_total.at(pid).read();
-        assert(claimed_total < distribution_amount, "distribution exhausted");
+        let pool = self.storage.d_amount.at(pid).read();
+        assert(claimed_total + claim <= pool, "distribution exhausted");
 
-        let remaining = distribution_amount - claimed_total;
-        let claim_amount = if raw_claim > remaining { remaining } else { raw_claim };
-        assert(claim_amount > 0, "nothing left to claim");
+        let fund_token = Token::at(self.storage.fund_token.read());
+        self.call(fund_token.mint_to_public(caller, claim));
 
-        let fund_token = FundToken::at(self.storage.fund_token.read());
-        self.call(fund_token.mint_public(caller, claim_amount));
-
-        self.storage.d_claimed_total.at(pid).write(claimed_total + claim_amount);
-        self.storage.d_has_claimed.at(claim_key).write(true);
+        self.storage.d_claimed_total.at(pid).write(claimed_total + claim);
+        self.storage.d_record_has_claimed.at(claim_key).write(true);
     }
 
     // -- Governance/accounting: valuation snapshot ------------------------
@@ -373,14 +557,21 @@ pub contract HousingFund {
     }
 
     // -- V2: private deposit ---------------------------------------------------
-    // The caller passes a hinted KycCredentialNote that they own; we prove it
-    // existed in KYCVerifier's note set at a recent anchor block. The deposit
-    // itself is stored privately as a DepositNote in the caller's set; only
-    // the aggregate total_deposits counter is updated publicly (via an
-    // only_self enqueue so the caller's address does not cross into public).
+    // The caller passes a hinted KycCredentialNote that they own, plus the
+    // current public allocation cursor values (read via get_deposit_cursor).
+    // The DepositNote is stamped privately with those cursor values; the
+    // only_self tail equality-asserts them against the live public cursors (so
+    // a lie or a concurrent-deposit reorder reverts the whole tx) and advances
+    // the cursors. The caller's address never crosses into public.
 
     #[external("private")]
-    fn deposit_private(amount: u128, hinted_kyc_note: HintedNote<KycCredentialNote>) {
+    fn deposit_private(
+        amount: u128,
+        hinted_kyc_note: HintedNote<KycCredentialNote>,
+        supplied_cum_before: u128,
+        supplied_seq: u64,
+        supplied_is_small: bool,
+    ) {
         assert(amount > 0, "amount must be positive");
 
         let header = self.context.get_anchor_block_header();
@@ -390,29 +581,33 @@ pub contract HousingFund {
         assert(confirmed.owner == caller, "kyc note not owned by caller");
         assert(confirmed.note.owner == caller, "kyc note owner mismatch");
 
-        // Mint a DepositNote into the caller's own PrivateSet.
-        let note = DepositNote::new(caller, amount);
+        // Mint a DepositNote into the caller's own PrivateSet, stamped with its
+        // immutable FIFO interval, global seq, and frozen small bit.
+        let note = DepositNote::new(
+            caller,
+            amount,
+            supplied_cum_before,
+            supplied_seq,
+            supplied_is_small,
+        );
         self.storage.deposit_notes.at(caller).insert(note).deliver(
             MessageDelivery.ONCHAIN_CONSTRAINED,
         );
 
-        // Compute the credential's revocation commitment from the note's
-        // packed fields so the public tail can reject revoked credentials.
-        // poseidon2([owner, nonce]) matches KYCVerifier.compute_revocation_commitment.
+        // Compute the credential's revocation commitment from the note's packed
+        // fields so the public tail can reject revoked credentials.
         let credential_commitment = poseidon2_hash([
             confirmed.note.owner.to_field(),
             confirmed.note.nonce,
         ]);
 
-        // Bump the public aggregate + verify (a) the credential came from our
-        // configured KYCVerifier contract and (b) it has not been revoked.
-        // Args carry only the amount, the note's source contract, and the
-        // revocation commitment; the caller's address never crosses the
-        // private/public boundary.
         self.enqueue_self._record_deposit_private(
             amount,
             confirmed.contract_address,
             credential_commitment,
+            supplied_cum_before,
+            supplied_seq,
+            supplied_is_small,
         );
     }
 
@@ -422,12 +617,34 @@ pub contract HousingFund {
         amount: u128,
         kyc_note_contract: AztecAddress,
         credential_commitment: Field,
+        supplied_cum_before: u128,
+        supplied_seq: u64,
+        supplied_is_small: bool,
     ) {
         let kyc_addr = self.storage.kyc_verifier.read();
         assert(kyc_note_contract == kyc_addr, "kyc note from wrong contract");
         let kyc = KYCVerifier::at(kyc_addr);
         let revoked = self.view(kyc.is_credential_revoked(credential_commitment));
         assert(!revoked, "credential revoked");
+
+        // Verify the supplied cursor matches the live public cursor (no lie, no
+        // concurrent-deposit reorder), and that the supplied small bit matches
+        // the recomputed classification from the kernel-verified amount.
+        let cum_before = self.storage.cum_deposits.read();
+        let seq = self.storage.deposit_seq.read();
+        let threshold = self.storage.small_threshold.read();
+        assert(supplied_cum_before == cum_before, "stale cum_before");
+        assert(supplied_seq == seq, "stale seq");
+        assert(supplied_is_small == (amount <= threshold), "is_small mismatch");
+
+        // Advance the global cursors.
+        self.storage.cum_deposits.write(cum_before + amount);
+        if supplied_is_small {
+            self.storage.cum_small_deposits.write(
+                self.storage.cum_small_deposits.read() + amount,
+            );
+        }
+        self.storage.deposit_seq.write(seq + 1);
 
         let amount_u64 = amount as u64;
         let total = self.storage.total_deposits.read();
@@ -440,8 +657,6 @@ pub contract HousingFund {
     // origin contract, consume a per-(note_hash, owner) SingleUseClaim
     // nullifier so the same note cannot be withdrawn twice, then enqueue
     // an only_self decrement of the public total_deposits aggregate.
-    // The note's amount never crosses the private/public boundary except
-    // as a delta on the aggregate counter.
     //
     // This withdraws the ENTIRE note's amount. Partial withdraws are a
     // follow-up that would need pop_notes-style change-note minting.
@@ -475,33 +690,30 @@ pub contract HousingFund {
         let available = deposits - in_defi - allocated;
         assert(amount_u64 <= available, "insufficient available balance");
         self.storage.total_deposits.write(deposits - amount_u64);
+        // cum_deposits is NOT decremented (monotonic FIFO axis); the nullified
+        // note can no longer prove existence, so it is ineligible to claim.
     }
 
     // -- V2: private claim_distribution ---------------------------------------
     //
-    // Caller passes a hinted DepositNote and the FundToken (FSFT) address.
-    // We prove the note existed at a recent anchor block (so it must have
-    // existed at or before distribution-open), consume a per-(note_hash,
-    // proposal_id, owner) nullifier so the same note cannot claim the same
-    // distribution twice, compute the caller's share privately, and mint
-    // FSFT to caller via a private->private cross-contract mint. The
-    // caller's address never crosses the private/public boundary except
-    // as the recipient of the private mint (which stays in their PXE).
-    //
-    // The caller supplies the public distribution params (distribution
-    // amount + snapshot total); the public tail verifies they match the
-    // stored values so a malicious caller cannot inflate their share.
+    // Caller passes a hinted DepositNote and the FundToken (FSFT) address, plus
+    // the per-proposal allocation snapshots (small_pool, small_total, fifo_cap)
+    // read via get_distribution_status. The claimant's (amount, cum_before,
+    // is_small) come from the KERNEL-VERIFIED note (unforgeable); the three
+    // snapshots are caller-supplied and re-checked against stored values in the
+    // public tail so a malicious caller cannot inflate their share. The share
+    // is computed by the SAME total_claim() used by the public path. FSFT is
+    // minted private->private to the caller (HousingFund is FSFT's minter).
 
     #[external("private")]
     fn claim_distribution_private(
         proposal_id: u32,
         hinted_deposit: HintedNote<DepositNote>,
         fund_token_addr: AztecAddress,
-        supplied_distribution_amount: u64,
-        supplied_snapshot_total: u64,
+        supplied_small_pool: u128,
+        supplied_small_total: u128,
+        supplied_fifo_cap: u128,
     ) {
-        assert(supplied_snapshot_total > 0, "invalid snapshot total");
-
         let header = self.context.get_anchor_block_header();
         let confirmed = assert_note_existed_by(header, hinted_deposit);
 
@@ -513,37 +725,37 @@ pub contract HousingFund {
             "deposit note from wrong contract",
         );
 
-        // Per-(note_hash, proposal_id, owner) nullifier so the same note
-        // can claim across DIFFERENT proposals (one share per distribution)
-        // but not the same proposal twice.
+        // Per-(note_hash, proposal_id, owner) nullifier so the same note can
+        // claim across DIFFERENT proposals but not the same proposal twice.
         let note_hash = compute_confirmed_note_hash_for_nullification(confirmed);
         let pid = proposal_id as Field;
         let claim_key = poseidon2_hash([note_hash, pid]);
         self.storage.d_claim_nullifiers.at(claim_key).at(caller).claim();
 
-        // Share = (distribution_amount * note.amount) / snapshot_total.
-        // note.amount is kernel-verified; supplied_* are caller-supplied
-        // and verified in the public tail.
-        let raw_share =
-            (supplied_distribution_amount as u128 * confirmed.note.amount)
-                / supplied_snapshot_total as u128;
-        assert(raw_share > 0, "share is zero");
-        let share_u64 = raw_share as u64;
+        let note = confirmed.note;
+        let share = total_claim(
+            note.amount,
+            note.cum_before,
+            note.is_small,
+            supplied_small_pool,
+            supplied_small_total,
+            supplied_fifo_cap,
+        );
+        assert(share > 0, "share is zero");
 
-        // Private mint to caller. FundToken.mint_private is admin-only;
-        // bootstrap transferred fund_token admin to this contract, so
-        // when we call it the token sees msg_sender = HousingFund.
-        self.call(FundToken::at(fund_token_addr).mint_private(caller, share_u64));
+        // Private mint to caller (HousingFund is FSFT's immutable minter, so the
+        // token sees msg_sender = HousingFund and passes _validate_minter).
+        self.call(Token::at(fund_token_addr).mint_to_private(caller, share));
 
-        // Public tail: verify caller-supplied params and that
-        // fund_token_addr matches our configured fund_token storage;
-        // bump d_claimed_total.
+        // Public tail: verify the caller-supplied snapshots and fund_token_addr,
+        // enforce the fail-closed ceiling, and bump d_claimed_total.
         self.enqueue_self._record_distribution_claim(
             proposal_id,
-            share_u64,
+            share,
             fund_token_addr,
-            supplied_distribution_amount,
-            supplied_snapshot_total,
+            supplied_small_pool,
+            supplied_small_total,
+            supplied_fifo_cap,
         );
     }
 
@@ -551,10 +763,11 @@ pub contract HousingFund {
     #[only_self]
     fn _record_distribution_claim(
         proposal_id: u32,
-        share: u64,
+        share: u128,
         supplied_fund_token: AztecAddress,
-        supplied_distribution_amount: u64,
-        supplied_snapshot_total: u64,
+        supplied_small_pool: u128,
+        supplied_small_total: u128,
+        supplied_fifo_cap: u128,
     ) {
         let pid = proposal_id as Field;
         assert(self.storage.d_open.at(pid).read(), "distribution not open");
@@ -562,17 +775,13 @@ pub contract HousingFund {
             supplied_fund_token == self.storage.fund_token.read(),
             "fund token mismatch",
         );
-        assert(
-            supplied_distribution_amount == self.storage.d_amount.at(pid).read(),
-            "distribution amount mismatch",
-        );
-        assert(
-            supplied_snapshot_total == self.storage.d_total_deposits_snapshot.at(pid).read(),
-            "snapshot total mismatch",
-        );
+        assert(supplied_small_pool == self.storage.d_small_pool.at(pid).read(), "small pool mismatch");
+        assert(supplied_small_total == self.storage.d_small_total.at(pid).read(), "small total mismatch");
+        assert(supplied_fifo_cap == self.storage.d_fifo_cap.at(pid).read(), "fifo cap mismatch");
 
         let claimed_total = self.storage.d_claimed_total.at(pid).read();
-        assert(claimed_total + share <= supplied_distribution_amount, "distribution exhausted");
+        let pool = self.storage.d_amount.at(pid).read();
+        assert(claimed_total + share <= pool, "distribution exhausted");
         self.storage.d_claimed_total.at(pid).write(claimed_total + share);
     }
 
@@ -647,31 +856,71 @@ pub contract HousingFund {
         }
     }
 
-    #[external("utility")]
-    unconstrained fn get_claimable_amount(proposal_id: u32, user: AztecAddress) -> pub u64 {
-        let pid = proposal_id as Field;
-        let claim_key = poseidon2_hash([user.to_field(), pid]);
-        let is_open = self.storage.d_open.at(pid).read();
-        let has_claimed = self.storage.d_has_claimed.at(claim_key).read();
-        let snapshot_total = self.storage.d_total_deposits_snapshot.at(pid).read();
-        let ticket = self.storage.deposit_tickets.at(user).read();
-        let distribution_amount = self.storage.d_amount.at(pid).read();
-        let claimed_total = self.storage.d_claimed_total.at(pid).read();
-
-        if !is_open | has_claimed | (snapshot_total == 0) | (ticket == 0) | (claimed_total >= distribution_amount) {
-            0
-        } else {
-            let raw_claim = (distribution_amount * ticket) / snapshot_total;
-            let remaining = distribution_amount - claimed_total;
-            if raw_claim > remaining { remaining } else { raw_claim }
+    // Public cursor for PXE callers to stamp a private deposit (supplied-then-verified).
+    #[external("public")]
+    #[view]
+    fn get_deposit_cursor() -> pub DepositCursor {
+        DepositCursor {
+            cum_deposits: self.storage.cum_deposits.read(),
+            cum_small_deposits: self.storage.cum_small_deposits.read(),
+            deposit_seq: self.storage.deposit_seq.read(),
+            small_threshold: self.storage.small_threshold.read(),
         }
     }
 
     #[external("utility")]
-    unconstrained fn has_claimed(proposal_id: u32, user: AztecAddress) -> pub bool {
+    unconstrained fn get_deposit_cursor_unconstrained() -> pub DepositCursor {
+        DepositCursor {
+            cum_deposits: self.storage.cum_deposits.read(),
+            cum_small_deposits: self.storage.cum_small_deposits.read(),
+            deposit_seq: self.storage.deposit_seq.read(),
+            small_threshold: self.storage.small_threshold.read(),
+        }
+    }
+
+    // Public-path claimable preview for a specific deposit record (by global seq).
+    #[external("utility")]
+    unconstrained fn get_claimable_amount(proposal_id: u32, user: AztecAddress, seq: u64) -> pub u128 {
         let pid = proposal_id as Field;
-        let claim_key = poseidon2_hash([user.to_field(), pid]);
-        self.storage.d_has_claimed.at(claim_key).read()
+        let is_open = self.storage.d_open.at(pid).read();
+        let claim_key = poseidon2_hash([user.to_field(), seq as Field, pid]);
+        let has_claimed = self.storage.d_record_has_claimed.at(claim_key).read();
+        let rec = self.storage.deposit_records.at(poseidon2_hash([user.to_field(), seq as Field])).read();
+
+        if !is_open | has_claimed | (rec.owner != user) | (rec.amount == 0) {
+            0
+        } else {
+            let small_pool = self.storage.d_small_pool.at(pid).read();
+            let small_total = self.storage.d_small_total.at(pid).read();
+            let fifo_cap = self.storage.d_fifo_cap.at(pid).read();
+            total_claim(rec.amount, rec.cum_before, rec.is_small, small_pool, small_total, fifo_cap)
+        }
+    }
+
+    #[external("utility")]
+    unconstrained fn has_claimed(proposal_id: u32, user: AztecAddress, seq: u64) -> pub bool {
+        let pid = proposal_id as Field;
+        let claim_key = poseidon2_hash([user.to_field(), seq as Field, pid]);
+        self.storage.d_record_has_claimed.at(claim_key).read()
+    }
+
+    // Per-user public deposit-record enumeration (so a caller can list the seqs
+    // they may claim against). Private deposits use get_my_deposit_notes instead.
+    #[external("utility")]
+    unconstrained fn get_my_deposit_record_count(user: AztecAddress) -> pub u32 {
+        self.storage.user_deposit_count.at(user).read()
+    }
+
+    #[external("utility")]
+    unconstrained fn get_my_deposit_record(user: AztecAddress, index: u32) -> pub DepositRecordView {
+        let seq = self.storage.user_deposit_seq.at(poseidon2_hash([user.to_field(), index as Field])).read();
+        let rec = self.storage.deposit_records.at(poseidon2_hash([user.to_field(), seq as Field])).read();
+        DepositRecordView {
+            seq,
+            amount: rec.amount,
+            cum_before: rec.cum_before,
+            is_small: rec.is_small,
+        }
     }
 
     #[external("utility")]
@@ -680,7 +929,10 @@ pub contract HousingFund {
         DistributionStatus {
             open: self.storage.d_open.at(pid).read(),
             amount: self.storage.d_amount.at(pid).read(),
-            total_deposits_snapshot: self.storage.d_total_deposits_snapshot.at(pid).read(),
+            snapshot_total: self.storage.d_snapshot_total.at(pid).read(),
+            small_total: self.storage.d_small_total.at(pid).read(),
+            small_pool: self.storage.d_small_pool.at(pid).read(),
+            fifo_cap: self.storage.d_fifo_cap.at(pid).read(),
             claimed_total: self.storage.d_claimed_total.at(pid).read(),
         }
     }
@@ -707,8 +959,7 @@ pub contract HousingFund {
     /// PXE-side helper: fetch caller's DepositNotes as paged HintedNote vec.
     /// Used by V2 callers (e.g., Governance.cast_vote_private's
     /// fund-exposure proof, frontend portfolio sum) via
-    /// .simulate({ from: owner }). Pattern matches
-    /// crowdfunding_contract.get_donation_notes.
+    /// .simulate({ from: owner }).
     #[external("utility")]
     unconstrained fn get_my_deposit_notes(
         owner: AztecAddress,

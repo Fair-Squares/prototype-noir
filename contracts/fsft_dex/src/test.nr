@@ -27,8 +27,9 @@ unconstrained fn setup() -> (TestEnvironment, AztecAddress, AztecAddress) {
 }
 
 #[test]
-unconstrained fn test_order_count_starts_at_zero() {
+unconstrained fn test_settlement_tokens_wired() {
     let (env, addr, _admin) = setup();
-    let count = env.execute_utility(FSFTDex::at(addr).get_order_count());
-    assert_eq(count, 0);
+    let tokens = env.view_public(FSFTDex::at(addr).get_settlement_tokens());
+    assert(!tokens.fsft_token.is_zero());
+    assert(!tokens.eur_token.is_zero());
 }

@@ -77,7 +77,10 @@ export async function GET() {
       const dist = simResult<{
         open: boolean;
         amount: bigint;
-        total_deposits_snapshot: bigint;
+        snapshot_total: bigint;
+        small_total: bigint;
+        small_pool: bigint;
+        fifo_cap: bigint;
         claimed_total: bigint;
       }>(await hf.methods.get_distribution_status(id).simulate({ from }));
 

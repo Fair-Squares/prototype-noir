@@ -22,13 +22,15 @@ BOOTSTRAP_RETRY_ATTEMPTS="${BOOTSTRAP_RETRY_ATTEMPTS:-8}"
 BOOTSTRAP_RETRY_DELAY_SECONDS="${BOOTSTRAP_RETRY_DELAY_SECONDS:-6}"
 WALLET_MIN_FEE_PADDING="${WALLET_MIN_FEE_PADDING:-30}"
 
-CONTRACTS="kyc_verifier fund_token defi_vault housing_fund governance fsft_dex protocol_rewards"
-# protocol_token reuses the fund_token artifact with a separate deployment.
-# eur_token is now an AIP-20 token from the vendored aztec-standards (see below).
+CONTRACTS="kyc_verifier defi_vault housing_fund governance fsft_dex protocol_rewards"
+# Phase 3: FSFT, EUR, and ProtocolToken are ALL instances of the vendored AIP-20
+# token_contract (deployed below with distinct immutable minters: FSFT->housing
+# fund, EUR->Dripper, ProtocolToken->protocol_rewards). The bespoke fund_token
+# crate has been removed.
 
-# -- Vendored Defi-Wonderland aztec-standards (AIP-20/721/4626 + Dripper) ------
+# -- Vendored Defi-Wonderland aztec-standards (AIP-20/721 + Dripper) -----------
 # Compiled from a separate Nargo workspace; artifacts land in its own target dir.
-# Phase 1 uses: token_contract (AIP-20, deployed as EUR) + dripper (faucet).
+# token_contract (AIP-20: FSFT + EUR + ProtocolToken) + dripper (EUR faucet) + nft.
 STANDARDS_DIR="${ROOT_DIR}/contracts/vendor/aztec-standards"
 STANDARD_CONTRACTS="token_contract dripper nft_contract"
 
@@ -350,22 +352,26 @@ deploy_contracts() {
     --args accounts:test0)
   [ -z "$KYC_ADDR" ] && die "kyc_verifier deploy failed — no address in output"
 
-  TOKEN_ADDR=$(_deploy "fund_token" \
-    "fund_token/target/fund_token-FundToken.json" \
-    --args accounts:test0)
-  [ -z "$TOKEN_ADDR" ] && die "fund_token deploy failed — no address in output"
-
   VAULT_ADDR=$(_deploy "defi_vault" \
     "defi_vault/target/defi_vault-DeFiVault.json" \
     --args accounts:test0 300)
   [ -z "$VAULT_ADDR" ] && die "defi_vault deploy failed — no address in output"
 
+  # HousingFund must precede FSFT: FSFT's immutable AIP-20 minter is the fund.
   FUND_ADDR=$(_deploy "housing_fund" \
     "housing_fund/target/housing_fund-HousingFund.json" \
     --args accounts:test0)
   [ -z "$FUND_ADDR" ] && die "housing_fund deploy failed — no address in output"
 
   log "DEBUG: FUND_ADDR='${FUND_ADDR}' ADMIN_ADDR='${ADMIN_ADDR}'"
+
+  # -- Deploy FSFT as AIP-20 token (minter = housing fund) ----------------------
+  # constructor_with_minter(name: str<31>, symbol: str<31>, decimals: u8, minter).
+  # The fund is FSFT's permanent minter; claim_distribution mints via mint_to_*.
+  TOKEN_ADDR=$(DEPLOY_INIT=constructor_with_minter _deploy "fund_token" \
+    "vendor/aztec-standards/target/token_contract-Token.json" \
+    --args "Fair Squares FSFT" FSFT 0 "${FUND_ADDR}")
+  [ -z "$TOKEN_ADDR" ] && die "fsft (AIP-20) deploy failed — no address in output"
 
   # Governance: all args are actual addresses/values (aliases not valid in --args)
   GOV_ADDR=$(_deploy "governance" \
@@ -400,20 +406,23 @@ deploy_contracts() {
     --args accounts:test0 "${KYC_ADDR}" "${FUND_ADDR}" "${TOKEN_ADDR}" "${EUR_ADDR}" "${DEX_PRICE_BAND_BPS}" "${DEX_MAX_TTL_BLOCKS}")
   [ -z "$DEX_ADDR" ] && die "fsft_dex deploy failed — no address in output"
 
-  # -- Deploy protocol token (third instance of fund_token — rewards token) --
-  PROTOCOL_TOKEN_ADDR=$(_deploy "protocol_token" \
-    "fund_token/target/fund_token-FundToken.json" \
-    --args accounts:test0)
-  [ -z "$PROTOCOL_TOKEN_ADDR" ] && die "protocol_token deploy failed — no address in output"
-
+  # ProtocolRewards must precede ProtocolToken: the token's immutable minter is
+  # this rewards contract. New constructor drops protocol_token (wired below via
+  # set_protocol_token): (admin, fsft_token, housing_fund, governance, kyc, claim_min).
   REWARDS_ADDR=$(_deploy "protocol_rewards" \
     "protocol_rewards/target/protocol_rewards-ProtocolRewards.json" \
-    --args accounts:test0 "${PROTOCOL_TOKEN_ADDR}" "${TOKEN_ADDR}" "${FUND_ADDR}" "${GOV_ADDR}" "${KYC_ADDR}" "${PROTOCOL_REWARDS_CLAIM_MIN}")
+    --args accounts:test0 "${TOKEN_ADDR}" "${FUND_ADDR}" "${GOV_ADDR}" "${KYC_ADDR}" "${PROTOCOL_REWARDS_CLAIM_MIN}")
   [ -z "$REWARDS_ADDR" ] && die "protocol_rewards deploy failed — no address in output"
+
+  # -- Deploy ProtocolToken as AIP-20 token (minter = protocol_rewards) ---------
+  PROTOCOL_TOKEN_ADDR=$(DEPLOY_INIT=constructor_with_minter _deploy "protocol_token" \
+    "vendor/aztec-standards/target/token_contract-Token.json" \
+    --args "Fair Squares Protocol" FSP 0 "${REWARDS_ADDR}")
+  [ -z "$PROTOCOL_TOKEN_ADDR" ] && die "protocol_token deploy failed — no address in output"
 
   log "Deployed addresses:"
   log "  KYCVerifier:  ${KYC_ADDR}"
-  log "  FundToken:    ${TOKEN_ADDR}"
+  log "  FSFT (AIP-20):${TOKEN_ADDR}"
   log "  DeFiVault:    ${VAULT_ADDR}"
   log "  HousingFund:  ${FUND_ADDR}"
   log "  Governance:   ${GOV_ADDR}"
@@ -451,21 +460,17 @@ wire_contracts() {
     --contract-address "${VAULT_ADDR}" \
     --args "${FUND_ADDR}"
 
-  # Transfer FSFT admin to HousingFund so claim_distribution can mint
-  # permissionlessly via contract logic.
-  log "Transferring FSFT admin to housing fund..."
-  wallet_send_with_retries required "FundToken.set_admin(housing_fund)" \
-    $AZTEC_WALLET_BIN send set_admin \
+  # FSFT and ProtocolToken minters are now IMMUTABLE (set at their
+  # constructor_with_minter deploy to HousingFund / ProtocolRewards) -- no
+  # set_admin handoff exists on the vendored AIP-20 Token. We only wire the
+  # rewards->protocol_token link, which had to be deferred because the token's
+  # minter (this rewards contract) must exist before the token is deployed.
+  log "Wiring ProtocolRewards.set_protocol_token(protocol_token)..."
+  wallet_send_with_retries required "ProtocolRewards.set_protocol_token" \
+    $AZTEC_WALLET_BIN send set_protocol_token \
     --from accounts:test0 \
-    --contract-address "${TOKEN_ADDR}" \
-    --args "${FUND_ADDR}"
-
-  log "Transferring protocol token admin to protocol rewards..."
-  wallet_send_with_retries required "ProtocolToken.set_admin(protocol_rewards)" \
-    $AZTEC_WALLET_BIN send set_admin \
-    --from accounts:test0 \
-    --contract-address "${PROTOCOL_TOKEN_ADDR}" \
-    --args "${REWARDS_ADDR}"
+    --contract-address "${REWARDS_ADDR}" \
+    --args "${PROTOCOL_TOKEN_ADDR}"
 
   # Seed KYC roles for local demo accounts so HousingFund.deposit passes its
   # investor-role gate checks.
@@ -677,13 +682,13 @@ NEXT_PUBLIC_ADMIN_ADDRESS=${admin_addr}
   log "============================================"
   log "Contract Addresses:"
   log "  KYCVerifier:  ${kyc_addr}"
-  log "  FundToken:    ${token_addr} (FSFT — admin: housing_fund)"
-  log "  EurToken:     ${eur_addr} (EURs — admin: test0)"
+  log "  FSFT (AIP-20):${token_addr} (minter: housing_fund)"
+  log "  EurToken:     ${eur_addr} (EURs — AIP-20, minter: dripper)"
   log "  DeFiVault:    ${vault_addr}"
   log "  HousingFund:  ${fund_addr} (initial: 500 000 EUR)"
   log "  Governance:   ${gov_addr}"
   log "  FSFTDex:      ${dex_addr}"
-  log "  ProtocolToken:${protocol_token_addr} (admin: protocol_rewards)"
+  log "  ProtocolToken:${protocol_token_addr} (AIP-20, minter: protocol_rewards)"
   log "  Rewards:      ${rewards_addr}"
   log "Accounts:"
   log "  test0 (admin): ${admin_addr} (600 000 EUR minted, 500 000 deposited)"

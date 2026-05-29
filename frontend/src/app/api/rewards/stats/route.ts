@@ -123,9 +123,10 @@ export async function GET(request: NextRequest) {
     const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
     const rewardsContract = await Contract.at(AztecAddress.fromString(rewardsAddr), rewardsArtifact, actor.wallet);
 
-    const [configSim, userSim] = await Promise.all([
+    const [configSim, userSim, eligibilitySim] = await Promise.all([
       rewardsContract.methods.get_rewards_config().simulate({ from: actorAddress }),
       rewardsContract.methods.get_user_stats(userAddress).simulate({ from: actorAddress }),
+      rewardsContract.methods.has_fsft_rewards_eligibility(userAddress).simulate({ from: actorAddress }),
     ]);
 
     const cfg = simResult<{
@@ -140,7 +141,6 @@ export async function GET(request: NextRequest) {
       claimable: bigint;
       total_claimed: bigint;
       last_claimed_epoch: bigint;
-      fsft_rewards_attested: boolean;
     }>(userSim);
 
     const distributionPool = toNumberStrict(cfg.total_distribution_pool, "ProtocolRewards.get_rewards_config.total_distribution_pool");
@@ -153,11 +153,13 @@ export async function GET(request: NextRequest) {
     const claimable = toNumberStrict(user.claimable, "ProtocolRewards.get_user_stats.claimable");
     const totalUserClaimed = toNumberStrict(user.total_claimed, "ProtocolRewards.get_user_stats.total_user_claimed");
     const rawLastClaimedEpoch = toNumberStrict(user.last_claimed_epoch, "ProtocolRewards.get_user_stats.last_claimed_epoch");
-    const fsftRewardsAttested = Boolean(user.fsft_rewards_attested);
+    // V2: per-user attestation flag is gone; FSFT reward-bucket eligibility is
+    // now derived on-chain from balance_of_public(user) > 0.
+    const fsftRewardsAttested = Boolean(simResult(eligibilitySim));
     let balance = 0;
 
     if (protocolTokenAddr) {
-      const FtJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
+      const FtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
       const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);
       const tokenContract = await Contract.at(
         AztecAddress.fromString(protocolTokenAddr),
@@ -165,8 +167,8 @@ export async function GET(request: NextRequest) {
         actor.wallet
       );
       balance = toNumberStrict(
-        simResult(await tokenContract.methods.public_balance_of(userAddress).simulate({ from: actorAddress })),
-        "ProtocolToken.public_balance_of"
+        simResult(await tokenContract.methods.balance_of_public(userAddress).simulate({ from: actorAddress })),
+        "ProtocolToken.balance_of_public"
       );
     }
 

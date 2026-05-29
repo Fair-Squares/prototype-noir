@@ -147,7 +147,7 @@ async function initWallet(): Promise<WalletSingleton> {
       registerIfPresent(
         "fund_token",
         process.env.NEXT_PUBLIC_FUND_TOKEN_ADDRESS ?? "",
-        async () => loadGeneratedArtifactJson("fund_token-FundToken.json")
+        async () => loadGeneratedArtifactJson("token_contract-Token.json")
       ),
       registerIfPresent(
         // EUR is now an AIP-20 token from the vendored aztec-standards.
@@ -188,7 +188,7 @@ async function initWallet(): Promise<WalletSingleton> {
       registerIfPresent(
         "protocol_token",
         process.env.NEXT_PUBLIC_PROTOCOL_TOKEN_ADDRESS ?? "",
-        async () => loadGeneratedArtifactJson("fund_token-FundToken.json")
+        async () => loadGeneratedArtifactJson("token_contract-Token.json")
       ),
     ]);
   } catch (err) {

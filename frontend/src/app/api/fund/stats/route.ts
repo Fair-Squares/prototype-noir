@@ -74,7 +74,7 @@ export async function GET() {
     const from = AztecAddress.fromString(admin.address);
 
     const HfJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
-    const FtJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
+    const FtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
 
     const hfArtifact = loadContractArtifact(HfJson as Parameters<typeof loadContractArtifact>[0]);
     const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);

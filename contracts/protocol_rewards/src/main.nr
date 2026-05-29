@@ -11,7 +11,7 @@ use aztec::macros::aztec;
 #[aztec]
 pub contract ProtocolRewards {
     use crate::reward_claim_note::RewardClaimNote;
-    use fund_token::FundToken;
+    use token_contract::Token;
     use kyc_verifier::KYCVerifier;
     use aztec::{
         history::note::assert_note_existed_by,
@@ -40,7 +40,6 @@ pub contract ProtocolRewards {
         pub claimable: u64,
         pub total_claimed: u64,
         pub last_claimed_epoch: u32,
-        pub fsft_rewards_attested: bool,
     }
 
     #[derive(Serialize, Deserialize)]
@@ -97,7 +96,6 @@ pub contract ProtocolRewards {
         user_total_claimed: Map<AztecAddress, PublicMutable<u64, Context>, Context>,
         user_last_claimed_epoch: Map<AztecAddress, PublicMutable<u32, Context>, Context>,
 
-        fsft_rewards_attested: Map<AztecAddress, PublicMutable<bool, Context>, Context>,
         // V2: per-recipient private reward records
         reward_notes: Owned<PrivateSet<RewardClaimNote, Context>, Context>,
         // V2: per (reward_note_hash, owner) single-use nullifier so a given
@@ -109,7 +107,6 @@ pub contract ProtocolRewards {
     #[external("public")]
     fn constructor(
         admin: AztecAddress,
-        protocol_token: AztecAddress,
         fsft_token: AztecAddress,
         housing_fund: AztecAddress,
         governance: AztecAddress,
@@ -117,7 +114,6 @@ pub contract ProtocolRewards {
         claim_min: u64,
     ) {
         assert(!admin.is_zero(), "invalid admin");
-        assert(!protocol_token.is_zero(), "invalid protocol token");
         assert(!fsft_token.is_zero(), "invalid fsft token");
         assert(!housing_fund.is_zero(), "invalid housing fund");
         assert(!governance.is_zero(), "invalid governance");
@@ -125,11 +121,13 @@ pub contract ProtocolRewards {
         assert(claim_min > 0, "invalid claim min");
 
         self.storage.admin.write(admin);
-        self.storage.protocol_token.write(protocol_token);
         self.storage.fsft_token.write(fsft_token);
         self.storage.housing_fund.write(housing_fund);
         self.storage.governance.write(governance);
         self.storage.kyc_verifier.write(kyc_verifier);
+        // protocol_token is the AIP-20 Token minted on reward claims. Its
+        // immutable minter must equal THIS contract, so it can only be deployed
+        // after this contract's address is known -> wired via set_protocol_token.
 
         self.storage.total_distribution_pool.write(8_000_000);
         self.storage.total_distributed.write(0);
@@ -138,6 +136,17 @@ pub contract ProtocolRewards {
         self.storage.claim_min.write(claim_min);
         self.storage.total_epochs.write(120);
         self.storage.current_epoch.write(0);
+    }
+
+    /// One-shot admin wiring of the protocol token (deployed after this contract
+    /// with minter = this contract). Breaks the ProtocolRewards<->ProtocolToken
+    /// deploy cycle imposed by the AIP-20 immutable minter.
+    #[external("public")]
+    fn set_protocol_token(protocol_token: AztecAddress) {
+        assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
+        assert(self.storage.protocol_token.read().is_zero(), "protocol token already set");
+        assert(!protocol_token.is_zero(), "invalid protocol token");
+        self.storage.protocol_token.write(protocol_token);
     }
 
     /// Opens/checkpoints an epoch and records total weighting denominators.
@@ -226,11 +235,12 @@ pub contract ProtocolRewards {
         let fsft_pool = (emission * 40) / 100;
         let governance_pool = emission - deposit_pool - fsft_pool;
 
-        let fsft = FundToken::at(self.storage.fsft_token.read());
-        let public_balance = self.view(fsft.public_balance_of_public(user));
-        let private_holder_proof = self.view(fsft.has_private_holder_proof(user));
-        let attested = self.storage.fsft_rewards_attested.at(user).read();
-        let fsft_eligible = (public_balance > 0) | private_holder_proof | attested;
+        // FSFT reward-pool eligibility: holds public FSFT. The vendored AIP-20
+        // Token exposes no on-chain private-holder attestation, so a purely
+        // private FSFT holder must unshield to earn this sub-pool.
+        let fsft = Token::at(self.storage.fsft_token.read());
+        let public_balance: u128 = self.view(fsft.balance_of_public(user));
+        let fsft_eligible = public_balance > 0;
 
         let deposit_share = if (deposit_pool > 0) & (deposit_total > 0) & (deposit_weight > 0) {
             (deposit_pool * deposit_weight) / deposit_total
@@ -306,8 +316,8 @@ pub contract ProtocolRewards {
     // crosses the private/public boundary -- only the aggregate total_claimed
     // counter is updated publicly.
     //
-    // Requires ProtocolRewards to be the admin of protocol_token (set in
-    // bootstrap via FundToken.set_admin).
+    // Requires ProtocolRewards to be the immutable minter of protocol_token
+    // (set at the token's deploy via constructor_with_minter).
     //
     // `protocol_token_addr` is passed in as a parameter; the enqueued public
     // tail verifies it matches the configured storage so a malicious caller
@@ -335,13 +345,14 @@ pub contract ProtocolRewards {
             compute_confirmed_note_hash_for_nullification(confirmed);
         self.storage.reward_claim_nullifiers.at(note_hash_for_nullification).at(caller).claim();
 
-        // Private cross-contract mint of protocol token to caller.
-        // FundToken.mint_private will see msg_sender = ProtocolRewards
-        // contract address and pass its admin check.
-        let amount_u64 = confirmed.note.amount as u64;
-        self.call(FundToken::at(protocol_token_addr).mint_private(caller, amount_u64));
+        // Private cross-contract mint of protocol token to caller. The vendored
+        // AIP-20 Token's mint_to_private sees msg_sender = ProtocolRewards and
+        // passes _validate_minter (this contract is the token's immutable minter).
+        let amount = confirmed.note.amount; // u128
+        self.call(Token::at(protocol_token_addr).mint_to_private(caller, amount));
 
-        // Public aggregate bump + protocol_token_addr verification.
+        // Public aggregate bump (u64 ledger) + protocol_token_addr verification.
+        let amount_u64 = amount as u64;
         self.enqueue_self._record_private_claim(amount_u64, protocol_token_addr);
     }
 
@@ -356,21 +367,6 @@ pub contract ProtocolRewards {
         self.storage.total_claimed.write(total + amount);
     }
 
-    #[external("public")]
-    fn attest_private_fsft_for_rewards() {
-        let caller = self.msg_sender();
-        let kyc = KYCVerifier::at(self.storage.kyc_verifier.read());
-        let is_investor = self.view(kyc.is_investor(caller));
-        assert(is_investor, "investor role required");
-
-        let fsft = FundToken::at(self.storage.fsft_token.read());
-        let public_balance = self.view(fsft.public_balance_of_public(caller));
-        let private_holder_proof = self.view(fsft.has_private_holder_proof(caller));
-
-        assert((public_balance > 0) | private_holder_proof, "no fsft exposure to attest");
-        self.storage.fsft_rewards_attested.at(caller).write(true);
-    }
-
     /// Claims all currently accrued rewards for caller.
     #[external("public")]
     fn claim() {
@@ -383,8 +379,8 @@ pub contract ProtocolRewards {
         let claim_min = self.storage.claim_min.read();
         assert(claimable >= claim_min, "claimable below minimum");
 
-        let protocol_token = FundToken::at(self.storage.protocol_token.read());
-        self.call(protocol_token.mint_public(caller, claimable));
+        let protocol_token = Token::at(self.storage.protocol_token.read());
+        self.call(protocol_token.mint_to_public(caller, claimable as u128));
 
         self.storage.user_claimable.at(caller).write(0);
 
@@ -411,7 +407,6 @@ pub contract ProtocolRewards {
             claimable: self.storage.user_claimable.at(user).read(),
             total_claimed: self.storage.user_total_claimed.at(user).read(),
             last_claimed_epoch: self.storage.user_last_claimed_epoch.at(user).read(),
-            fsft_rewards_attested: self.storage.fsft_rewards_attested.at(user).read(),
         }
     }
 
@@ -474,12 +469,9 @@ pub contract ProtocolRewards {
     #[external("public")]
     #[view]
     fn has_fsft_rewards_eligibility(user: AztecAddress) -> pub bool {
-        let fsft = FundToken::at(self.storage.fsft_token.read());
-        let public_balance = self.view(fsft.public_balance_of_public(user));
-        let private_holder_proof = self.view(fsft.has_private_holder_proof(user));
-        let attested = self.storage.fsft_rewards_attested.at(user).read();
-
-        (public_balance > 0) | private_holder_proof | attested
+        let fsft = Token::at(self.storage.fsft_token.read());
+        let public_balance: u128 = self.view(fsft.balance_of_public(user));
+        public_balance > 0
     }
 
     /// PXE-side helper: fetch caller's RewardClaimNotes as paged HintedNote

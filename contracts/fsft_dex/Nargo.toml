@@ -6,6 +6,7 @@ compiler_version = ">=0.18.0"
 
 [dependencies]
 aztec = { git = "https://github.com/AztecProtocol/aztec-packages/", tag = "v4.3.0", directory = "noir-projects/aztec-nr/aztec" }
-fund_token = { path = "../fund_token" }
+# FSFT and EUR settlement legs are vendored AIP-20 Token instances.
+token_contract = { path = "../vendor/aztec-standards/src/token_contract" }
 kyc_verifier = { path = "../kyc_verifier" }
 housing_fund = { path = "../housing_fund" }

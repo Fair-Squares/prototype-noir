@@ -14,7 +14,6 @@ use aztec::macros::aztec;
 #[aztec]
 pub contract Governance {
     use deposit_note::DepositNote;
-    use fund_token::FundToken;
     use kyc_verifier::{KYCVerifier, credential_note::KycCredentialNote};
     use aztec::{
         history::note::assert_note_existed_by,

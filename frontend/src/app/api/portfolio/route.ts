@@ -89,7 +89,6 @@ export async function GET(request: NextRequest) {
     let protocolTokenBalance = 0;
     let rewardsClaimable = 0;
     let investorRole = false;
-    let hasPrivateHolderProof = false;
 
     const KycJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
     const kycArtifact = loadContractArtifact(KycJson as Parameters<typeof loadContractArtifact>[0]);
@@ -115,22 +114,19 @@ export async function GET(request: NextRequest) {
     );
     eurBalance = privateEur + publicEur;
 
-    const FtJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
+    const FtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
     const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);
     const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, wallet);
     const privateFsft = toNumberStrict(
-      simResult(await ftContract.methods.private_balance_of(ownerAddr).simulate({ from: selectedAddr })),
-      "FundToken.private_balance_of"
+      simResult(await ftContract.methods.balance_of_private(ownerAddr).simulate({ from: selectedAddr })),
+      "FundToken.balance_of_private"
     );
     publicFsftBalance = toNumberStrict(
-      simResult(await ftContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr })),
-      "FundToken.public_balance_of"
+      simResult(await ftContract.methods.balance_of_public(ownerAddr).simulate({ from: selectedAddr })),
+      "FundToken.balance_of_public"
     );
     fsftBalance = privateFsft + publicFsftBalance;
     totalSupply = toNumberStrict(simResult(await ftContract.methods.total_supply().simulate({ from: selectedAddr })), "FundToken.total_supply");
-    hasPrivateHolderProof = Boolean(
-      simResult(await ftContract.methods.has_private_holder_proof(ownerAddr).simulate({ from: selectedAddr }))
-    );
 
     const HfJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
     const hfArtifact = loadContractArtifact(HfJson as Parameters<typeof loadContractArtifact>[0]);
@@ -186,16 +182,16 @@ export async function GET(request: NextRequest) {
     }
 
     if (protocolTokenAddr) {
-      const PtJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
+      const PtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
       const ptArtifact = loadContractArtifact(PtJson as Parameters<typeof loadContractArtifact>[0]);
       const ptContract = await Contract.at(AztecAddress.fromString(protocolTokenAddr), ptArtifact, wallet);
       const privateProtocol = toNumberStrict(
-        simResult(await ptContract.methods.private_balance_of(ownerAddr).simulate({ from: selectedAddr })),
-        "ProtocolToken.private_balance_of"
+        simResult(await ptContract.methods.balance_of_private(ownerAddr).simulate({ from: selectedAddr })),
+        "ProtocolToken.balance_of_private"
       );
       const publicProtocol = toNumberStrict(
-        simResult(await ptContract.methods.public_balance_of(ownerAddr).simulate({ from: selectedAddr })),
-        "ProtocolToken.public_balance_of"
+        simResult(await ptContract.methods.balance_of_public(ownerAddr).simulate({ from: selectedAddr })),
+        "ProtocolToken.balance_of_public"
       );
       protocolTokenBalance = privateProtocol + publicProtocol;
     }
@@ -220,9 +216,9 @@ export async function GET(request: NextRequest) {
     const navPerFsftEur = totalSupply > 0 ? Math.round((navEur / totalSupply) * 10000) / 10000 : 0;
     const fsftMarketValue = Math.round(fsftBalance * navPerFsftEur * 100) / 100;
     const hasDepositTicket = depositTicket > 0;
-    const hasFsftExposure = publicFsftBalance > 0 || hasPrivateHolderProof;
+    const hasFsftExposure = publicFsftBalance > 0;
     const canVote = investorRole && (hasDepositTicket || hasFsftExposure);
-    const privateFsftProofMode = hasPrivateHolderProof ? "aztec-private-proven" : "none";
+    const privateFsftProofMode = "none";
     const governanceReason = !investorRole
       ? "Investor role required. Complete KYC first."
       : canVote
@@ -257,7 +253,7 @@ export async function GET(request: NextRequest) {
         investorRole,
         hasDepositTicket,
         hasFsftExposure,
-        hasFsftVotingAttestation: hasPrivateHolderProof,
+        hasFsftVotingAttestation: false,
         privateFsftProofMode,
         canVote,
         reason: governanceReason,

@@ -1,11 +1,15 @@
 /**
  * Fair Squares -- Testnet contract deploy
  *
- * Deploys the 7 Fair Squares Noir contracts (plus the two FundToken
- * clones used for EUR and the protocol-rewards token) to the public
- * Aztec testnet, paying fees via SponsoredFPC. Wires set_contracts /
- * set_admin links and issues a private KYC credential to the deployer
- * so an immediate V2 deposit smoke flow is possible.
+ * Deploys the 6 Fair Squares Noir contracts plus the vendored aztec-standards
+ * instances they need: FSFT, EUR, and ProtocolToken are each a distinct AIP-20
+ * `Token` (one canonical EUR -- no FundToken clones), a Dripper faucet (EUR's
+ * minter), and a PropertyNFT (AIP-721 deed). Pays fees via SponsoredFPC. Each
+ * token's minter is IMMUTABLE and set at deploy (FSFT->housing_fund,
+ * EUR->dripper, ProtocolToken->protocol_rewards), so deploy ORDER matters and
+ * there are no set_admin handoffs. Wires set_contracts / set_property_nft /
+ * set_protocol_token and issues a private KYC credential to the deployer so an
+ * immediate V2 deposit smoke flow is possible.
  *
  * Prereqs:
  *   1. `npx tsx scripts/testnet-deploy-account.ts` first -- that
@@ -86,6 +90,27 @@ function loadArtifact(crate: string, name: string) {
   );
 }
 
+// Vendored aztec-standards artifacts live in a separate Nargo workspace target.
+function loadStandardArtifact(crate: string, name: string) {
+  const p = path.resolve(
+    ROOT,
+    "contracts",
+    "vendor",
+    "aztec-standards",
+    "target",
+    `${crate}-${name}.json`,
+  );
+  if (!fs.existsSync(p)) {
+    throw new Error(
+      `Standard artifact missing: ${p}. Compile the vendored workspace: ` +
+        `cd contracts/vendor/aztec-standards && aztec compile`,
+    );
+  }
+  return loadContractArtifact(
+    JSON.parse(fs.readFileSync(p, "utf8")) as Parameters<typeof loadContractArtifact>[0],
+  );
+}
+
 async function main() {
   const network = (process.env.AZTEC_NETWORK ?? "").toLowerCase();
   if (network !== "testnet") {
@@ -128,14 +153,18 @@ async function main() {
   log(`fpc      = ${fpcInstance.address.toString()}`);
 
   // -- Load all contract artifacts upfront ----------------------------------
+  // FSFT, EUR, and ProtocolToken all share the vendored AIP-20 Token artifact
+  // (`vtoken`); they are distinct instances with distinct immutable minters.
   const artifacts = {
     kyc: loadArtifact("kyc_verifier", "KYCVerifier"),
-    token: loadArtifact("fund_token", "FundToken"),
     vault: loadArtifact("defi_vault", "DeFiVault"),
     fund: loadArtifact("housing_fund", "HousingFund"),
     gov: loadArtifact("governance", "Governance"),
     dex: loadArtifact("fsft_dex", "FSFTDex"),
     rewards: loadArtifact("protocol_rewards", "ProtocolRewards"),
+    vtoken: loadStandardArtifact("token_contract", "Token"),
+    dripper: loadStandardArtifact("dripper", "Dripper"),
+    nft: loadStandardArtifact("nft_contract", "NFT"),
   };
 
   type ArtifactKey = keyof typeof artifacts;
@@ -144,9 +173,10 @@ async function main() {
     label: string,
     artKey: ArtifactKey,
     args: unknown[],
+    constructorName?: string,
   ): Promise<AztecAddress> {
     log(`deploying ${label}...`);
-    const ctorDeployer = new ContractDeployer(artifacts[artKey], wallet);
+    const ctorDeployer = new ContractDeployer(artifacts[artKey], wallet, constructorName);
     const sent = await ctorDeployer
       .deploy(args)
       .send({ from: deployer, fee: { paymentMethod } } as never);
@@ -173,11 +203,17 @@ async function main() {
     log(`  ${label} ok`);
   }
 
-  // -- Deploy contracts in dependency order ---------------------------------
+  // -- Deploy contracts in dependency order (immutable-minter constrained) ---
   const kycAddr = await deploy("KYCVerifier", "kyc", [deployer]);
-  const tokenAddr = await deploy("FundToken (FSFT)", "token", [deployer]);
   const vaultAddr = await deploy("DeFiVault", "vault", [deployer, 300]);
+  // HousingFund before FSFT: it is FSFT's immutable minter.
   const fundAddr = await deploy("HousingFund", "fund", [deployer]);
+  const tokenAddr = await deploy(
+    "FSFT (AIP-20)",
+    "vtoken",
+    ["Fair Squares FSFT", "FSFT", 0, fundAddr],
+    "constructor_with_minter",
+  );
 
   const govVotingWindow = Number(process.env.GOVERNANCE_VOTING_WINDOW_BLOCKS ?? "300");
   const govMinQuorum = Number(process.env.GOVERNANCE_MIN_QUORUM_VOTES ?? "2");
@@ -189,7 +225,22 @@ async function main() {
     govMinQuorum,
   ]);
 
-  const eurAddr = await deploy("EurToken (FundToken clone)", "token", [deployer]);
+  // Dripper before EUR: it is EUR's immutable minter. ONE canonical EUR (AIP-20).
+  const dripperAddr = await deploy("Dripper", "dripper", []);
+  const eurAddr = await deploy(
+    "EUR (AIP-20)",
+    "vtoken",
+    ["EURs", "EUR", 0, dripperAddr],
+    "constructor_with_minter",
+  );
+
+  // PropertyNFT (AIP-721); the housing fund is its minter.
+  const propertyNftAddr = await deploy(
+    "PropertyNFT (AIP-721)",
+    "nft",
+    ["Fair Squares Property", "FSP-RE", fundAddr],
+    "constructor_with_minter",
+  );
 
   const dexBandBps = Number(process.env.DEX_PRICE_BAND_BPS ?? "200");
   const dexMaxTtl = Number(process.env.DEX_MAX_TTL_BLOCKS ?? "120");
@@ -203,17 +254,23 @@ async function main() {
     dexMaxTtl,
   ]);
 
-  const protocolTokenAddr = await deploy("ProtocolToken (FundToken clone)", "token", [deployer]);
+  // ProtocolRewards before ProtocolToken: it is ProtocolToken's immutable minter.
+  // New constructor: (admin, fsft_token, housing_fund, governance, kyc, claim_min).
   const rewardsClaimMin = Number(process.env.PROTOCOL_REWARDS_CLAIM_MIN ?? "1");
   const rewardsAddr = await deploy("ProtocolRewards", "rewards", [
     deployer,
-    protocolTokenAddr,
     tokenAddr,
     fundAddr,
     govAddr,
     kycAddr,
     rewardsClaimMin,
   ]);
+  const protocolTokenAddr = await deploy(
+    "ProtocolToken (AIP-20)",
+    "vtoken",
+    ["Fair Squares Protocol", "FSP", 0, rewardsAddr],
+    "constructor_with_minter",
+  );
 
   // -- Wire links -----------------------------------------------------------
   await sendAtomic("HousingFund.set_contracts", "fund", fundAddr, "set_contracts", [
@@ -222,14 +279,16 @@ async function main() {
     vaultAddr,
     govAddr,
   ]);
+  await sendAtomic("HousingFund.set_property_nft", "fund", fundAddr, "set_property_nft", [
+    propertyNftAddr,
+  ]);
   await sendAtomic("DeFiVault.set_housing_fund", "vault", vaultAddr, "set_housing_fund", [
     fundAddr,
   ]);
-  await sendAtomic("FundToken.set_admin(housing_fund)", "token", tokenAddr, "set_admin", [
-    fundAddr,
-  ]);
-  await sendAtomic("ProtocolToken.set_admin(rewards)", "token", protocolTokenAddr, "set_admin", [
-    rewardsAddr,
+  // No set_admin handoffs: token minters are immutable (set at deploy). Only the
+  // rewards->protocol_token link is wired post-deploy (deferred for the cycle).
+  await sendAtomic("ProtocolRewards.set_protocol_token", "rewards", rewardsAddr, "set_protocol_token", [
+    protocolTokenAddr,
   ]);
 
   // -- Issue a private KYC credential to the deployer -----------------------
@@ -253,6 +312,8 @@ async function main() {
       housing_fund: fundAddr.toString(),
       governance: govAddr.toString(),
       eur_token: eurAddr.toString(),
+      dripper: dripperAddr.toString(),
+      property_nft: propertyNftAddr.toString(),
       fsft_dex: dexAddr.toString(),
       protocol_token: protocolTokenAddr.toString(),
       protocol_rewards: rewardsAddr.toString(),
@@ -292,6 +353,8 @@ NEXT_PUBLIC_HOUSING_FUND_ADDRESS=${out.contracts.housing_fund}
 NEXT_PUBLIC_GOVERNANCE_ADDRESS=${out.contracts.governance}
 NEXT_PUBLIC_FSFT_DEX_ADDRESS=${out.contracts.fsft_dex}
 NEXT_PUBLIC_EUR_TOKEN_ADDRESS=${out.contracts.eur_token}
+NEXT_PUBLIC_DRIPPER_ADDRESS=${out.contracts.dripper}
+NEXT_PUBLIC_PROPERTY_NFT_ADDRESS=${out.contracts.property_nft}
 NEXT_PUBLIC_PROTOCOL_TOKEN_ADDRESS=${out.contracts.protocol_token}
 NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS=${out.contracts.protocol_rewards}
 
@@ -305,9 +368,11 @@ NEXT_PUBLIC_ADMIN_ADDRESS=${out.deployer}
   log("============================================");
   log("Testnet deploy complete.");
   log(`  KYCVerifier      ${out.contracts.kyc_verifier}`);
-  log(`  FundToken        ${out.contracts.fund_token}`);
-  log(`  EurToken         ${out.contracts.eur_token}`);
-  log(`  ProtocolToken    ${out.contracts.protocol_token}`);
+  log(`  FSFT (AIP-20)    ${out.contracts.fund_token} (minter: housing_fund)`);
+  log(`  EUR  (AIP-20)    ${out.contracts.eur_token} (minter: dripper)`);
+  log(`  Dripper          ${out.contracts.dripper}`);
+  log(`  PropertyNFT      ${out.contracts.property_nft} (minter: housing_fund)`);
+  log(`  ProtocolToken    ${out.contracts.protocol_token} (minter: protocol_rewards)`);
   log(`  DeFiVault        ${out.contracts.defi_vault}`);
   log(`  HousingFund      ${out.contracts.housing_fund}`);
   log(`  Governance       ${out.contracts.governance}`);

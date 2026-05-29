@@ -114,9 +114,29 @@ async function main() {
   log(`  -> found ${credsResult.len} credential(s)`);
   const hintedKycNote = credsResult.storage[0];
 
+  // Phase 3: deposit_private stamps the deposit's immutable FIFO interval
+  // (cum_before), global seq, and frozen small bit. Read the live public cursor
+  // and supply them; the contract's only_self tail re-verifies them.
+  log("reading HousingFund.get_deposit_cursor_unconstrained...");
+  const cursor = (await hf.methods
+    .get_deposit_cursor_unconstrained()
+    .simulate({ from: accountAddress })) as unknown as {
+    cum_deposits: bigint;
+    cum_small_deposits: bigint;
+    deposit_seq: bigint;
+    small_threshold: bigint;
+  };
+  const suppliedCumBefore = BigInt(cursor.cum_deposits);
+  const suppliedSeq = BigInt(cursor.deposit_seq);
+  const suppliedIsSmall = SEED_AMOUNT <= BigInt(cursor.small_threshold);
+  log(
+    `  -> cursor: cum_before=${suppliedCumBefore} seq=${suppliedSeq} ` +
+      `is_small=${suppliedIsSmall} (threshold=${cursor.small_threshold})`
+  );
+
   log("sending HousingFund.deposit_private...");
   await hf.methods
-    .deposit_private(SEED_AMOUNT, hintedKycNote)
+    .deposit_private(SEED_AMOUNT, hintedKycNote, suppliedCumBefore, suppliedSeq, suppliedIsSmall)
     .send({ from: accountAddress });
 
   log(`✅ V2 seed deposit of ${SEED_AMOUNT} EUR landed as a private DepositNote for test0`);

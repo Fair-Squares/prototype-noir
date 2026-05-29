@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simAttestFsftForVoting, simGetVotingEligibility } from "@/lib/simulationStore";
-import { requireAztecTxHash } from "@/lib/txHash";
 import { simResult } from "@/lib/aztecSim";
 
 export async function GET(request: NextRequest) {
@@ -52,7 +51,7 @@ export async function GET(request: NextRequest) {
     const [kycJson, hfJson, ftJson] = await Promise.all([
       loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json"),
       loadGeneratedArtifactJson("housing_fund-HousingFund.json"),
-      loadGeneratedArtifactJson("fund_token-FundToken.json"),
+      loadGeneratedArtifactJson("token_contract-Token.json"),
     ]);
 
     const kycContract = await Contract.at(
@@ -72,25 +71,24 @@ export async function GET(request: NextRequest) {
     );
 
     // V2 eligibility: count private notes instead of reading public maps.
-    const [credSim, depSim, fsftSim, proofSim] = await Promise.all([
+    // FSFT exposure is now the AIP-20 public balance (balance_of_public > 0).
+    const [credSim, depSim, fsftSim] = await Promise.all([
       kycContract.methods.get_my_kyc_credentials(userAddress, 0).simulate({ from: actorAddress }),
       hfContract.methods.get_my_deposit_notes(userAddress, 0).simulate({ from: actorAddress }),
-      ftContract.methods.public_balance_of(userAddress).simulate({ from: actorAddress }),
-      ftContract.methods.has_private_holder_proof(userAddress).simulate({ from: actorAddress }),
+      ftContract.methods.balance_of_public(userAddress).simulate({ from: actorAddress }),
     ]);
 
     const isInvestor = simResult<{ len: bigint }>(credSim).len > 0n;
     const hasDepositTicket = simResult<{ len: bigint }>(depSim).len > 0n;
-    const hasPrivateHolderProof = Boolean(simResult(proofSim));
-    const hasFsftExposure = Number(simResult(fsftSim)) > 0 || hasPrivateHolderProof;
+    const hasFsftExposure = Number(simResult(fsftSim)) > 0;
     const canVote = isInvestor && (hasDepositTicket || hasFsftExposure);
-    const privateFsftProofMode = Boolean(hasPrivateHolderProof) ? "aztec-private-proven" : "none";
+    const privateFsftProofMode = hasFsftExposure ? "aztec-public-balance" : "none";
 
     return NextResponse.json({
       investorRole: Boolean(isInvestor),
       hasDepositTicket,
       hasFsftExposure,
-      hasFsftVotingAttestation: Boolean(hasPrivateHolderProof),
+      hasFsftVotingAttestation: hasFsftExposure,
       privateFsftProofMode,
       canVote,
       reason: !Boolean(isInvestor)
@@ -127,7 +125,7 @@ export async function POST(request: NextRequest) {
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({
       success: true,
-      message: "FSFT voting attestation recorded",
+      message: "FSFT voting eligibility recorded",
       privateFsftProofMode: "aztec-private-proven",
       source: "simulation",
     });
@@ -156,18 +154,27 @@ export async function POST(request: NextRequest) {
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
-    const FtArtifactJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
+    // AIP-20 migration: FSFT no longer exposes attest_private_holder(). Voting
+    // eligibility is now derived directly from the public token balance
+    // (balance_of_public > 0); there is no attestation tx to send.
+    const FtArtifactJson = await loadGeneratedArtifactJson("token_contract-Token.json");
     const ftArtifact = loadContractArtifact(FtArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, actor.wallet);
 
     const actorAddress = AztecAddress.fromString(actor.address);
-    const receipt = await ftContract.methods.attest_private_holder().send({ from: actorAddress });
+    const userAddress = AztecAddress.fromString(address);
+    const balance = Number(
+      simResult(await ftContract.methods.balance_of_public(userAddress).simulate({ from: actorAddress }))
+    );
+    const hasFsftExposure = balance > 0;
 
     return NextResponse.json({
       success: true,
-      message: "Private FSFT holder proof generated",
-      txHash: requireAztecTxHash(receipt),
-      privateFsftProofMode: "aztec-private-proven",
+      message: hasFsftExposure
+        ? "FSFT voting eligibility confirmed (public balance > 0)"
+        : "No FSFT exposure: hold FSFT to gain voting eligibility.",
+      hasFsftExposure,
+      privateFsftProofMode: hasFsftExposure ? "aztec-public-balance" : "none",
       source: "live",
     });
   } catch (error: unknown) {

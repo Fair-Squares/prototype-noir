@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simAttestFsftForRewards } from "@/lib/simulationStore";
-import { requireAztecTxHash } from "@/lib/txHash";
+import { simResult } from "@/lib/aztecSim";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -19,7 +19,8 @@ export async function POST(request: NextRequest) {
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({
       success: true,
-      message: "FSFT rewards attestation recorded",
+      eligible: true,
+      message: "FSFT rewards eligibility recorded",
       fsftProofMode: "aztec-private-proven",
       source: "simulation",
     });
@@ -33,7 +34,6 @@ export async function POST(request: NextRequest) {
 
   try {
     const rewardsAddr = process.env.NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS ?? "";
-    const fundTokenAddr = process.env.NEXT_PUBLIC_FUND_TOKEN_ADDRESS ?? "";
     if (!rewardsAddr) {
       return NextResponse.json({ error: "NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS not set" }, { status: 500 });
     }
@@ -50,35 +50,30 @@ export async function POST(request: NextRequest) {
     }
 
     const actorAddress = AztecAddress.fromString(actor.address);
-    let holderProofGenerated = false;
-    let holderProofMode: "none" | "aztec-private-proven" = "none";
+    const userAddress = AztecAddress.fromString(address);
 
-    if (fundTokenAddr) {
-      try {
-        const FtJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
-        const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);
-        const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, actor.wallet);
-        await ftContract.methods.attest_private_holder().send({ from: actorAddress });
-        holderProofMode = "aztec-private-proven";
-        holderProofGenerated = true;
-      } catch {
-        // Public FSFT holders can still attest rewards eligibility without this private-holder proof.
-      }
-    }
-
+    // AIP-20 migration: the explicit attest flow (FSFT.attest_private_holder +
+    // ProtocolRewards.attest_private_fsft_for_rewards) is removed. Rewards
+    // eligibility is now derived directly from the public FSFT balance, exposed
+    // by ProtocolRewards.has_fsft_rewards_eligibility (balance_of_public > 0).
+    // No transaction is sent; this endpoint just reports current eligibility.
     const RewardsJson = await loadGeneratedArtifactJson("protocol_rewards-ProtocolRewards.json");
     const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
     const rewardsContract = await Contract.at(AztecAddress.fromString(rewardsAddr), rewardsArtifact, actor.wallet);
 
-    const receipt = await rewardsContract.methods.attest_private_fsft_for_rewards().send({ from: actorAddress });
+    const eligible = Boolean(
+      simResult(
+        await rewardsContract.methods.has_fsft_rewards_eligibility(userAddress).simulate({ from: actorAddress })
+      )
+    );
+
     return NextResponse.json({
       success: true,
-      message: holderProofGenerated
-        ? "Private FSFT proof generated and rewards eligibility recorded"
-        : "FSFT rewards eligibility recorded",
-      txHash: requireAztecTxHash(receipt),
-      holderProofGenerated,
-      fsftProofMode: holderProofMode,
+      eligible,
+      message: eligible
+        ? "FSFT rewards eligibility confirmed (public balance > 0)"
+        : "No FSFT exposure: hold FSFT to become eligible for rewards.",
+      fsftProofMode: eligible ? "aztec-public-balance" : "none",
       source: "live",
     });
   } catch (error: unknown) {

@@ -1,0 +1,90 @@
+# Phase 3 — Token Standardization (AIP-20 everywhere)
+
+Date: 2026-05-29. Branch: `aip-token-standards`.
+
+Continues the aztec-standards migration. Phases 0–2 (vendored standards; EUR→AIP-20
+via Dripper; property deeds→AIP-721) are done. This phase standardizes the remaining
+tokens and the DEX, and replaces pure pro-rata distribution with a FIFO + small-floor
+allocation.
+
+## Decisions (locked by product owner)
+
+1. **Vendored AIP-20 `Token` everywhere.** Delete the bespoke `contracts/fund_token`.
+   FSFT, ProtocolToken, **and the single EUR token** are all instances of the vendored
+   `contracts/vendor/aztec-standards/src/token_contract` (`use token_contract::Token`).
+   There is exactly ONE EUR token (AIP-20, minter = Dripper); every pre-AIP-20 EUR
+   reference (notably the `FundToken clone` EUR in `testnet-deploy-contracts.ts`) is removed.
+2. **Immutable minters set at deploy** (vendored Token has no `set_admin`/`set_minter`):
+   - FSFT.minter = HousingFund   ProtocolToken.minter = ProtocolRewards   EUR.minter = Dripper
+3. **Rewards eligibility = `balance_of_public(user) > 0`.** The bespoke
+   `has_private_holder_proof` / `attest_private_holder` attestation has no AIP-20
+   equivalent and is dropped. Trade-off: a pure-private FSFT holder must unshield to earn
+   the FSFT reward sub-pool.
+4. **DEX retires the V1 public path**; settles only via the V2 commitment + authwit flow
+   using `Token::at(addr).transfer_private_to_private(from, to, amount:u128, _nonce)`.
+5. **Allocation = FIFO + small-depositor floor** (below).
+
+## Deploy / wiring order (immutable-minter constrained)
+
+1. KYCVerifier(admin) · 2. DeFiVault(admin) · 3. **HousingFund(admin)** ·
+4. **FSFT** = `Token.constructor_with_minter("Fair Squares FSFT","FSFT",0, HousingFund)` ·
+5. Governance(housing_fund, kyc, fund_token=FSFT, window, quorum) ·
+6. HousingFund.set_contracts(kyc, FSFT, defi, gov) · 7. DeFiVault.set_housing_fund ·
+8. **Dripper()** · 9. **EUR** = `Token.constructor_with_minter("EURs","EUR",0, Dripper)` ·
+10. PropertyNFT = `NFT.constructor_with_minter(..., HousingFund)`; HousingFund.set_property_nft ·
+11. FSFTDex(admin, kyc, housing_fund, FSFT, EUR, band, ttl) ·
+12. **ProtocolRewards(admin, housing_fund, governance, kyc, claim_min)** — no token args ·
+13. **ProtocolToken** = `Token.constructor_with_minter("Fair Squares Protocol","FSP",0, ProtocolRewards)` ·
+14. ProtocolRewards.set_protocol_token(ProtocolToken) (+ fsft already a ctor arg or set_fsft_token).
+
+Circular dep (ProtocolRewards↔ProtocolToken) broken by moving `protocol_token` from a
+constructor arg to a one-shot admin setter. No `set_admin` handoffs anymore.
+
+## Allocation spec (canonical — see commit-time design workflow)
+
+Per property distribution pool `pool = d_amount` (FSFT minted on claim, after an executed
+governance proposal):
+- `small_pool = floor(pool * 30 / 100)`; `fifo_pool = pool - small_pool`; `fifo_cap = fifo_pool`.
+- A deposit has an **immutable FIFO interval** `[cum_before, cum_before+amount)` where
+  `cum_before` = `cum_deposits` (monotonic gross, u128, never decremented) read before the deposit.
+- `small` iff `amount <= small_threshold` (default 10000, configurable), **frozen per-deposit**.
+- Order-independent, division-free share (one shared free fn, identical on both paths):
+  - `fifo_share = overlap([cum_before, cum_before+amount), [0, fifo_cap))` paid 1:1.
+  - `small_share = (is_small && small_total>0) ? floor(small_pool * amount / small_total) : 0`.
+  - `claim = fifo_share + small_share`.
+- `small_total` = snapshot of `cum_small_deposits` at `open_distribution`; `snapshot_total` =
+  `cum_deposits` at open. No-over-mint: intervals tile `[0,cum_deposits)` disjointly →
+  `Σfifo ≤ fifo_pool`, `Σsmall ≤ small_pool` → `Σclaim ≤ pool`. A `claimed_total ≤ d_amount`
+  ceiling assert is a fail-closed backstop only.
+- **Both paths use per-deposit records** (aggregate coalescing over-mints): public path writes
+  a `DepositRecord{owner,amount,cum_before,is_small}` at `poseidon2([owner,seq])`; private path
+  carries `{cum_before, seq, is_small}` inside the (now 5-field) `DepositNote` and uses the
+  existing supplied-then-verified discipline for the pool snapshots.
+- Privacy: only new leak is a 1-bit small/large per private deposit (via `cum_small_deposits`
+  moving); the exact-amount aggregate delta already leaked pre-Phase-3. Accepted for the prototype.
+
+`DepositNote` layout change → recompile all `HintedNote<DepositNote>` consumers (governance,
+housing_fund) + regen TS/PXE codegen; fresh deploy (immutable notes, no in-place migration).
+
+## File checklist
+
+Contracts (dependency order): [x] deposit_note · [x] governance · [x] housing_fund ·
+[x] protocol_rewards · [x] fsft_dex · [x] delete fund_token · [x] compile + `aztec test`
+(5/5 pass).
+Scripts: [x] bootstrap-local-network.sh · [x] testnet-deploy-contracts.ts.
+Frontend (source only — `src/artifacts/` is gitignored + regenerated by bootstrap):
+[x] serverWallet.ts loader · [x] portfolio/fund/rewards/governance/kyc/dex routes ·
+[x] aztecLive.ts raw-slot fix (FSFT total_supply→slot 8; HousingFund total_deposits/
+in_defi/allocated/is_paused→7/8/9/37) · [x] re-enable DEX matching (match_order_private +
+authwit Token.transfer_private_to_private) · [x] tsc 0 errors, 0 residual stale refs ·
+[x] seed-v2-deposit.ts deposit-cursor params · [x] .env.local.example dripper/property keys.
+
+## Verification notes
+
+- All 5 V2 contracts compile under `aztec compile` and pass `aztec test` (host CLI, v4.3.0).
+- Deploy scripts are correct-by-construction against the verified deploy sequencing;
+  they require a live local network / testnet to runtime-test (immutable minter ordering).
+- Frontend `src/artifacts/*` is a generated, gitignored, root-owned dir — refreshed by
+  `bootstrap-local-network.sh generate_typescript` (no longer codegens `fund_token`). Full
+  UI verification requires a local-network bootstrap; the committed source edits are
+  correct against the new ABIs.

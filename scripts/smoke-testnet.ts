@@ -82,9 +82,10 @@ async function main() {
     log(" 1. AZTEC_NETWORK=testnet npx tsx scripts/testnet-deploy-account.ts");
     log("    -- creates / reuses a Schnorr account paid for by SponsoredFPC.");
     log(" 2. AZTEC_NETWORK=testnet npx tsx scripts/testnet-deploy-contracts.ts");
-    log("    -- deploys all 9 contract instances, wires set_contracts /");
-    log("       set_admin links, issues a private KYC credential to the");
-    log("       deployer, emits frontend/.env.testnet.");
+    log("    -- deploys the contracts + AIP-20 token instances (FSFT/EUR/");
+    log("       ProtocolToken, immutable minters set at deploy), wires");
+    log("       set_contracts / set_property_nft / set_protocol_token, issues a");
+    log("       private KYC credential to the deployer, emits frontend/.env.testnet.");
     log(" 3. Start the frontend with AZTEC_LIVE=true AZTEC_NETWORK=testnet,");
     log("    using the freshly written frontend/.env.testnet.");
   } catch (err) {

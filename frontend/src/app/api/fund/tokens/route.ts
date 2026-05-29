@@ -127,14 +127,14 @@ export async function GET(request: NextRequest) {
           const { AztecAddress } = await import("@aztec/aztec.js/addresses");
           const admin = await getTestAccount(0);
           const w = admin.wallet;
-          const FtJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
+          const FtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
           const ftC = await Contract.at(
             AztecAddress.fromString(fundTokenAddr),
             loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]),
             w
           );
           return Number(
-            simResult(await ftC.methods.public_balance_of(AztecAddress.fromString(address)).simulate({
+            simResult(await ftC.methods.balance_of_public(AztecAddress.fromString(address)).simulate({
               from: AztecAddress.fromString(admin.address),
             }))
           );

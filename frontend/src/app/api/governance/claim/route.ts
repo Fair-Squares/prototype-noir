@@ -51,8 +51,10 @@ export async function POST(request: NextRequest) {
     const actorAddress = AztecAddress.fromString(actor.address);
 
     // V2 path: claim_distribution_private needs a hinted DepositNote the
-    // caller already owns plus the public distribution params (amount +
-    // snapshot total) which the public tail re-verifies against storage.
+    // caller already owns plus the per-proposal allocation snapshots
+    // (small_pool, small_total, fifo_cap) which the public tail re-verifies
+    // against storage. The claimable share is computed in-circuit from the
+    // kernel-verified note + these snapshots via the FIFO/small-pool scheme.
     const depositsResult = simResult<{
       len: bigint;
       storage: unknown[];
@@ -63,22 +65,31 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
+    // NOTE: claim is per-DepositNote. We claim against the first note only;
+    // an account with multiple private deposit notes would need to call
+    // claim_distribution_private once per note (one nullifier per
+    // (note_hash, proposal_id)). Enumerating + claiming all notes is a
+    // follow-up beyond this ABI-wiring change.
     const hintedDepositNote = depositsResult.storage[0];
 
     const status = simResult<{
       open: boolean;
       amount: bigint;
-      total_deposits_snapshot: bigint;
+      snapshot_total: bigint;
+      small_total: bigint;
+      small_pool: bigint;
+      fifo_cap: bigint;
       claimed_total: bigint;
     }>(await hfContract.methods.get_distribution_status(Number(proposalId)).simulate({ from: actorAddress }));
     if (!status.open) {
       return NextResponse.json({ error: "Distribution not open for this proposal" }, { status: 400 });
     }
-    if (status.total_deposits_snapshot === 0n) {
+    if (BigInt(status.snapshot_total) === 0n) {
       return NextResponse.json({ error: "Distribution snapshot is zero" }, { status: 400 });
     }
-    const distributionAmount = BigInt(status.amount);
-    const snapshotTotal = BigInt(status.total_deposits_snapshot);
+    const suppliedSmallPool = BigInt(status.small_pool);
+    const suppliedSmallTotal = BigInt(status.small_total);
+    const suppliedFifoCap = BigInt(status.fifo_cap);
 
     const fundTokenAddr = process.env.NEXT_PUBLIC_FUND_TOKEN_ADDRESS ?? "";
     if (!fundTokenAddr) {
@@ -90,14 +101,18 @@ export async function POST(request: NextRequest) {
         Number(proposalId),
         hintedDepositNote,
         AztecAddress.fromString(fundTokenAddr),
-        distributionAmount,
-        snapshotTotal,
+        suppliedSmallPool,
+        suppliedSmallTotal,
+        suppliedFifoCap,
       )
       .send({ from: actorAddress });
 
     return NextResponse.json({
       success: true,
-      claimedAmount: Number(distributionAmount),
+      // The claimed FSFT share is computed privately in-circuit and is not
+      // returned by the tx, so we cannot report an exact amount here without
+      // a separate private preview. Report null rather than a fabricated value.
+      claimedAmount: null,
       txHash: requireAztecTxHash(receipt),
       message: "Distribution claimed privately",
     });

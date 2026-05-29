@@ -101,11 +101,11 @@ function fieldToEur(raw: bigint): number {
 // ── Fund stats ────────────────────────────────────────────────────────────────
 
 export interface LiveFundStats {
-  totalDeposits: number;  // HousingFund.total_deposits  (slot 6)
-  totalInDefi:   number;  // HousingFund.total_in_defi   (slot 7)
-  totalAllocated:number;  // HousingFund.total_allocated (slot 8)
-  isPaused:      boolean; // HousingFund.is_paused       (slot 9)
-  totalSupply:   number;  // FundToken.total_supply      (slot 2)
+  totalDeposits: number;  // HousingFund.total_deposits  (slot 7)
+  totalInDefi:   number;  // HousingFund.total_in_defi   (slot 8)
+  totalAllocated:number;  // HousingFund.total_allocated (slot 9)
+  isPaused:      boolean; // HousingFund.is_paused       (slot 37, post Phase-3 FIFO fields)
+  totalSupply:   number;  // FSFT Token.total_supply      (slot 8, AIP-20)
   investorCount: number;  // KYCVerifier.verified_count  (slot 4)
   available:     number;  // totalDeposits - totalInDefi - totalAllocated
   totalYield:    number;  // DeFiVault.accrued_yield     (slot 5)
@@ -117,8 +117,14 @@ export async function getLiveFundStats(): Promise<LiveFundStats> {
 
   // Parallel reads across 3 contracts
   const [hf, ft, kyc, vault] = await Promise.all([
-    readSlots(HOUSING_FUND(), [6n, 7n, 8n, 9n], bh), // HousingFund
-    readSlots(FUND_TOKEN(), [2n], bh), // FundToken
+    // HousingFund post Phase-3 layout: total_deposits(7), total_in_defi(8),
+    // total_allocated(9), is_paused(37) -- FIFO/allocation fields shifted is_paused.
+    readSlots(HOUSING_FUND(), [7n, 8n, 9n, 37n], bh), // HousingFund
+    // FSFT is the vendored AIP-20 Token. Its storage layout is
+    // name(1)/symbol(3)/decimals(5)/private_balances(7)/total_supply(8)/
+    // public_balances(9)/minter(10) -- see src/artifacts/Token.ts. total_supply
+    // is at slot 8 (NOT slot 2; that was the bespoke FundToken layout).
+    readSlots(FUND_TOKEN(), [8n], bh), // FSFT Token total_supply
     readSlots(KYC_VERIFIER(), [4n], bh), // KYCVerifier
     readSlots(DEFI_VAULT(), [5n], bh), // DeFiVault
   ]);
@@ -259,7 +265,9 @@ export async function getLivePortfolio(userAddress: string): Promise<LivePortfol
   // TODO: route private reads through the browser wallet.
   void userAddress;
 
-  const totalSupply = fieldToEur(await readSlot(FUND_TOKEN(), 2n));
+  // FSFT total_supply is at slot 8 in the vendored AIP-20 Token layout
+  // (name/symbol/decimals/private_balances precede it). See getLiveFundStats.
+  const totalSupply = fieldToEur(await readSlot(FUND_TOKEN(), 8n));
 
   return {
     balance: 0,

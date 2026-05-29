@@ -3,6 +3,7 @@ import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simGetDexOrderbook, simPlaceDexOrder } from "@/lib/simulationStore";
 import { requireAztecTxHash } from "@/lib/txHash";
 import { simResult } from "@/lib/aztecSim";
+import { getBlockNumber } from "@/lib/aztecClient";
 
 function toNumberSafe(value: unknown): number {
   if (typeof value === "number") return value;
@@ -22,25 +23,16 @@ function toNumberStrict(value: unknown, fieldName: string): number {
   return parsed;
 }
 
-interface OrderInfoStruct {
-  owner: unknown;
-  side: bigint;
-  amount: bigint;
-  remaining: bigint;
-  price_bps: bigint;
-  status: bigint;
-  expiry_block: bigint;
-  created_block: bigint;
-}
-
-function statusToLabel(status: number): "open" | "partial" | "filled" | "cancelled" | "expired" {
-  if (status === 0) return "open";
-  if (status === 1) return "partial";
-  if (status === 2) return "filled";
-  if (status === 3) return "cancelled";
-  if (status === 4) return "expired";
-  throw new Error(`Invalid DEX order status code: ${status}`);
-}
+// Phase 3: the FSFTDex V1 public orderbook is RETIRED. The contract no longer
+// exposes per-order maps (`get_order` / `get_order_count` are GONE) — orders now
+// live as private OrderIntentNotes in each owner's PXE and the chain only reveals
+// an application-level commitment + its status (OPEN / PARTIAL / FILLED /
+// CANCELLED) via `get_order_status(commitment)`. There is therefore NO public
+// enumeration of the orderbook: the snapshot below carries only the advisory
+// NAV band + ttl policy, and the buy/sell/user lists are intentionally empty.
+// Callers track a specific order by retaining the commitment returned from POST
+// and polling `get_order_status` (not surfaced here — it requires the caller's
+// own commitment, which is not derivable from public state).
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -76,74 +68,39 @@ export async function GET(request: NextRequest) {
     const dexArtifact = loadContractArtifact(DexArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const dexContract = await Contract.at(AztecAddress.fromString(dexAddr), dexArtifact, actor.wallet);
 
-    const [countSim, snapshotSim] = await Promise.all([
-      dexContract.methods.get_order_count().simulate({ from: actorAddress }),
-      dexContract.methods.get_orderbook_snapshot().simulate({ from: actorAddress }),
-    ]);
-
-    const count = toNumberStrict(simResult(countSim), "FSFTDex.get_order_count");
-    const snapshot = simResult<{ ref_price_bps: bigint; min_price_bps: bigint; max_price_bps: bigint }>(snapshotSim);
+    // V2 snapshot only carries the advisory NAV band + ttl policy. `order_count`
+    // was dropped along with the public orderbook.
+    const snapshot = simResult<{
+      ref_price_bps: bigint;
+      min_price_bps: bigint;
+      max_price_bps: bigint;
+      price_band_bps: bigint;
+      max_ttl_blocks: bigint;
+    }>(await dexContract.methods.get_orderbook_snapshot().simulate({ from: actorAddress }));
     const referenceBps = toNumberStrict(snapshot.ref_price_bps, "FSFTDex.get_orderbook_snapshot.ref_price_bps");
     const minBps = toNumberStrict(snapshot.min_price_bps, "FSFTDex.get_orderbook_snapshot.min_price_bps");
     const maxBps = toNumberStrict(snapshot.max_price_bps, "FSFTDex.get_orderbook_snapshot.max_price_bps");
-
-    const rawOrders = await Promise.all(
-      Array.from({ length: count }, async (_, id) => {
-        const order = simResult<OrderInfoStruct>(
-          await dexContract.methods.get_order(id).simulate({ from: actorAddress })
-        );
-        return { id, order };
-      })
-    );
-
-    const orders = rawOrders.map(({ id, order }) => {
-      const ownerValue = order.owner;
-      if (ownerValue === undefined || ownerValue === null) {
-        throw new Error(`FSFTDex.get_order(${id}) returned empty owner`);
-      }
-      const owner = String(ownerValue);
-      const sideCode = toNumberStrict(order.side, `FSFTDex.get_order(${id}).side`);
-      if (sideCode !== 0 && sideCode !== 1) {
-        throw new Error(`FSFTDex.get_order(${id}) returned invalid side code ${sideCode}`);
-      }
-      const side = sideCode === 0 ? "buy" : "sell";
-      const amount = toNumberStrict(order.amount, `FSFTDex.get_order(${id}).amount`);
-      const remaining = toNumberStrict(order.remaining, `FSFTDex.get_order(${id}).remaining`);
-      const priceBps = toNumberStrict(order.price_bps, `FSFTDex.get_order(${id}).price_bps`);
-      const statusCode = toNumberStrict(order.status, `FSFTDex.get_order(${id}).status`);
-      const expiryBlock = toNumberStrict(order.expiry_block, `FSFTDex.get_order(${id}).expiry_block`);
-      const createdAt = toNumberStrict(order.created_block, `FSFTDex.get_order(${id}).created_block`);
-
-      return {
-        id,
-        side,
-        owner,
-        amount,
-        remaining,
-        priceEur: priceBps / 10000,
-        status: statusToLabel(statusCode),
-        createdAt,
-        updatedAt: createdAt,
-        expiryBlock,
-      };
-    });
-
-    const openOrders = orders.filter((o) => o.status === "open" || o.status === "partial");
-    const buyOrders = openOrders
-      .filter((o) => o.side === "buy")
-      .sort((a, b) => b.priceEur - a.priceEur || a.createdAt - b.createdAt);
-    const sellOrders = openOrders
-      .filter((o) => o.side === "sell")
-      .sort((a, b) => a.priceEur - b.priceEur || a.createdAt - b.createdAt);
+    const priceBandBps = toNumberStrict(snapshot.price_band_bps, "FSFTDex.get_orderbook_snapshot.price_band_bps");
+    const maxTtlBlocks = toNumberStrict(snapshot.max_ttl_blocks, "FSFTDex.get_orderbook_snapshot.max_ttl_blocks");
 
     return NextResponse.json({
       priceReferenceEur: referenceBps / 10000,
       priceBandMinEur: minBps / 10000,
       priceBandMaxEur: maxBps / 10000,
-      buyOrders,
-      sellOrders,
-      userOrders: address ? orders.filter((o) => o.owner.toLowerCase() === address.toLowerCase()) : [],
+      priceBandBps,
+      maxTtlBlocks,
+      // Per-order public listing is not available under the V2 private-intents
+      // model: order owner / amount / price never leave the owner's PXE, so the
+      // orderbook cannot be enumerated on chain.
+      buyOrders: [],
+      sellOrders: [],
+      userOrders: [],
       recentTrades: [],
+      orderbookListingAvailable: false,
+      note:
+        "Per-order public listing is unavailable under the private-intents model. " +
+        "Only the NAV band/ttl snapshot is public; track your own order via the " +
+        "commitment returned when placing it.",
       source: "live",
     });
   } catch (error: unknown) {
@@ -190,11 +147,16 @@ export async function POST(request: NextRequest) {
     if (!dexAddr) {
       return NextResponse.json({ error: "NEXT_PUBLIC_FSFT_DEX_ADDRESS not set" }, { status: 500 });
     }
+    const kycAddr = process.env.NEXT_PUBLIC_KYC_VERIFIER_ADDRESS ?? "";
+    if (!kycAddr) {
+      return NextResponse.json({ error: "NEXT_PUBLIC_KYC_VERIFIER_ADDRESS not set" }, { status: 500 });
+    }
 
     const { getTestAccount } = await import("@/lib/serverWallet");
     const { Contract } = await import("@aztec/aztec.js/contracts");
     const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Fr } = await import("@aztec/aztec.js/fields");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     const actor = await getTestAccount(accountIndex);
@@ -207,27 +169,59 @@ export async function POST(request: NextRequest) {
     const dexArtifact = loadContractArtifact(DexArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const dexContract = await Contract.at(AztecAddress.fromString(dexAddr), dexArtifact, actor.wallet);
 
-    const snapshot = simResult<{ ref_price_bps: bigint }>(
+    const snapshot = simResult<{ ref_price_bps: bigint; max_ttl_blocks: bigint }>(
       await dexContract.methods.get_orderbook_snapshot().simulate({ from: actorAddress })
     );
     const referenceBps = toNumberStrict(snapshot.ref_price_bps, "FSFTDex.get_orderbook_snapshot.ref_price_bps");
     if (referenceBps <= 0) {
       throw new Error("FSFTDex.get_orderbook_snapshot returned non-positive reference price");
     }
+    const maxTtlBlocks = toNumberStrict(snapshot.max_ttl_blocks, "FSFTDex.get_orderbook_snapshot.max_ttl_blocks");
     const priceBps = limitPriceEur ? Math.round(Number(limitPriceEur) * 10_000) : referenceBps;
 
-    const sideCode = side === "buy" ? 0 : 1;
-    const ttl = Number(ttlBlocks ?? process.env.DEX_MAX_TTL_BLOCKS ?? 120);
-    const receipt = await dexContract.methods
-      .place_order(sideCode, BigInt(Math.round(Number(amount))), BigInt(priceBps), ttl)
-      .send({ from: actorAddress });
+    // V2 place_order_private requires the caller's KYC credential note as a hint.
+    const KycArtifactJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
+    const kycArtifact = loadContractArtifact(KycArtifactJson as Parameters<typeof loadContractArtifact>[0]);
+    const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, actor.wallet);
+    const credentialsResult = simResult<{ len: bigint; storage: unknown[] }>(
+      await kycContract.methods.get_my_kyc_credentials(actorAddress, 0).simulate({ from: actorAddress })
+    );
+    if (credentialsResult.len === 0n) {
+      return NextResponse.json(
+        {
+          error:
+            "No private KYC credential found for this account. Complete KYC (POST /api/kyc/register) before placing orders.",
+        },
+        { status: 403 }
+      );
+    }
+    const hintedKycNote = credentialsResult.storage[0];
 
-    const countAfter = Number(simResult(await dexContract.methods.get_order_count().simulate({ from: actorAddress })));
-    const newOrderId = Math.max(0, countAfter - 1);
+    // Expiry is an absolute block height: current head + the requested ttl,
+    // clamped to the contract's advisory max_ttl_blocks policy.
+    const ttl = Math.min(Number(ttlBlocks ?? process.env.DEX_MAX_TTL_BLOCKS ?? 120), maxTtlBlocks);
+    const currentBlock = await getBlockNumber();
+    const expiryBlock = currentBlock + ttl;
+
+    const sideCode = side === "buy" ? 0 : 1;
+    const amountU128 = BigInt(Math.round(Number(amount)));
+    // Random salt so distinct orders with identical (owner, side, amount, price,
+    // expiry) parameters produce distinct public commitments.
+    const salt = Fr.random();
+
+    const receipt = await dexContract.methods
+      .place_order_private(sideCode, amountU128, BigInt(priceBps), expiryBlock, salt, hintedKycNote)
+      .send({ from: actorAddress });
 
     return NextResponse.json({
       success: true,
-      orderId: newOrderId,
+      // The application-level order commitment the caller retains to look up
+      // status later via FSFTDex.get_order_status(commitment).
+      salt: salt.toString(),
+      side,
+      amount: Number(amountU128),
+      priceBps,
+      expiryBlock,
       message: "Order placed",
       txHash: requireAztecTxHash(receipt),
       source: "live",
