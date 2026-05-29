@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simGetDexOrderbook, simPlaceDexOrder } from "@/lib/simulationStore";
 import { requireAztecTxHash } from "@/lib/txHash";
+import { simResult } from "@/lib/aztecSim";
 
 function toNumberSafe(value: unknown): number {
   if (typeof value === "number") return value;
@@ -21,14 +22,15 @@ function toNumberStrict(value: unknown, fieldName: string): number {
   return parsed;
 }
 
-function expectTuple(value: unknown, expectedLength: number, methodName: string): unknown[] {
-  if (!Array.isArray(value)) {
-    throw new Error(`${methodName} returned non-tuple response`);
-  }
-  if (value.length < expectedLength) {
-    throw new Error(`${methodName} returned ${value.length} values, expected ${expectedLength}`);
-  }
-  return value;
+interface OrderInfoStruct {
+  owner: unknown;
+  side: bigint;
+  amount: bigint;
+  remaining: bigint;
+  price_bps: bigint;
+  status: bigint;
+  expiry_block: bigint;
+  created_block: bigint;
 }
 
 function statusToLabel(status: number): "open" | "partial" | "filled" | "cancelled" | "expired" {
@@ -74,41 +76,43 @@ export async function GET(request: NextRequest) {
     const dexArtifact = loadContractArtifact(DexArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const dexContract = await Contract.at(AztecAddress.fromString(dexAddr), dexArtifact, actor.wallet);
 
-    const [countRaw, snapshotRaw] = await Promise.all([
+    const [countSim, snapshotSim] = await Promise.all([
       dexContract.methods.get_order_count().simulate({ from: actorAddress }),
       dexContract.methods.get_orderbook_snapshot().simulate({ from: actorAddress }),
     ]);
 
-    const count = toNumberStrict(countRaw, "FSFTDex.get_order_count");
-    const snapshot = expectTuple(snapshotRaw, 3, "FSFTDex.get_orderbook_snapshot");
-    const referenceBps = toNumberStrict(snapshot[0], "FSFTDex.get_orderbook_snapshot.reference_bps");
-    const minBps = toNumberStrict(snapshot[1], "FSFTDex.get_orderbook_snapshot.min_bps");
-    const maxBps = toNumberStrict(snapshot[2], "FSFTDex.get_orderbook_snapshot.max_bps");
+    const count = toNumberStrict(simResult(countSim), "FSFTDex.get_order_count");
+    const snapshot = simResult<{ ref_price_bps: bigint; min_price_bps: bigint; max_price_bps: bigint }>(snapshotSim);
+    const referenceBps = toNumberStrict(snapshot.ref_price_bps, "FSFTDex.get_orderbook_snapshot.ref_price_bps");
+    const minBps = toNumberStrict(snapshot.min_price_bps, "FSFTDex.get_orderbook_snapshot.min_price_bps");
+    const maxBps = toNumberStrict(snapshot.max_price_bps, "FSFTDex.get_orderbook_snapshot.max_price_bps");
 
     const rawOrders = await Promise.all(
       Array.from({ length: count }, async (_, id) => {
-        const orderRaw = await dexContract.methods.get_order(id).simulate({ from: actorAddress });
-        return { id, tuple: expectTuple(orderRaw, 8, `FSFTDex.get_order(${id})`) };
+        const order = simResult<OrderInfoStruct>(
+          await dexContract.methods.get_order(id).simulate({ from: actorAddress })
+        );
+        return { id, order };
       })
     );
 
-    const orders = rawOrders.map(({ id, tuple }) => {
-      const ownerValue = tuple[0];
+    const orders = rawOrders.map(({ id, order }) => {
+      const ownerValue = order.owner;
       if (ownerValue === undefined || ownerValue === null) {
         throw new Error(`FSFTDex.get_order(${id}) returned empty owner`);
       }
       const owner = String(ownerValue);
-      const sideCode = toNumberStrict(tuple[1], `FSFTDex.get_order(${id}).side`);
+      const sideCode = toNumberStrict(order.side, `FSFTDex.get_order(${id}).side`);
       if (sideCode !== 0 && sideCode !== 1) {
         throw new Error(`FSFTDex.get_order(${id}) returned invalid side code ${sideCode}`);
       }
       const side = sideCode === 0 ? "buy" : "sell";
-      const amount = toNumberStrict(tuple[2], `FSFTDex.get_order(${id}).amount`);
-      const remaining = toNumberStrict(tuple[3], `FSFTDex.get_order(${id}).remaining`);
-      const priceBps = toNumberStrict(tuple[4], `FSFTDex.get_order(${id}).price_bps`);
-      const statusCode = toNumberStrict(tuple[5], `FSFTDex.get_order(${id}).status`);
-      const expiryBlock = toNumberStrict(tuple[6], `FSFTDex.get_order(${id}).expiry_block`);
-      const createdAt = toNumberStrict(tuple[7], `FSFTDex.get_order(${id}).created_block`);
+      const amount = toNumberStrict(order.amount, `FSFTDex.get_order(${id}).amount`);
+      const remaining = toNumberStrict(order.remaining, `FSFTDex.get_order(${id}).remaining`);
+      const priceBps = toNumberStrict(order.price_bps, `FSFTDex.get_order(${id}).price_bps`);
+      const statusCode = toNumberStrict(order.status, `FSFTDex.get_order(${id}).status`);
+      const expiryBlock = toNumberStrict(order.expiry_block, `FSFTDex.get_order(${id}).expiry_block`);
+      const createdAt = toNumberStrict(order.created_block, `FSFTDex.get_order(${id}).created_block`);
 
       return {
         id,
@@ -203,9 +207,10 @@ export async function POST(request: NextRequest) {
     const dexArtifact = loadContractArtifact(DexArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const dexContract = await Contract.at(AztecAddress.fromString(dexAddr), dexArtifact, actor.wallet);
 
-    const snapshotRaw = await dexContract.methods.get_orderbook_snapshot().simulate({ from: actorAddress });
-    const snapshot = expectTuple(snapshotRaw, 1, "FSFTDex.get_orderbook_snapshot");
-    const referenceBps = toNumberStrict(snapshot[0], "FSFTDex.get_orderbook_snapshot.reference_bps");
+    const snapshot = simResult<{ ref_price_bps: bigint }>(
+      await dexContract.methods.get_orderbook_snapshot().simulate({ from: actorAddress })
+    );
+    const referenceBps = toNumberStrict(snapshot.ref_price_bps, "FSFTDex.get_orderbook_snapshot.ref_price_bps");
     if (referenceBps <= 0) {
       throw new Error("FSFTDex.get_orderbook_snapshot returned non-positive reference price");
     }
@@ -217,7 +222,7 @@ export async function POST(request: NextRequest) {
       .place_order(sideCode, BigInt(Math.round(Number(amount))), BigInt(priceBps), ttl)
       .send({ from: actorAddress });
 
-    const countAfter = Number(await dexContract.methods.get_order_count().simulate({ from: actorAddress }));
+    const countAfter = Number(simResult(await dexContract.methods.get_order_count().simulate({ from: actorAddress })));
     const newOrderId = Math.max(0, countAfter - 1);
 
     return NextResponse.json({

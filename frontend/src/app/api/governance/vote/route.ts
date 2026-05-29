@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simCastVote } from "@/lib/simulationStore";
 import { requireAztecTxHash } from "@/lib/txHash";
+import { simResult, isDuplicateNullifierError } from "@/lib/aztecSim";
 
 export async function POST(request: NextRequest) {
   const { address, accountIndex = 0, proposalId, voteYes } = await request.json();
@@ -62,9 +63,9 @@ export async function POST(request: NextRequest) {
     // PXE. cast_vote_private requires both: KYC for eligibility, deposit
     // note for fund-exposure proof. Both are kernel-verified inside the
     // private circuit; voter identity is not revealed publicly.
-    const credentialsResult = (await kycContract.methods
-      .get_my_kyc_credentials(userAddress, 0)
-      .simulate({ from: accountAddress })) as { len: bigint; storage: unknown[] };
+    const credentialsResult = simResult<{ len: bigint; storage: unknown[] }>(
+      await kycContract.methods.get_my_kyc_credentials(userAddress, 0).simulate({ from: accountAddress })
+    );
     if (credentialsResult.len === 0n) {
       return NextResponse.json(
         { error: "No private KYC credential found. Re-run /api/kyc/register first." },
@@ -73,9 +74,9 @@ export async function POST(request: NextRequest) {
     }
     const hintedKycNote = credentialsResult.storage[0];
 
-    const depositsResult = (await hfContract.methods
-      .get_my_deposit_notes(userAddress, 0)
-      .simulate({ from: accountAddress })) as { len: bigint; storage: unknown[] };
+    const depositsResult = simResult<{ len: bigint; storage: unknown[] }>(
+      await hfContract.methods.get_my_deposit_notes(userAddress, 0).simulate({ from: accountAddress })
+    );
     if (depositsResult.len === 0n) {
       return NextResponse.json(
         {
@@ -104,6 +105,12 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[governance/vote]", msg);
+    if (isDuplicateNullifierError(msg)) {
+      return NextResponse.json(
+        { error: "You have already voted on this proposal. Each account can vote once per proposal." },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

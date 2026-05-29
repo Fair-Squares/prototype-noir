@@ -83,9 +83,21 @@ async function main() {
     loadArtifact("housing_fund-HousingFund")
   );
 
-  // Wallet expects an actual wallet object; EmbeddedWallet implements it.
-  const kyc = await Contract.at(AztecAddress.fromString(KYC_ADDR), kycArtifact, wallet);
-  const hf = await Contract.at(AztecAddress.fromString(HF_ADDR), hfArtifact, wallet);
+  // Contract.at does NOT register the contract in PXE — it just builds the
+  // method proxy. EmbeddedWallet ships with its own in-process PXE which has
+  // no knowledge of contracts deployed via the aztec-wallet CLI, so we have
+  // to fetch the instance from the node and register it before simulating.
+  const kycAddress = AztecAddress.fromString(KYC_ADDR);
+  const hfAddress = AztecAddress.fromString(HF_ADDR);
+  const kycInstance = await node.getContract(kycAddress);
+  const hfInstance = await node.getContract(hfAddress);
+  if (!kycInstance) throw new Error(`KYCVerifier ${KYC_ADDR} not on node`);
+  if (!hfInstance) throw new Error(`HousingFund ${HF_ADDR} not on node`);
+  await wallet.registerContract(kycInstance, kycArtifact);
+  await wallet.registerContract(hfInstance, hfArtifact);
+
+  const kyc = await Contract.at(kycAddress, kycArtifact, wallet);
+  const hf = await Contract.at(hfAddress, hfArtifact, wallet);
 
   log("simulating KYCVerifier.get_my_kyc_credentials...");
   const credsResult = (await kyc.methods

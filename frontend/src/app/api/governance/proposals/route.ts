@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getBlockNumber } from "@/lib/aztecClient";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { getAztecTxHash } from "@/lib/txHash";
+import { simResult } from "@/lib/aztecSim";
 import {
   simGetProposals,
   simCreateProposal,
@@ -35,16 +36,6 @@ function toBigIntStrict(value: unknown, fieldName: string): bigint {
     return s.startsWith("0x") ? BigInt(s) : BigInt(s);
   }
   throw new Error(`${fieldName} is not a bigint-compatible value`);
-}
-
-function expectTuple(value: unknown, expectedLength: number, methodName: string): unknown[] {
-  if (!Array.isArray(value)) {
-    throw new Error(`${methodName} returned non-tuple response`);
-  }
-  if (value.length < expectedLength) {
-    throw new Error(`${methodName} returned ${value.length} values, expected ${expectedLength}`);
-  }
-  return value;
 }
 
 // -- GET: list proposals ------------------------------------------------------
@@ -104,48 +95,57 @@ export async function GET(request: NextRequest) {
     const govContract = await Contract.at(AztecAddress.fromString(govAddr), govArtifact, wallet);
     const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, wallet);
 
-    const count = Number(await govContract.methods.get_proposal_count().simulate({ from }));
+    const count = Number(simResult(await govContract.methods.get_proposal_count().simulate({ from })));
     const currentBlock = await getBlockNumber();
-    const quorum = Number(await govContract.methods.get_min_quorum_votes().simulate({ from }));
+    const quorum = Number(simResult(await govContract.methods.get_min_quorum_votes().simulate({ from })));
     const requestedAddress = address ? AztecAddress.fromString(address) : null;
 
     const proposals = await Promise.all(
       Array.from({ length: count }, async (_, id) => {
-        const raw = await govContract.methods.get_proposal(id).simulate({ from });
-        const tuple = expectTuple(raw, 7, `Governance.get_proposal(${id})`);
+        const proposal = simResult<{
+          desc_hash: bigint;
+          amount: bigint;
+          yes_votes: bigint;
+          no_votes: bigint;
+          status: bigint;
+          created_block: bigint;
+          deadline_block: bigint;
+        }>(await govContract.methods.get_proposal(id).simulate({ from }));
 
-        const descHash = toBigIntStrict(tuple[0], `Governance.get_proposal(${id}).desc_hash`);
-        const amount = Number(toBigIntStrict(tuple[1], `Governance.get_proposal(${id}).amount`));
-        const yesVotes = Number(toBigIntStrict(tuple[2], `Governance.get_proposal(${id}).yes_votes`));
-        const noVotes = Number(toBigIntStrict(tuple[3], `Governance.get_proposal(${id}).no_votes`));
-        const status = Number(toBigIntStrict(tuple[4], `Governance.get_proposal(${id}).status`));
-        const createdBlock = Number(toBigIntStrict(tuple[5], `Governance.get_proposal(${id}).created_block`));
-        const deadlineBlock = Number(toBigIntStrict(tuple[6], `Governance.get_proposal(${id}).deadline_block`));
+        const descHash = toBigIntStrict(proposal.desc_hash, `Governance.get_proposal(${id}).desc_hash`);
+        const amount = Number(toBigIntStrict(proposal.amount, `Governance.get_proposal(${id}).amount`));
+        const yesVotes = Number(toBigIntStrict(proposal.yes_votes, `Governance.get_proposal(${id}).yes_votes`));
+        const noVotes = Number(toBigIntStrict(proposal.no_votes, `Governance.get_proposal(${id}).no_votes`));
+        const status = Number(toBigIntStrict(proposal.status, `Governance.get_proposal(${id}).status`));
+        const createdBlock = Number(toBigIntStrict(proposal.created_block, `Governance.get_proposal(${id}).created_block`));
+        const deadlineBlock = Number(toBigIntStrict(proposal.deadline_block, `Governance.get_proposal(${id}).deadline_block`));
         const totalVotes = yesVotes + noVotes;
 
-        const distributionRaw = await hfContract.methods
-          .get_distribution_status(id)
-          .simulate({ from });
-        const distributionTuple = expectTuple(distributionRaw, 4, `HousingFund.get_distribution_status(${id})`);
-        const distributionOpened = Boolean(distributionTuple[0]);
+        const distribution = simResult<{
+          open: boolean;
+          amount: bigint;
+          total_deposits_snapshot: bigint;
+          claimed_total: bigint;
+        }>(await hfContract.methods.get_distribution_status(id).simulate({ from }));
+        const distributionOpened = Boolean(distribution.open);
         const distributionAmount = Number(
-          toBigIntStrict(distributionTuple[1], `HousingFund.get_distribution_status(${id}).amount`)
+          toBigIntStrict(distribution.amount, `HousingFund.get_distribution_status(${id}).amount`)
         );
         const distributionSnapshotDeposits = Number(
-          toBigIntStrict(distributionTuple[2], `HousingFund.get_distribution_status(${id}).snapshot_total`)
+          toBigIntStrict(distribution.total_deposits_snapshot, `HousingFund.get_distribution_status(${id}).snapshot_total`)
         );
         const distributionClaimed = Number(
-          toBigIntStrict(distributionTuple[3], `HousingFund.get_distribution_status(${id}).claimed_total`)
+          toBigIntStrict(distribution.claimed_total, `HousingFund.get_distribution_status(${id}).claimed_total`)
         );
 
         let hasClaimed = false;
         let claimableAmount = 0;
         if (requestedAddress) {
           hasClaimed = Boolean(
-            await hfContract.methods.has_claimed(id, requestedAddress).simulate({ from })
+            simResult(await hfContract.methods.has_claimed(id, requestedAddress).simulate({ from }))
           );
           claimableAmount = Number(
-            await hfContract.methods.get_claimable_amount(id, requestedAddress).simulate({ from })
+            simResult(await hfContract.methods.get_claimable_amount(id, requestedAddress).simulate({ from }))
           );
         }
 
@@ -266,7 +266,7 @@ export async function POST(request: NextRequest) {
       const kycArtifact = loadContractArtifact(KycArtifactJson as Parameters<typeof loadContractArtifact>[0]);
       const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, actor.wallet);
       const actorAddress = AztecAddress.fromString(actor.address);
-      const isInvestor = await kycContract.methods.is_investor(actorAddress).simulate({ from: actorAddress });
+      const isInvestor = simResult(await kycContract.methods.is_investor(actorAddress).simulate({ from: actorAddress }));
       if (!Boolean(isInvestor)) {
         return NextResponse.json({ error: "Investor role required to create proposals" }, { status: 403 });
       }

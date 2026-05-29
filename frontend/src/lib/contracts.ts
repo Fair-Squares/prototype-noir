@@ -52,11 +52,22 @@ export async function fetchFundStats(): Promise<FundStats> {
 
 // ── Deposit / Withdraw ────────────────────────────────────────────────────────
 
+export interface DepositResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  txHash?: string;
+  blockNumber?: number | null;
+  status?: string | null;
+  eurTransferTxHash?: string | null;
+  eurTransferBlockNumber?: number | null;
+}
+
 export async function depositFunds(
   address: string,
   amount: number,
   accountIndex = 0
-): Promise<{ success: boolean; message?: string; error?: string }> {
+): Promise<DepositResult> {
   const res = await fetch("/api/fund/deposit", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -579,12 +590,45 @@ export async function attestFsftForRewards(
   return res.json();
 }
 
+export interface PropertyDeed {
+  proposalId: number;
+  tokenId: number;
+  owner: string;
+  valuationEur: number;
+  distributionOpen: boolean;
+}
+
+/** Real-estate deed NFTs (AIP-721) held by the housing fund. */
+export async function fetchProperties(): Promise<PropertyDeed[]> {
+  const res = await fetch("/api/property", { cache: "no-store" });
+  if (!res.ok) throw await readApiError(res, "Failed to fetch properties");
+  const data = await res.json();
+  return (data.properties ?? []) as PropertyDeed[];
+}
+
 export async function fetchTokenInfo(address?: string): Promise<TokenInfo> {
   const url = address
     ? `/api/fund/tokens?address=${encodeURIComponent(address)}`
     : "/api/fund/tokens";
   const res = await fetch(url);
   if (!res.ok) throw await readApiError(res, "Failed to fetch token info");
+  return res.json();
+}
+
+/**
+ * Drip test EUR to the connected account via the Dripper faucet (AIP-20).
+ * The faucet mints to the caller, so `address` must be the active account.
+ */
+export async function requestTestEur(
+  address: string,
+  amount: number,
+  accountIndex = 0
+): Promise<{ success: boolean; message?: string; error?: string; txHash?: string }> {
+  const res = await fetch("/api/fund/tokens", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address, amount, accountIndex }),
+  });
   return res.json();
 }
 
@@ -615,4 +659,27 @@ export function formatEURDecimals(amount: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount);
+}
+
+export interface ChainParams {
+  timing: {
+    aztecSlotDurationSec: number;
+    ethereumSlotDurationSec: number;
+    epochDurationSlots: number;
+    epochDurationSec: number;
+    blockProductionMode: "on-demand" | "steady";
+  };
+  governance: {
+    votingWindowBlocks: number;
+    votingWindowSecondsEstimate: number;
+    minQuorumVotes: number;
+  };
+  dex: { priceBandBps: number; maxTtlBlocks: number; maxTtlSecondsEstimate: number };
+  rewards: { claimMin: number };
+}
+
+export async function fetchChainParams(): Promise<ChainParams> {
+  const res = await fetch("/api/chain/params", { cache: "no-store" });
+  if (!res.ok) throw new Error(`Failed to load chain params (${res.status})`);
+  return res.json();
 }

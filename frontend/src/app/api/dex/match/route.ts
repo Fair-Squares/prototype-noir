@@ -1,31 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simMatchDexOrder } from "@/lib/simulationStore";
-import { requireAztecTxHash } from "@/lib/txHash";
-
-function toNumberSafe(value: unknown): number {
-  if (typeof value === "number") return value;
-  if (typeof value === "bigint") return Number(value);
-  if (typeof value === "string") return Number(value);
-  if (value && typeof value === "object" && "toString" in value) {
-    return Number((value as { toString: () => string }).toString());
-  }
-  return 0;
-}
-
-function toBigIntSafe(value: unknown): bigint {
-  if (typeof value === "bigint") return value;
-  if (typeof value === "number") return BigInt(Math.trunc(value));
-  if (typeof value === "string") return BigInt(value);
-  if (value && typeof value === "object" && "toString" in value) {
-    return BigInt((value as { toString: () => string }).toString());
-  }
-  return 0n;
-}
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { address, orderId, makerOrderId, accountIndex = 0 } = body as {
+  const { address, orderId } = body as {
     address?: string;
     orderId?: number;
     makerOrderId?: number;
@@ -48,112 +27,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  try {
-    const dexAddr = process.env.NEXT_PUBLIC_FSFT_DEX_ADDRESS ?? "";
-    if (!dexAddr) {
-      return NextResponse.json({ error: "NEXT_PUBLIC_FSFT_DEX_ADDRESS not set" }, { status: 500 });
-    }
-
-    const { getTestAccount } = await import("@/lib/serverWallet");
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
-    const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
-
-    const actor = await getTestAccount(accountIndex);
-    if (address.toLowerCase() !== actor.address.toLowerCase()) {
-      return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
-    }
-
-    const actorAddress = AztecAddress.fromString(actor.address);
-    const DexArtifactJson = await loadGeneratedArtifactJson("fsft_dex-FSFTDex.json");
-    const dexArtifact = loadContractArtifact(DexArtifactJson as Parameters<typeof loadContractArtifact>[0]);
-    const dexContract = await Contract.at(AztecAddress.fromString(dexAddr), dexArtifact, actor.wallet);
-
-    let makerId = makerOrderId;
-    if (makerId === undefined) {
-      const takerRaw = await dexContract.methods.get_order(Number(orderId)).simulate({ from: actorAddress });
-      const taker = Array.isArray(takerRaw) ? takerRaw : [];
-      const takerOwner = String(taker[0] ?? "");
-      const takerSide = toNumberSafe(taker[1]);
-      const takerPrice = toNumberSafe(taker[4]);
-      const takerStatus = toNumberSafe(taker[5]);
-      if (takerStatus !== 0 && takerStatus !== 1) {
-        return NextResponse.json({ error: "Order is not matchable" }, { status: 400 });
-      }
-
-      const count = Number(await dexContract.methods.get_order_count().simulate({ from: actorAddress }));
-      for (let id = 0; id < count; id += 1) {
-        if (id === Number(orderId)) continue;
-        const raw = await dexContract.methods.get_order(id).simulate({ from: actorAddress });
-        const tuple = Array.isArray(raw) ? raw : [];
-        const owner = String(tuple[0] ?? "");
-        const side = toNumberSafe(tuple[1]);
-        const price = toNumberSafe(tuple[4]);
-        const status = toNumberSafe(tuple[5]);
-        if (status !== 0 && status !== 1) continue;
-        if (!owner || owner.toLowerCase() === takerOwner.toLowerCase()) continue;
-        if (side === takerSide) continue;
-
-        const crosses =
-          takerSide === 0
-            ? takerPrice >= price
-            : price >= takerPrice;
-        if (!crosses) continue;
-        makerId = id;
-        break;
-      }
-    }
-
-    if (makerId === undefined) {
-      return NextResponse.json({ error: "No compatible maker order found" }, { status: 400 });
-    }
-
-    const takerRaw = await dexContract.methods.get_order(Number(orderId)).simulate({ from: actorAddress });
-    const makerRaw = await dexContract.methods.get_order(Number(makerId)).simulate({ from: actorAddress });
-    const taker = Array.isArray(takerRaw) ? takerRaw : [];
-    const maker = Array.isArray(makerRaw) ? makerRaw : [];
-
-    const takerOwner = AztecAddress.fromString(String(taker[0]));
-    const makerOwner = AztecAddress.fromString(String(maker[0]));
-    const takerSide = toNumberSafe(taker[1]); // 0 buy, 1 sell
-    const takerRemaining = toBigIntSafe(taker[3]);
-    const makerRemaining = toBigIntSafe(maker[3]);
-    const makerPriceBps = toBigIntSafe(maker[4]);
-    const fillAmount = takerRemaining < makerRemaining ? takerRemaining : makerRemaining;
-    if (fillAmount <= 0n) {
-      return NextResponse.json({ error: "No matchable remaining amount" }, { status: 400 });
-    }
-    const eurAmount = (fillAmount * makerPriceBps + 9999n) / 10000n;
-    if (eurAmount <= 0n) {
-      return NextResponse.json({ error: "Computed settlement amount is zero" }, { status: 400 });
-    }
-    const buyer = takerSide === 0 ? takerOwner : makerOwner;
-    const seller = takerSide === 0 ? makerOwner : takerOwner;
-
-    const receipt = await dexContract.methods
-      .match_order(
-        Number(orderId),
-        Number(makerId),
-        fillAmount,
-        eurAmount,
-        buyer,
-        seller
-      )
-      .send({ from: actorAddress });
-
-    return NextResponse.json({
-      success: true,
-      message: "Order matched",
-      txHash: requireAztecTxHash(receipt),
-      source: "live",
-      makerOrderId: Number(makerId),
-      fillAmount: Number(fillAmount),
-      eurAmount: Number(eurAmount),
-    });
-  } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error("[dex/match]", msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
-  }
+  // Phase 1: EUR migrated to the AIP-20 standard token, but the DEX contract
+  // still settles EUR via the legacy fund_token interface, so live on-chain
+  // matching would revert. Order placement / viewing / cancellation remain
+  // fully functional. The full DEX settlement migration to AIP-20
+  // (transfer_private_to_private + authwit on both legs) lands in Phase 3,
+  // which will re-implement this handler.
+  return NextResponse.json(
+    {
+      error:
+        "DEX settlement is being upgraded to the AIP-20 token standard (Phase 3). " +
+        "You can still place, view, and cancel orders; matching is temporarily disabled.",
+      code: "DEX_MATCH_UPGRADING",
+    },
+    { status: 503 }
+  );
 }

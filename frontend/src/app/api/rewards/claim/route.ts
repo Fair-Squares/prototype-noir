@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simClaimRewards } from "@/lib/simulationStore";
 import { requireAztecTxHash } from "@/lib/txHash";
+import { simResult, isDuplicateNullifierError } from "@/lib/aztecSim";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -60,9 +61,9 @@ export async function POST(request: NextRequest) {
     // consumes the note via SingleUseClaim and privately mints the
     // protocol token to caller — recipient identity never crosses the
     // private/public boundary.
-    const rewardNotesResult = (await rewardsContract.methods
-      .get_my_reward_notes(userAddress, 0)
-      .simulate({ from: actorAddress })) as { len: bigint; storage: unknown[] };
+    const rewardNotesResult = simResult<{ len: bigint; storage: unknown[] }>(
+      await rewardsContract.methods.get_my_reward_notes(userAddress, 0).simulate({ from: actorAddress })
+    );
     if (rewardNotesResult.len === 0n) {
       return NextResponse.json(
         {
@@ -88,6 +89,12 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[rewards/claim]", msg);
+    if (isDuplicateNullifierError(msg)) {
+      return NextResponse.json(
+        { error: "You have already claimed this reward." },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

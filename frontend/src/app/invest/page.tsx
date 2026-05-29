@@ -11,10 +11,14 @@ import {
   fetchKYCProfile,
   fetchPortfolio,
   formatEUR,
+  requestTestEur,
+  type DepositResult,
   type FundStats,
   type KYCProfile,
   type PortfolioData,
 } from "@/lib/contracts";
+
+const FAUCET_AMOUNT = 50_000;
 
 export default function InvestPage() {
   const { activeAccount } = useWallet();
@@ -28,8 +32,9 @@ export default function InvestPage() {
   });
   const [stats, setStats] = useState<FundStats | null>(null);
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [faucetBusy, setFaucetBusy] = useState(false);
+  const [faucetMsg, setFaucetMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     fetchFundStats()
@@ -63,18 +68,33 @@ export default function InvestPage() {
     setPortfolio(nextPortfolio);
   };
 
-  const handleDeposit = async (amount: string) => {
-    if (!address) return;
+  const handleDeposit = async (amount: string): Promise<DepositResult> => {
+    if (!address) return { success: false, error: "Connect your wallet first." };
 
-    setMessage(null);
     const result = await depositFunds(address, Number.parseFloat(amount), accountIndex);
-    if (!result.success) {
-      setMessage({ type: "error", text: result.error ?? "Deposit failed." });
-      return;
+    if (result.success) {
+      await refreshPortfolio();
     }
+    return result;
+  };
 
-    setMessage({ type: "success", text: result.message ?? `Deposited ${formatEUR(Number(amount))}` });
-    await refreshPortfolio();
+  const handleFaucet = async () => {
+    if (!address) return;
+    setFaucetBusy(true);
+    setFaucetMsg(null);
+    try {
+      const result = await requestTestEur(address, FAUCET_AMOUNT, accountIndex);
+      if (!result.success) {
+        setFaucetMsg({ type: "error", text: result.error ?? "Faucet failed." });
+        return;
+      }
+      setFaucetMsg({ type: "success", text: result.message ?? `Dripped ${formatEUR(FAUCET_AMOUNT)}.` });
+      await refreshPortfolio();
+    } catch (e: unknown) {
+      setFaucetMsg({ type: "error", text: e instanceof Error ? e.message : "Faucet failed." });
+    } finally {
+      setFaucetBusy(false);
+    }
   };
 
   const sharePrice = useMemo(() => {
@@ -105,18 +125,6 @@ export default function InvestPage() {
         </div>
       )}
 
-      {message && (
-        <div
-          className={`rounded-lg border px-4 py-3 text-sm ${
-            message.type === "success"
-              ? "border-fs-teal/20 bg-fs-teal/10 text-fs-teal-dark"
-              : "border-red-100 bg-red-50 text-red-700"
-          }`}
-        >
-          {message.text}
-        </div>
-      )}
-
       <MetricRow items={metrics} />
 
       <ActionPanel title="Primary Action" subtitle="Deposit">
@@ -127,6 +135,39 @@ export default function InvestPage() {
           onDeposit={handleDeposit}
         />
       </ActionPanel>
+
+      <section className="surface p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-text-3 mb-1">Test EUR Faucet</p>
+            <p className="text-sm text-text-2">
+              Mint test EURs to your account via the on-chain Dripper (AIP-20).
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleFaucet}
+            disabled={!address || faucetBusy}
+            className="rounded-lg bg-fs-anthracite px-4 py-2 text-sm font-semibold text-white hover:bg-fs-anthracite/90 disabled:opacity-50"
+          >
+            {faucetBusy ? "Dripping…" : `Get ${formatEUR(FAUCET_AMOUNT)}`}
+          </button>
+        </div>
+        {!address && (
+          <p className="mt-2 text-xs text-text-3">Connect your wallet to use the faucet.</p>
+        )}
+        {faucetMsg && (
+          <div
+            className={`mt-3 rounded-lg border px-3 py-2 text-sm ${
+              faucetMsg.type === "success"
+                ? "border-fs-teal/20 bg-fs-teal/10 text-fs-teal-dark"
+                : "border-red-100 bg-red-50 text-red-700"
+            }`}
+          >
+            {faucetMsg.text}
+          </div>
+        )}
+      </section>
 
       <section className="surface p-5">
         <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Quick Checklist</p>

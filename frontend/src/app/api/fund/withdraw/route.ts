@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simWithdraw } from "@/lib/simulationStore";
 import { requireAztecTxHash } from "@/lib/txHash";
+import { simResult } from "@/lib/aztecSim";
 
 export async function POST(request: NextRequest) {
   const { address, accountIndex = 0, amount } = await request.json();
@@ -58,12 +59,10 @@ export async function POST(request: NextRequest) {
     // V2 path: withdraw_private consumes a whole DepositNote. Fetch the
     // caller's first note whose amount matches the requested withdraw.
     // Partial-withdraw / change-note minting is a follow-up.
-    const depositsResult = (await hfContract.methods
-      .get_my_deposit_notes(accountAddress, 0)
-      .simulate({ from: accountAddress })) as {
+    const depositsResult = simResult<{
       len: bigint;
       storage: { note: { amount: bigint } }[];
-    };
+    }>(await hfContract.methods.get_my_deposit_notes(accountAddress, 0).simulate({ from: accountAddress }));
     if (depositsResult.len === 0n) {
       return NextResponse.json(
         { error: "No private deposit notes available to withdraw" },

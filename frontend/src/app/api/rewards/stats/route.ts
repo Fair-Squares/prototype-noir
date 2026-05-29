@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simGetRewardsStatus } from "@/lib/simulationStore";
+import { simResult } from "@/lib/aztecSim";
 
 function toNumberSafe(value: unknown): number {
   if (typeof value === "number") return value;
@@ -18,16 +19,6 @@ function toNumberStrict(value: unknown, fieldName: string): number {
     throw new Error(`${fieldName} is not a finite number`);
   }
   return parsed;
-}
-
-function expectTuple(value: unknown, expectedLength: number, methodName: string): unknown[] {
-  if (!Array.isArray(value)) {
-    throw new Error(`${methodName} returned non-tuple response`);
-  }
-  if (value.length < expectedLength) {
-    throw new Error(`${methodName} returned ${value.length} values, expected ${expectedLength}`);
-  }
-  return value;
 }
 
 async function fetchJsonOrThrow(url: string): Promise<Record<string, unknown>> {
@@ -132,25 +123,37 @@ export async function GET(request: NextRequest) {
     const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
     const rewardsContract = await Contract.at(AztecAddress.fromString(rewardsAddr), rewardsArtifact, actor.wallet);
 
-    const [configRaw, userRaw] = await Promise.all([
+    const [configSim, userSim] = await Promise.all([
       rewardsContract.methods.get_rewards_config().simulate({ from: actorAddress }),
       rewardsContract.methods.get_user_stats(userAddress).simulate({ from: actorAddress }),
     ]);
 
-    const cfg = expectTuple(configRaw, 6, "ProtocolRewards.get_rewards_config");
-    const user = expectTuple(userRaw, 4, "ProtocolRewards.get_user_stats");
+    const cfg = simResult<{
+      total_distribution_pool: bigint;
+      total_distributed: bigint;
+      total_claimed: bigint;
+      current_epoch: bigint;
+      total_epochs: bigint;
+      claim_min: bigint;
+    }>(configSim);
+    const user = simResult<{
+      claimable: bigint;
+      total_claimed: bigint;
+      last_claimed_epoch: bigint;
+      fsft_rewards_attested: boolean;
+    }>(userSim);
 
-    const distributionPool = toNumberStrict(cfg[0], "ProtocolRewards.get_rewards_config.total_distribution_pool");
-    const emittedToDate = toNumberStrict(cfg[1], "ProtocolRewards.get_rewards_config.total_distributed");
-    const totalClaimed = toNumberStrict(cfg[2], "ProtocolRewards.get_rewards_config.total_claimed");
-    const currentEpoch = toNumberStrict(cfg[3], "ProtocolRewards.get_rewards_config.current_epoch");
-    const totalEpochs = toNumberStrict(cfg[4], "ProtocolRewards.get_rewards_config.total_epochs");
-    const claimMin = toNumberStrict(cfg[5], "ProtocolRewards.get_rewards_config.claim_min");
+    const distributionPool = toNumberStrict(cfg.total_distribution_pool, "ProtocolRewards.get_rewards_config.total_distribution_pool");
+    const emittedToDate = toNumberStrict(cfg.total_distributed, "ProtocolRewards.get_rewards_config.total_distributed");
+    const totalClaimed = toNumberStrict(cfg.total_claimed, "ProtocolRewards.get_rewards_config.total_claimed");
+    const currentEpoch = toNumberStrict(cfg.current_epoch, "ProtocolRewards.get_rewards_config.current_epoch");
+    const totalEpochs = toNumberStrict(cfg.total_epochs, "ProtocolRewards.get_rewards_config.total_epochs");
+    const claimMin = toNumberStrict(cfg.claim_min, "ProtocolRewards.get_rewards_config.claim_min");
 
-    const claimable = toNumberStrict(user[0], "ProtocolRewards.get_user_stats.claimable");
-    const totalUserClaimed = toNumberStrict(user[1], "ProtocolRewards.get_user_stats.total_user_claimed");
-    const rawLastClaimedEpoch = toNumberStrict(user[2], "ProtocolRewards.get_user_stats.last_claimed_epoch");
-    const fsftRewardsAttested = Boolean(user[3]);
+    const claimable = toNumberStrict(user.claimable, "ProtocolRewards.get_user_stats.claimable");
+    const totalUserClaimed = toNumberStrict(user.total_claimed, "ProtocolRewards.get_user_stats.total_user_claimed");
+    const rawLastClaimedEpoch = toNumberStrict(user.last_claimed_epoch, "ProtocolRewards.get_user_stats.last_claimed_epoch");
+    const fsftRewardsAttested = Boolean(user.fsft_rewards_attested);
     let balance = 0;
 
     if (protocolTokenAddr) {
@@ -162,7 +165,7 @@ export async function GET(request: NextRequest) {
         actor.wallet
       );
       balance = toNumberStrict(
-        await tokenContract.methods.public_balance_of(userAddress).simulate({ from: actorAddress }),
+        simResult(await tokenContract.methods.public_balance_of(userAddress).simulate({ from: actorAddress })),
         "ProtocolToken.public_balance_of"
       );
     }

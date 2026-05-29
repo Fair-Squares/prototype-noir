@@ -9,9 +9,13 @@ import {
   castVote,
   fetchGovernanceEligibility,
   fetchProposals,
+  fetchProperties,
+  formatEUR,
   type GovernanceEligibility,
   type Proposal,
+  type PropertyDeed,
 } from "@/lib/contracts";
+import { hasVotedLocally, markVoted } from "@/lib/votedStore";
 
 export default function ProposalDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -24,8 +28,21 @@ export default function ProposalDetailPage({ params }: { params: Promise<{ id: s
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [eligibility, setEligibility] = useState<GovernanceEligibility | null>(null);
   const [isVoting, setIsVoting] = useState(false);
+  const [voted, setVoted] = useState(false);
+  const [deed, setDeed] = useState<PropertyDeed | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  useEffect(() => {
+    setVoted(address ? hasVotedLocally(address, proposalId) : false);
+  }, [address, proposalId]);
+
+  // If this proposal's asset has been acquired, a deed NFT exists for it.
+  useEffect(() => {
+    fetchProperties()
+      .then((deeds) => setDeed(deeds.find((d) => d.proposalId === proposalId) ?? null))
+      .catch(() => setDeed(null));
+  }, [proposalId, message]);
 
   useEffect(() => {
     fetchProposals(address ?? undefined, accountIndex)
@@ -61,11 +78,20 @@ export default function ProposalDetailPage({ params }: { params: Promise<{ id: s
     try {
       const result = await castVote(address, pid, voteYes, accountIndex);
       if (!result.success) {
-        setMessage({ type: "error", text: result.error ?? "Vote failed." });
+        const text = result.error ?? "Vote failed.";
+        // A duplicate-nullifier / already-voted rejection means this account
+        // has in fact already voted — record it so the UI reflects that.
+        if (/already voted/i.test(text)) {
+          markVoted(address, pid);
+          setVoted(true);
+        }
+        setMessage({ type: "error", text });
         return;
       }
 
-      setMessage({ type: "success", text: "Vote recorded." });
+      markVoted(address, pid);
+      setVoted(true);
+      setMessage({ type: "success", text: `Vote recorded (${voteYes ? "Yes" : "No"}).` });
       const proposals = await fetchProposals(address, accountIndex);
       setProposal(proposals.find((item) => item.id === pid) ?? null);
     } finally {
@@ -112,11 +138,20 @@ export default function ProposalDetailPage({ params }: { params: Promise<{ id: s
         </div>
       )}
 
+      {deed && (
+        <div className="rounded-lg border border-fs-teal/20 bg-fs-teal/10 px-4 py-3 text-sm text-fs-teal-dark">
+          🏠 Property acquired — deed NFT <strong>#{deed.tokenId}</strong> (AIP-721) is held by the fund.
+          Valuation <strong>{formatEUR(deed.valuationEur)}</strong>.{" "}
+          <Link href="/fund" className="underline">View in Fund</Link>
+        </div>
+      )}
+
       <ProposalCard
         proposal={proposal}
         mode="detail"
         onVote={handleVote}
         isVoting={isVoting}
+        hasVoted={voted}
         isConnected={Boolean(address)}
         canVote={Boolean(eligibility?.canVote)}
       />

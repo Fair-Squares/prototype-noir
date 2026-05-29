@@ -1,30 +1,42 @@
 {
   "kyc_verifier-KYCVerifier.json": {
     "contractName": "KYCVerifier",
-    "hash": "dce662917a51d934818dba0f30a0a4bb63f0e45635b2a9ebd4114af0d7fac363"
+    "hash": "484f095e9485d60eb09df9f2ba9c0295a5452fc9794f6b76cb691903bf92c42a"
   },
   "fund_token-FundToken.json": {
     "contractName": "FundToken",
-    "hash": "ecc87d8c570a8cbb87eca36cb48a246d1c47d0531d8f72a1aa09ac82925d3244"
+    "hash": "0799760e976abb21f9d6e6976cbdb7dede6d26b564a18a98da41a3a2f9f901fc"
   },
   "defi_vault-DeFiVault.json": {
     "contractName": "DeFiVault",
-    "hash": "1dc2a0dc45d7515c309f7506bd2517a9b65785b16bd6b756270c097d4eafd325"
+    "hash": "1e1fc97b8446c90551f9664dda26c1eccb901192a75c24aa00f45b79301c049f"
   },
   "housing_fund-HousingFund.json": {
     "contractName": "HousingFund",
-    "hash": "cdbe9ab0c7bd36c0f5b637093de23713177c3cdc0df24e3bc5ed16426adf86a9"
+    "hash": "2f12b479e38ee5579e76cff174630ae57a3b03fe448af52947659010eecca192"
   },
   "governance-Governance.json": {
     "contractName": "Governance",
-    "hash": "9344125f99779c9b145930c47fcb4881f542db36994f5b5a09704d7a40072dda"
+    "hash": "79f3ef373e12fad1f9bfd6df81ed67d09a82161593b5de03313c6d0172d29c5b"
   },
   "fsft_dex-FSFTDex.json": {
     "contractName": "FSFTDex",
-    "hash": "516d368c2c0c11deef685da245991b1c2788c3e645025234dde9d0da47a5ae5e"
+    "hash": "ae6534053537253930a2a3c0188d7a61e2e752bcfa41f4d3ed3e0df5fdf63b5b"
   },
   "protocol_rewards-ProtocolRewards.json": {
     "contractName": "ProtocolRewards",
-    "hash": "f72837ade5c38f5f926c30cdb3e3f31a6f15a3b6adc8b82c7ed63e550be6003a"
+    "hash": "027ba80d18a2be46f9c5287884244a834c7134b7d8bf8fc86b66fe2f6e3a0ee1"
+  },
+  "dripper-Dripper.json": {
+    "contractName": "Dripper",
+    "hash": "ec639f28b277c81090e9bd4447a028bdc94b776e6701920efeddc4c4cd6924d7"
+  },
+  "token_contract-Token.json": {
+    "contractName": "Token",
+    "hash": "3a31755b550f85f346d88ba54ebd1ea818a3db9f7034a3b8dc942ea373a37655"
+  },
+  "nft_contract-NFT.json": {
+    "contractName": "NFT",
+    "hash": "16a039e817c7562a0ecf6d41ec413efc998b9da82212184a05ac1994ef2de40d"
   }
 }

@@ -22,3 +22,30 @@ export function requireAztecTxHash(value: unknown): string {
   }
   return txHash;
 }
+
+export interface AztecTxMeta {
+  txHash: string;
+  blockNumber: number | null;
+  status: string | null;
+}
+
+/** Extracts hash + inclusion metadata (block number, status) from a send() receipt. */
+export function getAztecTxMeta(receipt: unknown): AztecTxMeta {
+  const txHash = requireAztecTxHash(receipt);
+  const top = receipt && typeof receipt === "object" ? (receipt as Record<string, unknown>) : {};
+  // wallet sendTx() resolves to { receipt: TxReceipt, ...offchainOutput }, so the
+  // block number / status live on the nested receipt, not the top-level object.
+  const inner =
+    (top.receipt as Record<string, unknown> | undefined) ??
+    (top.txReceipt as Record<string, unknown> | undefined) ??
+    top;
+  const blockRaw = inner.blockNumber;
+  const blockNumber =
+    blockRaw === null || blockRaw === undefined ? null : Number(blockRaw as number);
+  const status = inner.status === undefined || inner.status === null ? null : String(inner.status);
+  return {
+    txHash,
+    blockNumber: blockNumber !== null && Number.isFinite(blockNumber) ? blockNumber : null,
+    status,
+  };
+}

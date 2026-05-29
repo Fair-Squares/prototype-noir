@@ -63,10 +63,26 @@ async function initWallet(): Promise<WalletSingleton> {
 
   // 1. Create in-process PXE → Aztec node
   console.log("[serverWallet] Creating NodeEmbeddedWallet...");
+  // Proving (~4s/tx ClientIVC) is unnecessary on a local network. The fast dev
+  // profile sets PXE_PROVER_ENABLED=false; default true stays testnet-realistic.
+  const proverEnabled = process.env.PXE_PROVER_ENABLED !== "false";
   const baseWallet = await EmbeddedWallet.create(AZTEC_NODE_URL, {
     ephemeral: true, // in-memory PXE, no disk state needed
+    pxe: { proverEnabled },
   });
-  console.log("[serverWallet] PXE ready.");
+  console.log(`[serverWallet] PXE ready (proverEnabled=${proverEnabled}).`);
+
+  // Local-network gas prices are volatile under the fast-slot tuning. The
+  // default minFeePadding (0.5 → maxFeesPerGas = 1.5x currentMinFees) is too
+  // low: minFees can spike several-fold between the wallet computing maxFees
+  // and the public processor reading gasFees, tripping the
+  // `maxFeesPerGas >= gasFees` assertion in computeEffectiveGasFees and making
+  // public #[view] simulations fail intermittently. Match the bootstrap's
+  // WALLET_MIN_FEE_PADDING=30 (maxFees = 31x minFees). maxPriorityFeesPerGas
+  // stays 0, so this only raises the cap — actual fees paid are unchanged.
+  const feePadding = Number(process.env.WALLET_MIN_FEE_PADDING ?? "30");
+  (baseWallet as unknown as { setMinFeePadding: (v: number) => void }).setMinFeePadding(feePadding);
+  console.log(`[serverWallet] minFeePadding set to ${feePadding}`);
 
   // 2. Register local-network test accounts in the wallet/PXE.
   // AccountManager.register() was removed; use createSchnorrAccount instead.
@@ -134,9 +150,20 @@ async function initWallet(): Promise<WalletSingleton> {
         async () => loadGeneratedArtifactJson("fund_token-FundToken.json")
       ),
       registerIfPresent(
+        // EUR is now an AIP-20 token from the vendored aztec-standards.
         "eur_token",
         process.env.NEXT_PUBLIC_EUR_TOKEN_ADDRESS ?? "",
-        async () => loadGeneratedArtifactJson("fund_token-FundToken.json")
+        async () => loadGeneratedArtifactJson("token_contract-Token.json")
+      ),
+      registerIfPresent(
+        "dripper",
+        process.env.NEXT_PUBLIC_DRIPPER_ADDRESS ?? "",
+        async () => loadGeneratedArtifactJson("dripper-Dripper.json")
+      ),
+      registerIfPresent(
+        "property_nft",
+        process.env.NEXT_PUBLIC_PROPERTY_NFT_ADDRESS ?? "",
+        async () => loadGeneratedArtifactJson("nft_contract-NFT.json")
       ),
       registerIfPresent(
         "kyc_verifier",
@@ -147,6 +174,21 @@ async function initWallet(): Promise<WalletSingleton> {
         "defi_vault",
         process.env.NEXT_PUBLIC_DEFI_VAULT_ADDRESS ?? "",
         async () => loadGeneratedArtifactJson("defi_vault-DeFiVault.json")
+      ),
+      registerIfPresent(
+        "fsft_dex",
+        process.env.NEXT_PUBLIC_FSFT_DEX_ADDRESS ?? "",
+        async () => loadGeneratedArtifactJson("fsft_dex-FSFTDex.json")
+      ),
+      registerIfPresent(
+        "protocol_rewards",
+        process.env.NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS ?? "",
+        async () => loadGeneratedArtifactJson("protocol_rewards-ProtocolRewards.json")
+      ),
+      registerIfPresent(
+        "protocol_token",
+        process.env.NEXT_PUBLIC_PROTOCOL_TOKEN_ADDRESS ?? "",
+        async () => loadGeneratedArtifactJson("fund_token-FundToken.json")
       ),
     ]);
   } catch (err) {

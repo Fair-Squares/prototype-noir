@@ -1,0 +1,7 @@
+3f5cf1cc60681333d7fa2af3cb5cea3d7714517f
+(defi-wonderland/aztec-standards @ dev)
+
+MODIFIED: aztec/uint-note/balance-set/compressed-string deps repointed from
+AztecProtocol/aztec-packages (noir-projects/aztec-nr/*) to AztecProtocol/aztec-nr
+(v4.3.0, identical source) so cross-contract calls unify with the host project
+(housing_fund etc.) which use aztec-nr.

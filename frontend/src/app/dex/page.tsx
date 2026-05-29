@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ActionPanel, MetricRow, PageHero } from "@/components/SimplePage";
 import { useWallet } from "@/contexts/WalletContext";
-import { DEMO_DEX_ORDERBOOK } from "@/lib/demoData";
 import {
   cancelDexOrder,
   fetchDexOrderbook,
@@ -21,26 +20,27 @@ export default function DexPage() {
   const address = activeAccount?.address ?? null;
   const accountIndex = activeAccount?.index ?? 0;
 
-  const [orderbook, setOrderbook] = useState<DexOrderbook | null>(DEMO_DEX_ORDERBOOK);
+  const [orderbook, setOrderbook] = useState<DexOrderbook | null>(null);
+  const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<KYCProfile>({ verified: false, isInvestor: false, roles: [] });
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("100");
   const [limitPrice, setLimitPrice] = useState("");
   const [busy, setBusy] = useState(false);
-  const [usingDemoData, setUsingDemoData] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const refresh = useCallback(async () => {
+    setLoading(true);
     try {
       const book = await fetchDexOrderbook(address ?? undefined, accountIndex);
       setOrderbook(book);
-      setUsingDemoData(false);
       setLoadError(null);
     } catch (error: unknown) {
       setLoadError(error instanceof Error ? error.message : "Could not load trade data.");
-      setOrderbook(DEMO_DEX_ORDERBOOK);
-      setUsingDemoData(true);
+      setOrderbook(null);
+    } finally {
+      setLoading(false);
     }
   }, [address, accountIndex]);
 
@@ -126,21 +126,23 @@ export default function DexPage() {
     }
   };
 
-  const displayBook = orderbook ?? DEMO_DEX_ORDERBOOK;
+  const userOrders = orderbook?.userOrders ?? [];
 
-  const metrics = [
-    { label: "Investor Status", value: profile.isInvestor ? "Ready" : "Required" },
-    {
-      label: "Reference Price",
-      value: `€${displayBook.priceReferenceEur.toFixed(4)}`,
-      accent: true,
-    },
-    {
-      label: "Price Band",
-      value: `€${displayBook.priceBandMinEur.toFixed(4)} - €${displayBook.priceBandMaxEur.toFixed(4)}`,
-    },
-    { label: "Open Orders", value: String(displayBook.userOrders.length) },
-  ];
+  const metrics = orderbook
+    ? [
+        { label: "Investor Status", value: profile.isInvestor ? "Ready" : "Required" },
+        {
+          label: "Reference Price",
+          value: `€${orderbook.priceReferenceEur.toFixed(4)}`,
+          accent: true,
+        },
+        {
+          label: "Price Band",
+          value: `€${orderbook.priceBandMinEur.toFixed(4)} - €${orderbook.priceBandMaxEur.toFixed(4)}`,
+        },
+        { label: "Open Orders", value: String(orderbook.userOrders.length) },
+      ]
+    : [];
 
   return (
     <div className="space-y-6">
@@ -153,20 +155,10 @@ export default function DexPage() {
 
       {loadError && (
         <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {loadError} Showing seeded demo orderbook.
-          <button
-            type="button"
-            onClick={refresh}
-            className="ml-2 font-semibold underline"
-          >
+          {loadError}
+          <button type="button" onClick={refresh} className="ml-2 font-semibold underline">
             Retry
           </button>
-        </div>
-      )}
-
-      {usingDemoData && !loadError && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Demo orderbook data is shown for simulation preview.
         </div>
       )}
 
@@ -182,7 +174,11 @@ export default function DexPage() {
         </div>
       )}
 
-      <MetricRow items={metrics} />
+      {loading && !orderbook ? (
+        <div className="h-20 rounded-2xl bg-bg animate-pulse" />
+      ) : orderbook ? (
+        <MetricRow items={metrics} />
+      ) : null}
 
       <section className="grid gap-6 lg:grid-cols-2">
         <ActionPanel title="Primary Action" subtitle="Place Order">
@@ -242,8 +238,8 @@ export default function DexPage() {
 
         <ActionPanel title="Primary Action" subtitle="Manage Orders">
           <div className="space-y-2">
-            {displayBook.userOrders.length ? (
-              displayBook.userOrders.map((order) => (
+            {userOrders.length ? (
+              userOrders.map((order) => (
                 <div
                   key={order.id}
                   className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-bg p-3"
@@ -274,7 +270,7 @@ export default function DexPage() {
               ))
             ) : (
               <p className="rounded-lg border border-border bg-bg p-4 text-sm text-text-3">
-                No active orders.
+                {loading ? "Loading orders…" : "No active orders."}
               </p>
             )}
           </div>

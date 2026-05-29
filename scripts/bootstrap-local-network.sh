@@ -23,7 +23,14 @@ BOOTSTRAP_RETRY_DELAY_SECONDS="${BOOTSTRAP_RETRY_DELAY_SECONDS:-6}"
 WALLET_MIN_FEE_PADDING="${WALLET_MIN_FEE_PADDING:-30}"
 
 CONTRACTS="kyc_verifier fund_token defi_vault housing_fund governance fsft_dex protocol_rewards"
-# eur_token / protocol_token reuse the fund_token artifact with separate deployments
+# protocol_token reuses the fund_token artifact with a separate deployment.
+# eur_token is now an AIP-20 token from the vendored aztec-standards (see below).
+
+# -- Vendored Defi-Wonderland aztec-standards (AIP-20/721/4626 + Dripper) ------
+# Compiled from a separate Nargo workspace; artifacts land in its own target dir.
+# Phase 1 uses: token_contract (AIP-20, deployed as EUR) + dripper (faucet).
+STANDARDS_DIR="${ROOT_DIR}/contracts/vendor/aztec-standards"
+STANDARD_CONTRACTS="token_contract dripper nft_contract"
 
 # -- Binary paths (Aztec image doesn't put these in PATH) ---------------------
 # aztec CLI: the main node entrypoint
@@ -44,6 +51,16 @@ else
   BB_BIN=$(command -v bb-avm 2>/dev/null || command -v bb 2>/dev/null || echo "")
 fi
 [ -z "$BB_BIN" ] && { log "FATAL: bb/bb-avm binary not found"; exit 1; }
+
+# Ensure nargo is on PATH so `aztec compile` (which shells out to bare `nargo`)
+# can find it. The 4.3.0 Docker image ships nargo in the Noir release dir but
+# does NOT add it to PATH, so the CLI's spawn('nargo', ...) fails with ENOENT.
+if [ -x "$NARGO_BIN" ]; then
+  case ":$PATH:" in
+    *":$(dirname "$NARGO_BIN"):"*) ;;
+    *) export PATH="$(dirname "$NARGO_BIN"):$PATH" ;;
+  esac
+fi
 
 # -- Helpers -------------------------------------------------------------------
 
@@ -197,6 +214,52 @@ print('Renamed functions in ${json_file}')
   cd "${ROOT_DIR}"
 }
 
+# -- 2a. Compile vendored aztec-standards --------------------------------------
+# The standards are a separate Nargo workspace; compiling a member writes its
+# artifact to the workspace-level target dir (contracts/vendor/aztec-standards/
+# target/<name>-<Contract>.json). We compile the Phase-1 subset, then run the
+# same AVM-transpile + VK + prefix-strip steps the custom contracts get.
+compile_standards() {
+  std_target="${STANDARDS_DIR}/target"
+  for c in $STANDARD_CONTRACTS; do
+    log "Compiling standard contract: ${c}"
+    cd "${STANDARDS_DIR}/src/${c}"
+    # nargo ACIR compile (bb aztec_process below adds AVM transpile + VKs, so the
+    # raw-nargo caveat about missing transpilation does not apply here).
+    if [ -n "$AZTEC_NARGO_BIN" ]; then
+      "$AZTEC_NARGO_BIN" compile --silence-warnings 2>&1 || die "Could not compile standard ${c}"
+    else
+      $NARGO_BIN compile --silence-warnings 2>&1 || die "Could not compile standard ${c} (nargo)"
+    fi
+  done
+
+  if [ ! -d "$std_target" ] || [ -z "$(ls "$std_target"/*.json 2>/dev/null)" ]; then
+    die "No standard artifacts found in ${std_target}"
+  fi
+
+  log "Transpiling standards (AVM + VKs)..."
+  $BB_BIN aztec_process -i "${std_target}" 2>&1 | grep -E "Transpil|complete|Error" || die "AVM transpilation failed for standards"
+
+  for json_file in "${std_target}"/*.json; do
+    python3 -c "
+import json, re
+with open('${json_file}') as f: d = json.load(f)
+for fn in d.get('functions', []):
+    fn['name'] = re.sub(r'^__aztec_nr_internals__', '', fn['name'])
+# Raw 'nargo compile' omits the aztec_version field that 'aztec compile' adds.
+# The generated TS artifact casts the JSON to NoirCompiledContract, which
+# requires aztec_version — inject it (pinned toolchain) so codegen output
+# type-checks (matches the custom contracts' value).
+if not d.get('aztec_version'):
+    d['aztec_version'] = '4.3.0'
+with open('${json_file}', 'w') as f: json.dump(d, f)
+print('Patched functions + aztec_version in ${json_file}')
+" 2>&1
+  done
+  log "Compiled and transpiled standards successfully"
+  cd "${ROOT_DIR}"
+}
+
 # -- 2b. Generate TypeScript contract wrappers ---------------------------------
 
 generate_typescript() {
@@ -214,6 +277,12 @@ generate_typescript() {
     target_dir="${ROOT_DIR}/contracts/${c}/target"
     cp "${target_dir}"/*.json "${artifacts_dir}/" 2>/dev/null || die "Failed to copy artifacts for ${c}"
   done
+
+  # Standards: codegen + copy from the vendored workspace target dir.
+  std_target="${STANDARDS_DIR}/target"
+  log "Generating TypeScript for vendored standards..."
+  $AZTEC_BIN codegen "${std_target}" --outdir "${artifacts_dir}" 2>&1 || die "TypeScript codegen failed for standards"
+  cp "${std_target}"/*.json "${artifacts_dir}/" 2>/dev/null || die "Failed to copy standard artifacts"
 
   log "TypeScript artifacts generated in ${artifacts_dir}"
 }
@@ -247,9 +316,11 @@ deploy_contracts() {
     while [ "$attempt" -le "$BOOTSTRAP_RETRY_ATTEMPTS" ]; do
       log "Deploying ${label} (attempt ${attempt}/${BOOTSTRAP_RETRY_ATTEMPTS})..."
       set +e
+      # DEPLOY_INIT lets callers override the initializer name (e.g. the AIP-20
+      # token uses constructor_with_minter instead of the default constructor).
       output=$($AZTEC_WALLET_BIN deploy \
         "${ROOT_DIR}/contracts/${artifact}" \
-        --init constructor \
+        --init "${DEPLOY_INIT:-constructor}" \
         --from accounts:test0 \
         "$@" \
         -a "${label}" 2>&1)
@@ -302,11 +373,27 @@ deploy_contracts() {
     --args "${FUND_ADDR}" "${KYC_ADDR}" "${TOKEN_ADDR}" "${GOVERNANCE_VOTING_WINDOW_BLOCKS}" "${GOVERNANCE_MIN_QUORUM_VOTES}")
   [ -z "$GOV_ADDR" ] && die "governance deploy failed — no address in output"
 
-  # -- Deploy EUR token (second instance of fund_token — represents EURs stablecoin) --
-  EUR_ADDR=$(_deploy "eur_token" \
-    "fund_token/target/fund_token-FundToken.json" \
-    --args accounts:test0)
-  [ -z "$EUR_ADDR" ] && die "eur_token deploy failed — no address in output"
+  # -- Deploy Dripper faucet (must precede EUR: EUR's minter is the Dripper) -----
+  DRIPPER_ADDR=$(_deploy "dripper" \
+    "vendor/aztec-standards/target/dripper-Dripper.json")
+  [ -z "$DRIPPER_ADDR" ] && die "dripper deploy failed — no address in output"
+
+  # -- Deploy EUR as AIP-20 token (minter = Dripper) ----------------------------
+  # constructor_with_minter(name: str<31>, symbol: str<31>, decimals: u8, minter).
+  # decimals=0 keeps whole-unit EUR semantics matching the existing frontend
+  # (raw balance == whole euros), so no display rework is needed in Phase 1.
+  EUR_ADDR=$(DEPLOY_INIT=constructor_with_minter _deploy "eur_token" \
+    "vendor/aztec-standards/target/token_contract-Token.json" \
+    --args EURs EUR 0 "${DRIPPER_ADDR}")
+  [ -z "$EUR_ADDR" ] && die "eur_token (AIP-20) deploy failed — no address in output"
+
+  # -- Deploy PropertyNFT (AIP-721 real-estate deed; minter = housing fund) -----
+  # The housing fund mints a deed (token_id = proposal_id + 1) when a proposal's
+  # distribution opens. constructor_with_minter(name: str<31>, symbol, minter).
+  PROPERTY_NFT_ADDR=$(DEPLOY_INIT=constructor_with_minter _deploy "property_nft" \
+    "vendor/aztec-standards/target/nft_contract-NFT.json" \
+    --args "Fair Squares Property" FSP-RE "${FUND_ADDR}")
+  [ -z "$PROPERTY_NFT_ADDR" ] && die "property_nft (AIP-721) deploy failed — no address in output"
 
   DEX_ADDR=$(_deploy "fsft_dex" \
     "fsft_dex/target/fsft_dex-FSFTDex.json" \
@@ -335,7 +422,7 @@ deploy_contracts() {
   log "  ProtocolToken:${PROTOCOL_TOKEN_ADDR}"
   log "  Rewards:      ${REWARDS_ADDR}"
 
-  export KYC_ADDR TOKEN_ADDR VAULT_ADDR FUND_ADDR GOV_ADDR DEX_ADDR ADMIN_ADDR EUR_ADDR PROTOCOL_TOKEN_ADDR REWARDS_ADDR TEST1_ADDR TEST2_ADDR
+  export KYC_ADDR TOKEN_ADDR VAULT_ADDR FUND_ADDR GOV_ADDR DEX_ADDR ADMIN_ADDR EUR_ADDR DRIPPER_ADDR PROPERTY_NFT_ADDR PROTOCOL_TOKEN_ADDR REWARDS_ADDR TEST1_ADDR TEST2_ADDR
 }
 
 # -- 4. Wire contracts together ------------------------------------------------
@@ -349,6 +436,13 @@ wire_contracts() {
     --from accounts:test0 \
     --contract-address "${FUND_ADDR}" \
     --args "${KYC_ADDR}" "${TOKEN_ADDR}" "${VAULT_ADDR}" "${GOV_ADDR}"
+
+  log "Wiring HousingFund.set_property_nft(property_nft)..."
+  wallet_send_with_retries required "HousingFund.set_property_nft" \
+    $AZTEC_WALLET_BIN send set_property_nft \
+    --from accounts:test0 \
+    --contract-address "${FUND_ADDR}" \
+    --args "${PROPERTY_NFT_ADDR}"
 
   log "Wiring DeFiVault.set_housing_fund(housing_fund)..."
   wallet_send_with_retries required "DeFiVault.set_housing_fund" \
@@ -424,60 +518,79 @@ wire_contracts() {
       --args "${TEST2_ADDR}" 3
   fi
 
-  # -- Mint EUR stablecoin to all test accounts (public balances) ---------------
-  log "Minting EUR to test accounts..."
-  log "  mint test0 -> ${ADMIN_ADDR} amount=600000"
+  # -- Mint EUR to all test accounts via the Dripper (AIP-20) -------------------
+  # drip_to_public(token_address, amount) mints `amount` to the CALLER's public
+  # balance, so we send from each account to fund that account. The Dripper is
+  # EUR's minter, so these are the only way to create EUR.
+  log "Dripping EUR to test accounts..."
+  log "  drip test0 -> ${ADMIN_ADDR} amount=600000"
   # test0 gets 600 000 EUR (will deposit 500 000, keeps 100 000 for demo)
-  wallet_send_with_retries required "EUR.mint_public(test0)" \
-    $AZTEC_WALLET_BIN send mint_public \
+  wallet_send_with_retries required "Dripper.drip_to_public(test0,600000)" \
+    $AZTEC_WALLET_BIN send drip_to_public \
     --from accounts:test0 \
-    --contract-address "${EUR_ADDR}" \
-    --args "${ADMIN_ADDR}" 600000
+    --contract-address "${DRIPPER_ADDR}" \
+    --args "${EUR_ADDR}" 600000
 
   # test1 gets 50 000 EUR
   if [ -n "${TEST1_ADDR:-}" ]; then
-    log "  mint test1 -> ${TEST1_ADDR} amount=50000"
-    wallet_send_with_retries required "EUR.mint_public(test1)" \
-      $AZTEC_WALLET_BIN send mint_public \
-      --from accounts:test0 \
-      --contract-address "${EUR_ADDR}" \
-      --args "${TEST1_ADDR}" 50000
+    log "  drip test1 -> ${TEST1_ADDR} amount=50000"
+    wallet_send_with_retries required "Dripper.drip_to_public(test1,50000)" \
+      $AZTEC_WALLET_BIN send drip_to_public \
+      --from accounts:test1 \
+      --contract-address "${DRIPPER_ADDR}" \
+      --args "${EUR_ADDR}" 50000
   fi
 
   # test2 gets 50 000 EUR
   if [ -n "${TEST2_ADDR:-}" ]; then
-    log "  mint test2 -> ${TEST2_ADDR} amount=50000"
-    wallet_send_with_retries required "EUR.mint_public(test2)" \
-      $AZTEC_WALLET_BIN send mint_public \
-      --from accounts:test0 \
-      --contract-address "${EUR_ADDR}" \
-      --args "${TEST2_ADDR}" 50000
+    log "  drip test2 -> ${TEST2_ADDR} amount=50000"
+    wallet_send_with_retries required "Dripper.drip_to_public(test2,50000)" \
+      $AZTEC_WALLET_BIN send drip_to_public \
+      --from accounts:test2 \
+      --contract-address "${DRIPPER_ADDR}" \
+      --args "${EUR_ADDR}" 50000
   fi
 
   # -- Initial housing fund deposit from test0 (500 000 EUR) -------------------
-  # First transfer EUR to housing fund (test0 → housing_fund)
+  # Transfer EUR to housing fund (test0 → housing_fund) via AIP-20.
+  # transfer_public_to_public(from, to, amount, _nonce); from == caller (test0)
+  # so it is self-authorized and _nonce = 0 (no authwit needed).
   log "Transferring 500000 EUR from test0 to housing fund..."
-  wallet_send_with_retries required "EUR.transfer_public(test0->housing_fund)" \
-    $AZTEC_WALLET_BIN send transfer_public \
+  wallet_send_with_retries required "EUR.transfer_public_to_public(test0->housing_fund)" \
+    $AZTEC_WALLET_BIN send transfer_public_to_public \
     --from accounts:test0 \
     --contract-address "${EUR_ADDR}" \
-    --args "${FUND_ADDR}" 500000
+    --args "${ADMIN_ADDR}" "${FUND_ADDR}" 500000 0
 
   # Then record the deposit as a V2 private DepositNote in test0's PXE.
   # aztec-wallet CLI cannot pass HintedNote<KycCredentialNote> args, so
   # this step uses the TS SDK helper which fetches the KYC credential
   # hint from PXE and threads it into HousingFund.deposit_private.
+  # NOTE: this is best-effort and NON-fatal. A fresh EmbeddedWallet PXE
+  # created here syncs from genesis and, when registering a contract whose
+  # on-chain anchor is an early block, can hit "Block hash not found when
+  # querying world state" because the local-network EpochTestSettler reorgs
+  # early blocks out of the node's pruned world state. The public EUR
+  # transfer above already credited the housing fund; the private DepositNote
+  # is a demo nicety, so a failure here must NOT block frontend startup.
+  # Override with FS_SEED_V2_REQUIRED=1 to make it fatal again.
   log "Recording initial deposit (V2 private path)..."
-  (
+  if (
     cd "${ROOT_DIR}/scripts" && \
     AZTEC_NODE_URL="${AZTEC_NODE_URL}" \
     NEXT_PUBLIC_KYC_VERIFIER_ADDRESS="${KYC_ADDR}" \
     NEXT_PUBLIC_HOUSING_FUND_ADDRESS="${FUND_ADDR}" \
     SEED_AMOUNT=500000 \
     npx tsx seed-v2-deposit.ts
-  ) || die "V2 seed deposit failed"
-
-  log "Initial housing fund balance: 500 000 EUR (V2 private deposit by test0)"
+  ); then
+    log "Initial housing fund balance: 500 000 EUR (V2 private deposit by test0)"
+  elif [ "${FS_SEED_V2_REQUIRED:-0}" = "1" ]; then
+    die "V2 seed deposit failed (FS_SEED_V2_REQUIRED=1)"
+  else
+    log "WARN: V2 private seed deposit failed (non-fatal). The 500 000 EUR"
+    log "      public transfer to the housing fund still succeeded; only the"
+    log "      private DepositNote pre-seed was skipped. Continuing bootstrap."
+  fi
 }
 
 # -- 5. Extract addresses and write env files ----------------------------------
@@ -496,6 +609,8 @@ save_addresses() {
   require_value "GOV_ADDR" "${GOV_ADDR:-}"
   require_value "DEX_ADDR" "${DEX_ADDR:-}"
   require_value "EUR_ADDR" "${EUR_ADDR:-}"
+  require_value "DRIPPER_ADDR" "${DRIPPER_ADDR:-}"
+  require_value "PROPERTY_NFT_ADDR" "${PROPERTY_NFT_ADDR:-}"
   require_value "PROTOCOL_TOKEN_ADDR" "${PROTOCOL_TOKEN_ADDR:-}"
   require_value "REWARDS_ADDR" "${REWARDS_ADDR:-}"
 
@@ -509,6 +624,8 @@ save_addresses() {
   gov_addr="${GOV_ADDR}"
   dex_addr="${DEX_ADDR}"
   eur_addr="${EUR_ADDR}"
+  dripper_addr="${DRIPPER_ADDR}"
+  property_nft_addr="${PROPERTY_NFT_ADDR}"
   protocol_token_addr="${PROTOCOL_TOKEN_ADDR}"
   rewards_addr="${REWARDS_ADDR}"
 
@@ -535,6 +652,8 @@ NEXT_PUBLIC_HOUSING_FUND_ADDRESS=${fund_addr}
 NEXT_PUBLIC_GOVERNANCE_ADDRESS=${gov_addr}
 NEXT_PUBLIC_FSFT_DEX_ADDRESS=${dex_addr}
 NEXT_PUBLIC_EUR_TOKEN_ADDRESS=${eur_addr}
+NEXT_PUBLIC_DRIPPER_ADDRESS=${dripper_addr}
+NEXT_PUBLIC_PROPERTY_NFT_ADDRESS=${property_nft_addr}
 NEXT_PUBLIC_PROTOCOL_TOKEN_ADDRESS=${protocol_token_addr}
 NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS=${rewards_addr}
 
@@ -582,6 +701,7 @@ main() {
 
   wait_for_pxe
   compile_contracts
+  compile_standards
   generate_typescript
   fix_inquirer
   fix_wallet_fee_padding

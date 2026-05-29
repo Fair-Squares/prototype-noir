@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simClaimDistribution } from "@/lib/simulationStore";
 import { requireAztecTxHash } from "@/lib/txHash";
+import { simResult, isDuplicateNullifierError } from "@/lib/aztecSim";
 
 export async function POST(request: NextRequest) {
   const { proposalId, accountIndex = 0, address } = await request.json();
@@ -52,12 +53,10 @@ export async function POST(request: NextRequest) {
     // V2 path: claim_distribution_private needs a hinted DepositNote the
     // caller already owns plus the public distribution params (amount +
     // snapshot total) which the public tail re-verifies against storage.
-    const depositsResult = (await hfContract.methods
-      .get_my_deposit_notes(actorAddress, 0)
-      .simulate({ from: actorAddress })) as {
+    const depositsResult = simResult<{
       len: bigint;
       storage: unknown[];
-    };
+    }>(await hfContract.methods.get_my_deposit_notes(actorAddress, 0).simulate({ from: actorAddress }));
     if (depositsResult.len === 0n) {
       return NextResponse.json(
         { error: "No private deposit note for this account; deposit before claiming." },
@@ -66,14 +65,12 @@ export async function POST(request: NextRequest) {
     }
     const hintedDepositNote = depositsResult.storage[0];
 
-    const status = (await hfContract.methods
-      .get_distribution_status(Number(proposalId))
-      .simulate({ from: actorAddress })) as {
+    const status = simResult<{
       open: boolean;
       amount: bigint;
       total_deposits_snapshot: bigint;
       claimed_total: bigint;
-    };
+    }>(await hfContract.methods.get_distribution_status(Number(proposalId)).simulate({ from: actorAddress }));
     if (!status.open) {
       return NextResponse.json({ error: "Distribution not open for this proposal" }, { status: 400 });
     }
@@ -107,6 +104,12 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[governance/claim]", msg);
+    if (isDuplicateNullifierError(msg)) {
+      return NextResponse.json(
+        { error: "You have already claimed this distribution." },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

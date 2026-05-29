@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simGetFundStats } from "@/lib/simulationStore";
+import { simResult } from "@/lib/aztecSim";
 
 function toNumberSafe(value: unknown): number {
   if (typeof value === "number") return value;
@@ -19,17 +20,6 @@ function toNumberStrict(value: unknown, fieldName: string): number {
   }
   return parsed;
 }
-
-function expectTuple(value: unknown, expectedLength: number, methodName: string): unknown[] {
-  if (!Array.isArray(value)) {
-    throw new Error(`${methodName} returned non-tuple response`);
-  }
-  if (value.length < expectedLength) {
-    throw new Error(`${methodName} returned ${value.length} values, expected ${expectedLength}`);
-  }
-  return value;
-}
-
 
 function buildV3FeatureMeta() {
   return {
@@ -92,33 +82,42 @@ export async function GET() {
     const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, admin.wallet);
     const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, admin.wallet);
 
-    const statsRaw = await hfContract.methods.get_fund_stats().simulate({ from });
-    const stats = expectTuple(statsRaw, 4, "HousingFund.get_fund_stats");
+    const stats = simResult<{
+      total_deposits: bigint;
+      total_in_defi: bigint;
+      total_allocated: bigint;
+      available: bigint;
+    }>(await hfContract.methods.get_fund_stats().simulate({ from }));
 
-    const valuationRaw = await hfContract.methods.get_valuation().simulate({ from });
-    const valuation = expectTuple(valuationRaw, 4, "HousingFund.get_valuation");
-    const parkedPolicyRaw = await hfContract.methods
-      .get_parked_capital_policy()
-      .simulate({ from });
-    const parkedPolicy = expectTuple(parkedPolicyRaw, 3, "HousingFund.get_parked_capital_policy");
+    const valuation = simResult<{
+      last_asset_sale_price: bigint;
+      last_fsft_minted: bigint;
+      last_token_price_bps: bigint;
+      last_valuation_block: bigint;
+    }>(await hfContract.methods.get_valuation().simulate({ from }));
+    const parkedPolicy = simResult<{
+      target_bps: bigint;
+      min_bps: bigint;
+      max_bps: bigint;
+    }>(await hfContract.methods.get_parked_capital_policy().simulate({ from }));
 
     const investorCount = toNumberStrict(
-      await hfContract.methods.get_investor_count().simulate({ from }),
+      simResult(await hfContract.methods.get_investor_count().simulate({ from })),
       "HousingFund.get_investor_count"
     );
-    const isPaused = Boolean(await hfContract.methods.is_paused().simulate({ from }));
-    const totalSupply = toNumberStrict(await ftContract.methods.total_supply().simulate({ from }), "FundToken.total_supply");
-    const totalDeposits = toNumberStrict(stats[0], "HousingFund.get_fund_stats.total_deposits");
-    const totalInDefi = toNumberStrict(stats[1], "HousingFund.get_fund_stats.total_in_defi");
-    const totalAllocated = toNumberStrict(stats[2], "HousingFund.get_fund_stats.total_allocated");
-    const available = toNumberStrict(stats[3], "HousingFund.get_fund_stats.available");
+    const isPaused = Boolean(simResult(await hfContract.methods.is_paused().simulate({ from })));
+    const totalSupply = toNumberStrict(simResult(await ftContract.methods.total_supply().simulate({ from })), "FundToken.total_supply");
+    const totalDeposits = toNumberStrict(stats.total_deposits, "HousingFund.get_fund_stats.total_deposits");
+    const totalInDefi = toNumberStrict(stats.total_in_defi, "HousingFund.get_fund_stats.total_in_defi");
+    const totalAllocated = toNumberStrict(stats.total_allocated, "HousingFund.get_fund_stats.total_allocated");
+    const available = toNumberStrict(stats.available, "HousingFund.get_fund_stats.available");
     let totalYield = 0;
     if (defiVaultAddr) {
       const DvJson = await loadGeneratedArtifactJson("defi_vault-DeFiVault.json");
       const dvArtifact = loadContractArtifact(DvJson as Parameters<typeof loadContractArtifact>[0]);
       const dvContract = await Contract.at(AztecAddress.fromString(defiVaultAddr), dvArtifact, admin.wallet);
       totalYield = toNumberStrict(
-        await dvContract.methods.get_accrued_yield().simulate({ from }),
+        simResult(await dvContract.methods.get_accrued_yield().simulate({ from })),
         "DeFiVault.get_accrued_yield"
       );
     }
@@ -134,15 +133,15 @@ export async function GET() {
       isPaused,
       investorCount,
       totalSupply,
-      lastAssetSalePrice: toNumberStrict(valuation[0], "HousingFund.get_valuation.last_asset_sale_price"),
-      lastFsftMinted: toNumberStrict(valuation[1], "HousingFund.get_valuation.last_fsft_minted"),
-      tokenPriceBps: toNumberStrict(valuation[2], "HousingFund.get_valuation.last_token_price_bps"),
-      valuationBlock: toNumberStrict(valuation[3], "HousingFund.get_valuation.last_valuation_block"),
+      lastAssetSalePrice: toNumberStrict(valuation.last_asset_sale_price, "HousingFund.get_valuation.last_asset_sale_price"),
+      lastFsftMinted: toNumberStrict(valuation.last_fsft_minted, "HousingFund.get_valuation.last_fsft_minted"),
+      tokenPriceBps: toNumberStrict(valuation.last_token_price_bps, "HousingFund.get_valuation.last_token_price_bps"),
+      valuationBlock: toNumberStrict(valuation.last_valuation_block, "HousingFund.get_valuation.last_valuation_block"),
       navEur,
       navPerFsftEur,
-      parkedAllocationBps: toNumberStrict(parkedPolicy[0], "HousingFund.get_parked_capital_policy.target_bps"),
-      parkedMinBps: toNumberStrict(parkedPolicy[1], "HousingFund.get_parked_capital_policy.min_bps"),
-      parkedMaxBps: toNumberStrict(parkedPolicy[2], "HousingFund.get_parked_capital_policy.max_bps"),
+      parkedAllocationBps: toNumberStrict(parkedPolicy.target_bps, "HousingFund.get_parked_capital_policy.target_bps"),
+      parkedMinBps: toNumberStrict(parkedPolicy.min_bps, "HousingFund.get_parked_capital_policy.min_bps"),
+      parkedMaxBps: toNumberStrict(parkedPolicy.max_bps, "HousingFund.get_parked_capital_policy.max_bps"),
       ...buildV3FeatureMeta(),
       source: "live",
     });

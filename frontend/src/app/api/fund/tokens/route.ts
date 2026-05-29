@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simGetFundStats, simGetPortfolio } from "@/lib/simulationStore";
 import { requireAztecTxHash } from "@/lib/txHash";
+import { simResult } from "@/lib/aztecSim";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -103,16 +104,17 @@ export async function GET(request: NextRequest) {
           const { AztecAddress } = await import("@aztec/aztec.js/addresses");
           const admin = await getTestAccount(0);
           const w = admin.wallet;
-          const EurJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
+          // EUR is an AIP-20 token (vendored standards): balance_of_public.
+          const EurJson = await loadGeneratedArtifactJson("token_contract-Token.json");
           const eurC = await Contract.at(
             AztecAddress.fromString(eurTokenAddr),
             loadContractArtifact(EurJson as Parameters<typeof loadContractArtifact>[0]),
             w
           );
           return Number(
-            await eurC.methods.public_balance_of(AztecAddress.fromString(address)).simulate({
+            simResult(await eurC.methods.balance_of_public(AztecAddress.fromString(address)).simulate({
               from: AztecAddress.fromString(admin.address),
-            })
+            }))
           );
         } catch { return 0; }
       })(),
@@ -132,9 +134,9 @@ export async function GET(request: NextRequest) {
             w
           );
           return Number(
-            await ftC.methods.public_balance_of(AztecAddress.fromString(address)).simulate({
+            simResult(await ftC.methods.public_balance_of(AztecAddress.fromString(address)).simulate({
               from: AztecAddress.fromString(admin.address),
-            })
+            }))
           );
         } catch { return 0; }
       })(),
@@ -174,11 +176,17 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // ── Live mode: mint EURs to selected address via admin wallet ───────────
+  // ── Live mode: drip EURs to the caller via the Dripper faucet ────────────
+  // EUR is an AIP-20 token whose minter is the Dripper. drip_to_public mints to
+  // the CALLER, so the faucet tx is sent from the user's own account.
   try {
     const eurTokenAddr = process.env.NEXT_PUBLIC_EUR_TOKEN_ADDRESS ?? "";
+    const dripperAddr = process.env.NEXT_PUBLIC_DRIPPER_ADDRESS ?? "";
     if (!eurTokenAddr) {
       return NextResponse.json({ error: "NEXT_PUBLIC_EUR_TOKEN_ADDRESS not set" }, { status: 500 });
+    }
+    if (!dripperAddr) {
+      return NextResponse.json({ error: "NEXT_PUBLIC_DRIPPER_ADDRESS not set" }, { status: 500 });
     }
 
     const { getTestAccount } = await import("@/lib/serverWallet");
@@ -187,22 +195,26 @@ export async function POST(request: NextRequest) {
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
-    // test0/admin is the EUR token admin in bootstrap script.
-    const admin = await getTestAccount(0);
-    void accountIndex; // target account is identified by `address`; admin signs mint.
+    // The faucet credits the CALLER, so the selected account must match `address`.
+    const actor = await getTestAccount(accountIndex);
+    if (address.toLowerCase() !== actor.address.toLowerCase()) {
+      return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
+    }
+    const actorAddress = AztecAddress.fromString(actor.address);
 
-    const EurJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
-    const eurArtifact = loadContractArtifact(EurJson as Parameters<typeof loadContractArtifact>[0]);
-    const eurContract = await Contract.at(AztecAddress.fromString(eurTokenAddr), eurArtifact, admin.wallet);
+    const DripperJson = await loadGeneratedArtifactJson("dripper-Dripper.json");
+    const dripperArtifact = loadContractArtifact(DripperJson as Parameters<typeof loadContractArtifact>[0]);
+    const dripper = await Contract.at(AztecAddress.fromString(dripperAddr), dripperArtifact, actor.wallet);
 
-    const receipt = await eurContract.methods
-      .mint_public(AztecAddress.fromString(address), BigInt(Number(amount)))
-      .send({ from: AztecAddress.fromString(admin.address) });
-    console.info(`[fund/tokens POST] Minted ${Number(amount)} EURs to ${address} from admin ${admin.address}`);
+    // drip_to_public(token_address: AztecAddress, amount: u64)
+    const receipt = await dripper.methods
+      .drip_to_public(AztecAddress.fromString(eurTokenAddr), BigInt(Number(amount)))
+      .send({ from: actorAddress });
+    console.info(`[fund/tokens POST] Dripped ${Number(amount)} EURs to ${actor.address}`);
 
     return NextResponse.json({
       success: true,
-      message: `Topped up ${Number(amount).toLocaleString()} EURs to ${address}`,
+      message: `Dripped ${Number(amount).toLocaleString()} EURs to your account`,
       txHash: requireAztecTxHash(receipt),
       source: "live",
     });

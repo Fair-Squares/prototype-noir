@@ -19,5 +19,6 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "//exclude-artifacts": "Generated aztec codegen wrappers (src/artifacts/*.ts) are dead code — the app loads the raw JSON via loadGeneratedArtifactJson, never these classes. Their codegen-embedded artifact object omits aztec_version and fails the strict NoirCompiledContract cast, so exclude the generated dir from type-checking.",
+  "exclude": ["node_modules", "src/artifacts/**/*.ts"]
 }

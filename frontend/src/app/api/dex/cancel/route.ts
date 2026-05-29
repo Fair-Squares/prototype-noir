@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simCancelDexOrder } from "@/lib/simulationStore";
 import { requireAztecTxHash } from "@/lib/txHash";
+import { simResult } from "@/lib/aztecSim";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -55,9 +56,9 @@ export async function POST(request: NextRequest) {
     // legacy arg) is a follow-up. `orderId` is accepted but ignored on
     // the V2 path until per-intent identification is wired up.
     void orderId;
-    const intentsResult = (await dexContract.methods
-      .get_my_order_intents(userAddress, 0)
-      .simulate({ from: actorAddress })) as { len: bigint; storage: unknown[] };
+    const intentsResult = simResult<{ len: bigint; storage: unknown[] }>(
+      await dexContract.methods.get_my_order_intents(userAddress, 0).simulate({ from: actorAddress })
+    );
     if (intentsResult.len === 0n) {
       return NextResponse.json({ error: "No open private order intent to cancel." }, { status: 400 });
     }

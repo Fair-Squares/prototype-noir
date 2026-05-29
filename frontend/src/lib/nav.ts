@@ -28,6 +28,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Reference",
     items: [
       { num: "09", label: "How it works", href: "/explain", blurb: "Mechanics and glossary" },
+      { num: "10", label: "Parameters", href: "/reference", blurb: "Chain & governance metrics" },
     ],
   },
 ];

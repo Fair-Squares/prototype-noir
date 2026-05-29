@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simDeposit } from "@/lib/simulationStore";
-import { requireAztecTxHash } from "@/lib/txHash";
+import { getAztecTxMeta } from "@/lib/txHash";
+import { simResult } from "@/lib/aztecSim";
 
 export async function POST(request: NextRequest) {
   const { address, accountIndex = 0, amount } = await request.json();
@@ -62,12 +63,10 @@ export async function POST(request: NextRequest) {
     // V2 path: fetch caller's KycCredentialNote hint from their PXE so we
     // can pass it into HousingFund.deposit_private. Fails clearly if the
     // user has not been issued a private credential yet.
-    const credentialsResult = (await kycContract.methods
-      .get_my_kyc_credentials(userAddress, 0)
-      .simulate({ from: accountAddress })) as {
+    const credentialsResult = simResult<{
       len: bigint;
       storage: unknown[];
-    };
+    }>(await kycContract.methods.get_my_kyc_credentials(userAddress, 0).simulate({ from: accountAddress }));
     if (credentialsResult.len === 0n) {
       return NextResponse.json(
         {
@@ -82,13 +81,22 @@ export async function POST(request: NextRequest) {
     // Step 1: Transfer EUR from caller to housing fund (still public for
     // the EUR stablecoin shadow; V2 privacy gain is on the housing-fund
     // side where the deposit position becomes a private DepositNote).
+    let eurTransfer: ReturnType<typeof getAztecTxMeta> | null = null;
     if (eurTokenAddr) {
-      const EurArtifactJson = await loadGeneratedArtifactJson("fund_token-FundToken.json");
+      // EUR is an AIP-20 token: transfer_public_to_public(from, to, amount, _nonce).
+      // from == caller (accountAddress) is self-authorized, so _nonce = 0.
+      const EurArtifactJson = await loadGeneratedArtifactJson("token_contract-Token.json");
       const eurArtifact = loadContractArtifact(EurArtifactJson as Parameters<typeof loadContractArtifact>[0]);
       const eurContract = await Contract.at(AztecAddress.fromString(eurTokenAddr), eurArtifact, wallet);
-      await eurContract.methods
-        .transfer_public(AztecAddress.fromString(housingFundAddr), BigInt(amount))
+      const eurReceipt = await eurContract.methods
+        .transfer_public_to_public(
+          accountAddress,
+          AztecAddress.fromString(housingFundAddr),
+          BigInt(amount),
+          0,
+        )
         .send({ from: accountAddress });
+      eurTransfer = getAztecTxMeta(eurReceipt);
     }
 
     // Step 2: V2 private deposit. The DepositNote lands in caller's PXE;
@@ -104,11 +112,16 @@ export async function POST(request: NextRequest) {
     const receipt = await hfContract.methods
       .deposit_private(BigInt(amount), hintedKycNote)
       .send({ from: accountAddress });
+    const deposit = getAztecTxMeta(receipt);
 
     return NextResponse.json({
       success: true,
       message: `Privately deposited €${amount.toLocaleString()} to housing fund`,
-      txHash: requireAztecTxHash(receipt),
+      txHash: deposit.txHash,
+      blockNumber: deposit.blockNumber,
+      status: deposit.status,
+      eurTransferTxHash: eurTransfer?.txHash ?? null,
+      eurTransferBlockNumber: eurTransfer?.blockNumber ?? null,
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);

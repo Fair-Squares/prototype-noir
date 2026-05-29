@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ActionPanel, MetricRow, PageHero } from "@/components/SimplePage";
 import { useWallet } from "@/contexts/WalletContext";
-import { DEMO_REWARDS_OVERVIEW, DEMO_REWARDS_STATS } from "@/lib/demoData";
 import { fetchRewardsOverview, fetchRewardsStats, type RewardsOverview, type RewardsStats } from "@/lib/contracts";
 
 function formatDateTime(ts: number): string {
@@ -23,13 +22,14 @@ export default function RewardsPage() {
   const address = activeAccount?.address ?? null;
   const accountIndex = activeAccount?.index ?? 0;
 
-  const [overview, setOverview] = useState<RewardsOverview>(DEMO_REWARDS_OVERVIEW);
-  const [stats, setStats] = useState<RewardsStats>(DEMO_REWARDS_STATS);
-  const [usingDemoData, setUsingDemoData] = useState(true);
+  const [overview, setOverview] = useState<RewardsOverview | null>(null);
+  const [stats, setStats] = useState<RewardsStats | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
+    setLoading(true);
     setError(null);
 
     Promise.all([
@@ -39,17 +39,15 @@ export default function RewardsPage() {
       .then(([nextOverview, nextStats]) => {
         if (!mounted) return;
         setOverview(nextOverview);
-        if (nextStats) setStats(nextStats);
-        setUsingDemoData(false);
+        setStats(nextStats);
         setError(null);
       })
       .catch((e: unknown) => {
         if (!mounted) return;
-        setError(e instanceof Error ? e.message : "Could not load rewards data. Showing demo snapshot.");
-        setUsingDemoData(true);
+        setError(e instanceof Error ? e.message : "Could not load rewards data.");
       })
       .finally(() => {
-        if (!mounted) return;
+        if (mounted) setLoading(false);
       });
 
     return () => {
@@ -57,19 +55,22 @@ export default function RewardsPage() {
     };
   }, [address, accountIndex]);
 
-  const metrics = [
-    {
-      label: "Claimable",
-      value: `${(stats.claimable ?? 0).toLocaleString()} ${overview.token.symbol}`,
-      accent: true,
-    },
-    { label: "Epoch", value: `${overview.currentEpoch}/${overview.token.totalEpochs}` },
-    { label: "Remaining Pool", value: `${overview.remainingPool.toLocaleString()} ${overview.token.symbol}` },
-    {
-      label: "Eligibility",
-      value: stats.eligibility.canClaimNow ? "Ready" : "Not yet",
-    },
-  ];
+  const symbol = overview?.token.symbol ?? "FSP";
+  const metrics = overview
+    ? [
+        {
+          label: "Claimable",
+          value: stats ? `${(stats.claimable ?? 0).toLocaleString()} ${symbol}` : "Connect wallet",
+          accent: true,
+        },
+        { label: "Epoch", value: `${overview.currentEpoch}/${overview.token.totalEpochs}` },
+        { label: "Remaining Pool", value: `${overview.remainingPool.toLocaleString()} ${symbol}` },
+        {
+          label: "Eligibility",
+          value: stats ? (stats.eligibility.canClaimNow ? "Ready" : "Not yet") : "—",
+        },
+      ]
+    : [];
 
   return (
     <div className="space-y-6">
@@ -86,28 +87,37 @@ export default function RewardsPage() {
         </div>
       )}
 
-      {usingDemoData && !error && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Showing seeded demo rewards data for simulation.
+      {loading && !overview ? (
+        <div className="space-y-4">
+          <div className="h-20 rounded-2xl bg-bg animate-pulse" />
+          <div className="h-28 rounded-2xl bg-bg animate-pulse" />
         </div>
-      )}
+      ) : overview ? (
+        <>
+          <MetricRow items={metrics} />
 
-      <MetricRow items={metrics} />
-
-      <section className="surface p-5">
-        <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Progress</p>
-        <p className="text-sm text-text-2">
-          Emitted to date: <strong className="text-text-1">{overview.emittedToDate.toLocaleString()} {overview.token.symbol}</strong>
-        </p>
-        <p className="mt-2 text-sm text-text-2">
-          Next epoch: <strong className="text-text-1">{formatDateTime(overview.nextEpochAt)}</strong>
-        </p>
-        {!stats.eligibility.canClaimNow && stats.eligibility.nextSteps[0] && (
-          <p className="mt-2 text-sm text-text-2">
-            Next step: <strong className="text-text-1">{stats.eligibility.nextSteps[0]}</strong>
-          </p>
-        )}
-      </section>
+          <section className="surface p-5">
+            <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Progress</p>
+            <p className="text-sm text-text-2">
+              Emitted to date: <strong className="text-text-1">{overview.emittedToDate.toLocaleString()} {symbol}</strong>
+            </p>
+            <p className="mt-2 text-sm text-text-2">
+              Next epoch: <strong className="text-text-1">{formatDateTime(overview.nextEpochAt)}</strong>
+            </p>
+            {!address ? (
+              <p className="mt-2 text-sm text-text-3">Connect your wallet to see your personal rewards.</p>
+            ) : (
+              stats &&
+              !stats.eligibility.canClaimNow &&
+              stats.eligibility.nextSteps[0] && (
+                <p className="mt-2 text-sm text-text-2">
+                  Next step: <strong className="text-text-1">{stats.eligibility.nextSteps[0]}</strong>
+                </p>
+              )
+            )}
+          </section>
+        </>
+      ) : null}
 
       <ActionPanel title="What To Do Now" subtitle="Pick one">
         <div className="grid gap-2 sm:grid-cols-2">

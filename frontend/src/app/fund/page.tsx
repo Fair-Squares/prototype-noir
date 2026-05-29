@@ -3,28 +3,50 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ActionPanel, MetricRow, PageHero } from "@/components/SimplePage";
-import { DEMO_FUND_STATS } from "@/lib/demoData";
-import { fetchFundStats, formatEUR, type FundStats } from "@/lib/contracts";
+import {
+  fetchFundStats,
+  fetchProperties,
+  formatEUR,
+  type FundStats,
+  type PropertyDeed,
+} from "@/lib/contracts";
 
 export default function FundPage() {
-  const [stats, setStats] = useState<FundStats>(DEMO_FUND_STATS);
-  const [usingDemoData, setUsingDemoData] = useState(true);
+  const [stats, setStats] = useState<FundStats | null>(null);
+  const [properties, setProperties] = useState<PropertyDeed[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let active = true;
     fetchFundStats()
       .then((nextStats) => {
+        if (!active) return;
         setStats(nextStats);
-        setUsingDemoData(false);
         setError(null);
       })
       .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : "Could not load fund data. Showing demo snapshot.");
-        setUsingDemoData(true);
+        if (!active) return;
+        setError(e instanceof Error ? e.message : "Could not load fund data.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
       });
+    // Property deeds are an optional, best-effort read (don't block fund stats).
+    fetchProperties()
+      .then((p) => {
+        if (active) setProperties(p);
+      })
+      .catch(() => {
+        if (active) setProperties([]);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   const metrics = useMemo(() => {
+    if (!stats) return [];
     const fundValue = stats.navEur ?? Math.max(0, stats.totalDeposits + stats.totalYield);
     const sharePrice =
       stats.navPerFsftEur ?? (stats.totalSupply > 0 ? fundValue / stats.totalSupply : 0);
@@ -51,32 +73,70 @@ export default function FundPage() {
         </div>
       )}
 
-      {usingDemoData && !error && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Showing seeded demo fund data for simulation.
+      {loading ? (
+        <div className="space-y-4">
+          <div className="h-20 rounded-2xl bg-bg animate-pulse" />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="h-32 rounded-2xl bg-bg animate-pulse" />
+            <div className="h-32 rounded-2xl bg-bg animate-pulse" />
+          </div>
         </div>
+      ) : stats ? (
+        <>
+          <MetricRow items={metrics} />
+
+          <section className="grid gap-4 md:grid-cols-2">
+            <div className="surface p-5">
+              <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Fund Breakdown</p>
+              <div className="space-y-2 text-sm text-text-2">
+                <p>In DeFi: <strong className="text-text-1">{formatEUR(stats.totalInDefi)}</strong></p>
+                <p>Allocated: <strong className="text-text-1">{formatEUR(stats.totalAllocated)}</strong></p>
+                <p>Yield: <strong className="text-text-1">{formatEUR(stats.totalYield)}</strong></p>
+              </div>
+            </div>
+            <div className="surface p-5">
+              <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Health Check</p>
+              <div className="space-y-2 text-sm text-text-2">
+                <p>Investor count: <strong className="text-text-1">{stats.investorCount.toLocaleString()}</strong></p>
+                <p>Fund status: <strong className="text-text-1">{stats.isPaused ? "Paused" : "Active"}</strong></p>
+                <p>Data source: <strong className="text-text-1">{stats.source ?? "Live"}</strong></p>
+              </div>
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      {properties.length > 0 && (
+        <section className="surface p-5">
+          <p className="text-xs uppercase tracking-wide text-text-3 mb-3">
+            Real-Estate Assets (AIP-721 deeds)
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {properties.map((p) => (
+              <div key={p.tokenId} className="rounded-xl border border-border bg-bg p-4">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-text-1">Property deed #{p.tokenId}</span>
+                  <span className="text-tag rounded-full bg-fs-mint px-2 py-0.5 text-fs-teal-dark">
+                    {p.distributionOpen ? "Distributing" : "Held"}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-text-2">
+                  Acquired via{" "}
+                  <Link href={`/governance/${p.proposalId}`} className="text-fs-teal hover:underline">
+                    proposal #{p.proposalId}
+                  </Link>
+                </p>
+                <p className="mt-1 text-sm text-text-2">
+                  Valuation: <strong className="text-text-1">{formatEUR(p.valuationEur)}</strong>
+                </p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-text-3">
+            Each acquired property is recorded on-chain as a non-fungible deed held by the fund.
+          </p>
+        </section>
       )}
-
-      <MetricRow items={metrics} />
-
-      <section className="grid gap-4 md:grid-cols-2">
-        <div className="surface p-5">
-          <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Fund Breakdown</p>
-          <div className="space-y-2 text-sm text-text-2">
-            <p>In DeFi: <strong className="text-text-1">{formatEUR(stats.totalInDefi)}</strong></p>
-            <p>Allocated: <strong className="text-text-1">{formatEUR(stats.totalAllocated)}</strong></p>
-            <p>Yield: <strong className="text-text-1">{formatEUR(stats.totalYield)}</strong></p>
-          </div>
-        </div>
-        <div className="surface p-5">
-          <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Health Check</p>
-          <div className="space-y-2 text-sm text-text-2">
-            <p>Investor count: <strong className="text-text-1">{stats.investorCount.toLocaleString()}</strong></p>
-            <p>Fund status: <strong className="text-text-1">{stats.isPaused ? "Paused" : "Active"}</strong></p>
-            <p>Data source: <strong className="text-text-1">{usingDemoData ? "Demo" : (stats.source ?? "Live")}</strong></p>
-          </div>
-        </div>
-      </section>
 
       <ActionPanel title="What To Do Now" subtitle="Pick one">
         <div className="grid gap-2 sm:grid-cols-2">

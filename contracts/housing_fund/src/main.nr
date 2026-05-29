@@ -21,6 +21,7 @@ pub contract HousingFund {
     use fund_token::FundToken;
     use governance::Governance;
     use kyc_verifier::{KYCVerifier, credential_note::KycCredentialNote};
+    use nft_contract::NFT;
     use aztec::{
         history::note::assert_note_existed_by,
         macros::{
@@ -82,6 +83,9 @@ pub contract HousingFund {
         fund_token: PublicMutable<AztecAddress, Context>,
         defi_vault: PublicMutable<AztecAddress, Context>,
         governance: PublicMutable<AztecAddress, Context>,
+        // AIP-721 property-deed NFT (this fund is its minter). Optional: when
+        // unset, distribution still works and no deed is minted.
+        property_nft: PublicMutable<AztecAddress, Context>,
         // Fund accounting (all public -- transparent to investors)
         total_deposits: PublicMutable<u64, Context>,
         total_in_defi: PublicMutable<u64, Context>,
@@ -153,6 +157,14 @@ pub contract HousingFund {
         self.storage.fund_token.write(fund_token);
         self.storage.defi_vault.write(defi_vault);
         self.storage.governance.write(governance);
+    }
+
+    // Wire the AIP-721 property-deed NFT (deployed with this fund as its minter).
+    // Kept separate from set_contracts to avoid changing that function's arity.
+    #[external("public")]
+    fn set_property_nft(property_nft: AztecAddress) {
+        assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
+        self.storage.property_nft.write(property_nft);
     }
 
     // -- Core operations --------------------------------------------------
@@ -296,6 +308,17 @@ pub contract HousingFund {
         self.storage.last_fsft_minted.write(proposal_amount);
         self.storage.last_token_price_bps.write(10000);
         self.storage.last_valuation_block.write(self.context.block_number());
+
+        // Record the asset acquisition on-chain by minting a property-deed NFT
+        // (AIP-721) to the fund. token_id = proposal_id + 1 because the NFT
+        // contract reserves token_id 0. No-op if the NFT is not wired up.
+        let nft_addr = self.storage.property_nft.read();
+        if !nft_addr.is_zero() {
+            let recipient = self.context.this_address();
+            let token_id: Field = (proposal_id + 1) as Field;
+            let nft = NFT::at(nft_addr);
+            self.call(nft.mint_to_public(recipient, token_id));
+        }
     }
 
     #[external("public")]

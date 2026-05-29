@@ -36,8 +36,14 @@ pnpm-debug.log*
 
 # Aztec / Noir artifacts
 contracts/*/target/
+contracts/vendor/**/target/
 artifacts/
 frontend/src/artifacts/
 proofs/output/
 proofs/recursive/*/target/
 proofs/recursive/*/Prover.toml
+
+# Local PXE / wallet runtime data (may contain keys) + agent runtime lock
+scripts/pxe_data_*/
+scripts/wallet_data_*/
+.claude/scheduled_tasks.lock

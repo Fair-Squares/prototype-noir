@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simAttestFsftForVoting, simGetVotingEligibility } from "@/lib/simulationStore";
 import { requireAztecTxHash } from "@/lib/txHash";
+import { simResult } from "@/lib/aztecSim";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -71,16 +72,17 @@ export async function GET(request: NextRequest) {
     );
 
     // V2 eligibility: count private notes instead of reading public maps.
-    const [credentialsResult, depositNotesResult, fsftBalance, hasPrivateHolderProof] = await Promise.all([
-      kycContract.methods.get_my_kyc_credentials(userAddress, 0).simulate({ from: actorAddress }) as Promise<{ len: bigint }>,
-      hfContract.methods.get_my_deposit_notes(userAddress, 0).simulate({ from: actorAddress }) as Promise<{ len: bigint }>,
+    const [credSim, depSim, fsftSim, proofSim] = await Promise.all([
+      kycContract.methods.get_my_kyc_credentials(userAddress, 0).simulate({ from: actorAddress }),
+      hfContract.methods.get_my_deposit_notes(userAddress, 0).simulate({ from: actorAddress }),
       ftContract.methods.public_balance_of(userAddress).simulate({ from: actorAddress }),
       ftContract.methods.has_private_holder_proof(userAddress).simulate({ from: actorAddress }),
     ]);
 
-    const isInvestor = credentialsResult.len > 0n;
-    const hasDepositTicket = depositNotesResult.len > 0n;
-    const hasFsftExposure = Number(fsftBalance) > 0 || Boolean(hasPrivateHolderProof);
+    const isInvestor = simResult<{ len: bigint }>(credSim).len > 0n;
+    const hasDepositTicket = simResult<{ len: bigint }>(depSim).len > 0n;
+    const hasPrivateHolderProof = Boolean(simResult(proofSim));
+    const hasFsftExposure = Number(simResult(fsftSim)) > 0 || hasPrivateHolderProof;
     const canVote = isInvestor && (hasDepositTicket || hasFsftExposure);
     const privateFsftProofMode = Boolean(hasPrivateHolderProof) ? "aztec-private-proven" : "none";
 

@@ -2,6 +2,12 @@
 
 import Link from "next/link";
 import { PROPOSAL_STATUS, formatEUR, type Proposal } from "@/lib/contracts";
+import {
+  AZTEC_SLOT_DURATION_SEC,
+  BLOCK_PRODUCTION_MODE,
+  blocksToSeconds,
+  formatDuration,
+} from "@/lib/chainParams";
 
 interface ProposalCardProps {
   proposal: Proposal;
@@ -9,6 +15,7 @@ interface ProposalCardProps {
   canVote?: boolean;
   isConnected?: boolean;
   isVoting?: boolean;
+  hasVoted?: boolean;
   onVote?: (proposalId: number, voteYes: boolean) => Promise<void>;
   actionHref?: string;
 }
@@ -27,11 +34,21 @@ export default function ProposalCard({
   canVote = false,
   isConnected = false,
   isVoting = false,
+  hasVoted = false,
   onVote,
   actionHref,
 }: ProposalCardProps) {
   const statusLabel = PROPOSAL_STATUS[proposal.status] ?? "Unknown";
   const isActive = proposal.status === 0;
+
+  const deadlineBlock = proposal.deadlineBlock ?? proposal.deadline;
+  const currentBlock = proposal.currentBlock ?? 0;
+  const blocksRemaining = Math.max(0, deadlineBlock - currentBlock);
+  const quorum = proposal.quorumRequired ?? 0;
+  const totalVotes = proposal.totalVotes ?? proposal.yesVotes + proposal.noVotes;
+  const quorumReached = proposal.quorumReached ?? totalVotes >= quorum;
+  const majorityYes = proposal.yesVotes > proposal.noVotes;
+  const wouldPass = quorumReached && majorityYes;
 
   if (mode === "compact") {
     return (
@@ -76,10 +93,73 @@ export default function ProposalCard({
         Votes: <strong className="text-fs-teal">{proposal.yesVotes}</strong> yes · <strong className="text-fs-magenta">{proposal.noVotes}</strong> no
       </p>
 
+      {/* What it takes to pass / fail */}
+      <div className="mt-4 rounded-lg border border-border bg-bg p-3 text-sm">
+        <p className="text-xs uppercase tracking-wide text-text-3">What it takes to pass</p>
+        <p className="mt-1 text-text-2">
+          At least <strong className="text-text-1">{quorum}</strong> total votes (quorum) and more{" "}
+          <span className="text-fs-teal">Yes</span> than <span className="text-fs-magenta">No</span>.
+        </p>
+        <ul className="mt-2 space-y-1 text-xs text-text-2">
+          <li>
+            Quorum: {totalVotes}/{quorum}{" "}
+            <span className={quorumReached ? "font-semibold text-fs-teal-dark" : "text-text-3"}>
+              {quorumReached ? "· met" : "· not met"}
+            </span>
+          </li>
+          <li>
+            Majority: {proposal.yesVotes} Yes vs {proposal.noVotes} No{" "}
+            <span className={majorityYes ? "font-semibold text-fs-teal-dark" : "text-text-3"}>
+              {majorityYes
+                ? "· Yes leads"
+                : proposal.yesVotes === proposal.noVotes
+                ? "· tied"
+                : "· No leads"}
+            </span>
+          </li>
+          <li className="pt-1 font-semibold text-text-1">
+            {isActive
+              ? wouldPass
+                ? "On track to pass if the window closed now."
+                : "Would not pass yet — needs more Yes votes and/or quorum."
+              : `Final result: ${statusLabel}.`}
+          </li>
+        </ul>
+      </div>
+
+      {/* Voting window / time remaining */}
+      {isActive && (
+        <div className="mt-3 rounded-lg border border-border bg-bg p-3 text-sm">
+          <p className="text-xs uppercase tracking-wide text-text-3">Voting window</p>
+          <p className="mt-1 text-text-2">
+            Closes at block <strong className="text-text-1">{deadlineBlock}</strong> ·{" "}
+            <strong className="text-text-1">{blocksRemaining}</strong> block
+            {blocksRemaining === 1 ? "" : "s"} remaining
+            {blocksRemaining > 0 && (
+              <> (~{formatDuration(blocksToSeconds(blocksRemaining))} at {AZTEC_SLOT_DURATION_SEC}s/block)</>
+            )}
+          </p>
+          {blocksRemaining === 0 ? (
+            <p className="mt-1 text-xs text-text-3">Window reached — the proposal can now be finalized.</p>
+          ) : (
+            BLOCK_PRODUCTION_MODE === "on-demand" && (
+              <p className="mt-1 text-xs text-text-3">
+                Locally, blocks are produced on-demand (only when transactions happen), so the time is a
+                steady-state estimate — the window advances as activity occurs.
+              </p>
+            )
+          )}
+        </div>
+      )}
+
       {isActive && onVote && (
         <div className="mt-4">
           {!isConnected ? (
             <p className="text-sm text-text-3">Connect your wallet to vote.</p>
+          ) : hasVoted ? (
+            <div className="rounded-lg border border-fs-teal/20 bg-fs-teal/10 p-3 text-sm text-fs-teal-dark">
+              ✓ You have already voted on this proposal. Each account votes once; your ballot stays private.
+            </div>
           ) : !canVote ? (
             <p className="text-sm text-text-3">You are not ready to vote yet.</p>
           ) : (

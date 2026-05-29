@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simGetKYCProfile, simGetVotingEligibility } from "@/lib/simulationStore";
+import { simResult } from "@/lib/aztecSim";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const address = searchParams.get("address") ?? "";
+  // Live mode (AZTEC_LIVE=true) always reads on-chain — dev/sim only applies when
+  // live mode is off, so the local stack doesn't fall back to simulated KYC data.
   const forceDevMode =
-    process.env.NEXT_PUBLIC_DEV_MODE === "true" ||
-    process.env.NEXT_PUBLIC_SIMULATION === "true";
+    !isLiveModeEnabled() &&
+    (process.env.NEXT_PUBLIC_DEV_MODE === "true" ||
+      process.env.NEXT_PUBLIC_SIMULATION === "true");
 
   if (!address) {
     return NextResponse.json({ error: "address required" }, { status: 400 });
@@ -80,18 +84,22 @@ export async function GET(request: NextRequest) {
     const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
-    const from = AztecAddress.fromString(admin.address);
     const KycArtifactJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
     const kycArtifact = loadContractArtifact(KycArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet);
 
     const userAddress = AztecAddress.fromString(address);
+    // Read the user's OWN private notes from their account scope. Simulating
+    // from the admin would not see another account's credential / deposit
+    // notes, so we use the queried address (all local test accounts are
+    // registered in the server PXE) as the `from` for these reads.
+    const readFrom = userAddress;
     // V2: a user is "verified investor" iff they own a non-revoked KYC
     // credential note. Replaces the V1 public is_verified / is_investor
     // map lookups, which leaked address→KYC linkage in public state.
-    const credentialsResult = (await kycContract.methods
-      .get_my_kyc_credentials(userAddress, 0)
-      .simulate({ from })) as { len: bigint };
+    const credentialsResult = simResult<{ len: bigint }>(
+      await kycContract.methods.get_my_kyc_credentials(userAddress, 0).simulate({ from: readFrom })
+    );
     const isInvestor = credentialsResult.len > 0n;
     const verified = isInvestor;
     const roles: string[] = [];
@@ -109,17 +117,17 @@ export async function GET(request: NextRequest) {
       const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, wallet);
       const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, wallet);
       // V2: deposit-ticket existence = "does the user own ≥1 DepositNote?"
-      const depositNotesResult = (await hfContract.methods
-        .get_my_deposit_notes(userAddress, 0)
-        .simulate({ from })) as { len: bigint };
+      const depositNotesResult = simResult<{ len: bigint }>(
+        await hfContract.methods.get_my_deposit_notes(userAddress, 0).simulate({ from: readFrom })
+      );
       hasDepositTicket = depositNotesResult.len > 0n;
       // FSFT exposure still uses fund_token's public/private balance checks
       // (FundToken V2 is staged for a later cleanup pass).
       const [fsftPublicBalance, hasPrivateHolderProof] = await Promise.all([
-        ftContract.methods.public_balance_of(userAddress).simulate({ from }),
-        ftContract.methods.has_private_holder_proof(userAddress).simulate({ from }),
+        ftContract.methods.public_balance_of(userAddress).simulate({ from: readFrom }),
+        ftContract.methods.has_private_holder_proof(userAddress).simulate({ from: readFrom }),
       ]);
-      hasFsftExposure = Number(fsftPublicBalance) > 0 || Boolean(hasPrivateHolderProof);
+      hasFsftExposure = Number(simResult(fsftPublicBalance)) > 0 || Boolean(simResult(hasPrivateHolderProof));
     }
     const canVote = Boolean(isInvestor) && (hasDepositTicket || hasFsftExposure);
     const voteEligibilityReason = !Boolean(isInvestor)
