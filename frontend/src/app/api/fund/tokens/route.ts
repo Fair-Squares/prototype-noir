@@ -63,9 +63,12 @@ export async function GET(request: NextRequest) {
     const fundTokenAddr = process.env.NEXT_PUBLIC_FUND_TOKEN_ADDRESS ?? "";
     const eurTokenAddr = process.env.NEXT_PUBLIC_EUR_TOKEN_ADDRESS ?? "";
 
+    // FSFT is the vendored AIP-20 Token; total_supply is at slot 8 in its
+    // storage layout (name/symbol/decimals/private_balances precede it). The
+    // old bespoke FundToken had it at slot 2. See src/artifacts/Token.ts.
     const totalSupplyRaw = await callNodeRpc<string>(
       "node_getPublicStorageAt",
-      [bh, fundTokenAddr, "0x" + BigInt(2).toString(16).padStart(64, "0")]
+      [bh, fundTokenAddr, "0x" + BigInt(8).toString(16).padStart(64, "0")]
     );
     const totalSupply = totalSupplyRaw ? Number(BigInt(totalSupplyRaw)) : 0;
 

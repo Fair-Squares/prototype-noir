@@ -13,19 +13,19 @@
   },
   "housing_fund-HousingFund.json": {
     "contractName": "HousingFund",
-    "hash": "aac950924a2170767303703b2fe0929a5785cdef3409b1234a45e97471adb34b"
+    "hash": "907b5a1d6f3d6b0a8a6492a5ff84ae03a2fa110fe490e38af3463ce6995394f5"
   },
   "governance-Governance.json": {
     "contractName": "Governance",
-    "hash": "0180fa09e7b770d6c66d026ed7a1f96c2b8a07a23d6fa43a88a3347efde79f92"
+    "hash": "6520f37cd50aa66dedaa1edc6168c898ca86b445b76d096e46538fed058a18b6"
   },
   "fsft_dex-FSFTDex.json": {
     "contractName": "FSFTDex",
-    "hash": "ae6534053537253930a2a3c0188d7a61e2e752bcfa41f4d3ed3e0df5fdf63b5b"
+    "hash": "d64fe583d33ac3922af204eb168d664521f7b319d2918575f29ab3dd6d520bdb"
   },
   "protocol_rewards-ProtocolRewards.json": {
     "contractName": "ProtocolRewards",
-    "hash": "027ba80d18a2be46f9c5287884244a834c7134b7d8bf8fc86b66fe2f6e3a0ee1"
+    "hash": "ff0f7c528c93bbabc14f327ff5784086116fd426cc87ae420ba293a0f9ff600c"
   },
   "dripper-Dripper.json": {
     "contractName": "Dripper",

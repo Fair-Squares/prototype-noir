@@ -117,9 +117,13 @@ export async function POST(request: NextRequest) {
         salt: unknown;
       };
     }
+    // Each side's OrderIntentNotes are private to that owner's PXE scope, so
+    // each read must be simulated FROM that owner (the shared EmbeddedWallet
+    // holds all test-account keys). Reading the maker's intents `from` the
+    // matcher returns nothing.
     const [takerIntents, makerIntents] = await Promise.all([
-      dexContract.methods.get_my_order_intents(takerOwner, 0).simulate({ from: actorAddress }),
-      dexContract.methods.get_my_order_intents(makerOwner, 0).simulate({ from: actorAddress }),
+      dexContract.methods.get_my_order_intents(takerOwner, 0).simulate({ from: takerOwner }),
+      dexContract.methods.get_my_order_intents(makerOwner, 0).simulate({ from: makerOwner }),
     ]);
     const takerResult = simResult<{ len: bigint; storage: IntentHint[] }>(takerIntents);
     const makerResult = simResult<{ len: bigint; storage: IntentHint[] }>(makerIntents);

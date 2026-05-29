@@ -72,7 +72,10 @@ async function main() {
   // issued a credential to. We use the same wallet so the credential
   // note is in this PXE.
   const [test0] = await getInitialTestAccountsData();
-  const account = await wallet.createSchnorrAccount(test0.secret, test0.salt);
+  // Pass signingKey (3rd arg) so the derived address matches the bootstrap /
+  // serverWallet test0 (which was KYC'd). Omitting it derives a DIFFERENT
+  // address with no KYC credential, so get_my_kyc_credentials would find none.
+  const account = await wallet.createSchnorrAccount(test0.secret, test0.salt, test0.signingKey);
   const accountAddress = account.address;
   log(`test0 = ${accountAddress.toString()}`);
 
