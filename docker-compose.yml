@@ -74,6 +74,26 @@ services:
       retries: 12
       start_period: 20s
 
+  # -- Seed tradable FSFT into all three accounts (real distribution flow) ------
+  # Runs once the frontend is healthy and drives the live API routes:
+  #   deposit x3 -> create proposal -> vote x2 -> finalize -> execute (opens the
+  #   distribution) -> claim x3, so test0/1/2 each hold private FSFT minted from
+  #   an executed fund proposal — ready to sell on the DEX. One-shot; exits 0.
+  # Reuses the proven server-side wallet via HTTP (reliable, unlike a fresh PXE).
+  fsft-seed:
+    image: *aztec-image
+    profiles: ["aztec"]
+    working_dir: /workspace
+    depends_on:
+      frontend:
+        condition: service_healthy
+    environment:
+      - FRONTEND_URL=http://frontend:3000
+    volumes:
+      - ./:/workspace
+    entrypoint: ["bash", "./scripts/seed-fsft.sh"]
+    restart: "no"
+
   # -- Frontend (simulation only, no Aztec) ------------------------------------
   frontend-sim:
     build: ./frontend
