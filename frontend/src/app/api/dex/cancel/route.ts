@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
 import { simCancelDexOrder } from "@/lib/simulationStore";
 import { requireAztecTxHash } from "@/lib/txHash";
-import { simResult } from "@/lib/aztecSim";
 
 // FSFTDex V3: cancel an order by its public `seq`. We locate the caller's
 // private OrderOwnerNote for that seq (in their PXE) and prove it to the
@@ -35,9 +34,9 @@ export async function POST(request: NextRequest) {
 
     const { getTestAccount } = await import("@/lib/serverWallet");
     const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
-    const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
+    const { loadArtifact } = await import("@/lib/artifactLoader");
+    const { findOwnedOrderNote } = await import("@/lib/dexNotes");
 
     const actor = await getTestAccount(accountIndex);
     if (address.toLowerCase() !== actor.address.toLowerCase()) {
@@ -46,15 +45,15 @@ export async function POST(request: NextRequest) {
     const from = AztecAddress.fromString(actor.address);
     const dex = await Contract.at(
       AztecAddress.fromString(dexAddr),
-      loadContractArtifact((await loadGeneratedArtifactJson("fsft_dex-FSFTDex.json")) as Parameters<typeof loadContractArtifact>[0]),
+      await loadArtifact("fsft_dex-FSFTDex.json"),
       actor.wallet
     );
 
     // Find the caller's OrderOwnerNote for this seq (read from the owner's scope).
-    const mine = simResult<{ len: bigint; storage: { note: { seq: bigint } }[] }>(
-      await dex.methods.get_my_orders(from, 0).simulate({ from })
+    const hinted = await findOwnedOrderNote(
+      () => dex.methods.get_my_orders(from, 0).simulate({ from }),
+      Number(orderId)
     );
-    const hinted = mine.storage.find((h) => Number(h.note.seq) === Number(orderId));
     if (!hinted) {
       return NextResponse.json({ error: `No owned order found for seq ${orderId}.` }, { status: 400 });
     }

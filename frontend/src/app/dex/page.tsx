@@ -108,35 +108,31 @@ export default function DexPage() {
     }
   };
 
-  const cancelOrder = async () => {
+  // cancel + claim share the same shape: guard on seq, run the action, surface
+  // the result, refresh on success. Only the call and the default copy differ.
+  const runManage = async (
+    action: (addr: string) => Promise<{ success: boolean; message?: string; error?: string }>,
+    fallback: { ok: string; fail: string }
+  ) => {
     if (!address || !manageSeq.trim()) {
       notify("error", "Enter your order's seq number.");
       return;
     }
     setBusy(true);
     try {
-      const result = await cancelDexOrder(address, Number(manageSeq), accountIndex);
-      notify(result.success ? "success" : "error", result.success ? (result.message ?? "Cancelled.") : (result.error ?? "Cancel failed."));
+      const result = await action(address);
+      notify(result.success ? "success" : "error", result.success ? (result.message ?? fallback.ok) : (result.error ?? fallback.fail));
       if (result.success) await refresh();
     } finally {
       setBusy(false);
     }
   };
 
-  const claim = async (token: "eur" | "fsft") => {
-    if (!address || !manageSeq.trim()) {
-      notify("error", "Enter your order's seq number.");
-      return;
-    }
-    setBusy(true);
-    try {
-      const result = await claimDexProceeds(address, Number(manageSeq), token, accountIndex);
-      notify(result.success ? "success" : "error", result.success ? (result.message ?? "Claimed.") : (result.error ?? "Nothing to claim."));
-      if (result.success) await refresh();
-    } finally {
-      setBusy(false);
-    }
-  };
+  const cancelOrder = () =>
+    runManage((addr) => cancelDexOrder(addr, Number(manageSeq), accountIndex), { ok: "Cancelled.", fail: "Cancel failed." });
+
+  const claim = (token: "eur" | "fsft") =>
+    runManage((addr) => claimDexProceeds(addr, Number(manageSeq), token, accountIndex), { ok: "Claimed.", fail: "Nothing to claim." });
 
   const canTrade = portfolio?.canTradeDex ?? false;
   const fundSymbol = portfolio?.fundTokenSymbol ?? "FSFT";

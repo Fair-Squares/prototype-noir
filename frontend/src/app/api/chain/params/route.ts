@@ -20,8 +20,10 @@ export async function GET() {
   const maxTtlBlocks = envInt("DEX_MAX_TTL_BLOCKS", 120);
   const claimMin = envInt("PROTOCOL_REWARDS_CLAIM_MIN", 1);
 
-  // Prefer the live node timing (set per dev profile, e.g. .env.fast uses a 24s
-  // slot) over the testnet-like defaults baked into chainParams.
+  // Prefer the live node timing (AZTEC_SLOT_DURATION / ETHEREUM_SLOT_DURATION,
+  // surfaced by the aztec service) over the testnet-like defaults baked into
+  // chainParams. On the local network these are display values: automine warps
+  // across the slot, so they do not gate wall-clock block time.
   const aztecSlotDurationSec = envInt("AZTEC_SLOT_DURATION", AZTEC_SLOT_DURATION_SEC);
   const ethereumSlotDurationSec = envInt("ETHEREUM_SLOT_DURATION", ETHEREUM_SLOT_DURATION_SEC);
   const epochDurationSec = EPOCH_DURATION_SLOTS * aztecSlotDurationSec;

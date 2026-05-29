@@ -48,15 +48,12 @@ export async function GET(request: NextRequest) {
 
     const { getTestAccount } = await import("@/lib/serverWallet");
     const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
-    const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
+    const { loadArtifact } = await import("@/lib/artifactLoader");
 
     const actor = await getTestAccount(accountIndex);
     const from = AztecAddress.fromString(actor.address);
-    const dexArtifact = loadContractArtifact(
-      (await loadGeneratedArtifactJson("fsft_dex-FSFTDex.json")) as Parameters<typeof loadContractArtifact>[0]
-    );
+    const dexArtifact = await loadArtifact("fsft_dex-FSFTDex.json");
     const dex = await Contract.at(AztecAddress.fromString(dexAddr), dexArtifact, actor.wallet);
 
     const snapshot = simResult<{
@@ -141,10 +138,9 @@ export async function POST(request: NextRequest) {
 
     const { getTestAccount } = await import("@/lib/serverWallet");
     const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
     const { Fr } = await import("@aztec/aztec.js/fields");
-    const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
+    const { loadArtifact } = await import("@/lib/artifactLoader");
 
     const actor = await getTestAccount(accountIndex);
     if (address.toLowerCase() !== actor.address.toLowerCase()) {
@@ -153,15 +149,11 @@ export async function POST(request: NextRequest) {
     const from = AztecAddress.fromString(actor.address);
     const dexAddress = AztecAddress.fromString(dexAddr);
 
-    const dexArtifact = loadContractArtifact(
-      (await loadGeneratedArtifactJson("fsft_dex-FSFTDex.json")) as Parameters<typeof loadContractArtifact>[0]
-    );
-    const tokenArtifact = loadContractArtifact(
-      (await loadGeneratedArtifactJson("token_contract-Token.json")) as Parameters<typeof loadContractArtifact>[0]
-    );
-    const kycArtifact = loadContractArtifact(
-      (await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json")) as Parameters<typeof loadContractArtifact>[0]
-    );
+    const [dexArtifact, tokenArtifact, kycArtifact] = await Promise.all([
+      loadArtifact("fsft_dex-FSFTDex.json"),
+      loadArtifact("token_contract-Token.json"),
+      loadArtifact("kyc_verifier-KYCVerifier.json"),
+    ]);
     const dex = await Contract.at(dexAddress, dexArtifact, actor.wallet);
     const kyc = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, actor.wallet);
 
@@ -192,20 +184,27 @@ export async function POST(request: NextRequest) {
     // Scan the public book for crossing EXACT-price, opposite-side, active,
     // unexpired, strictly-older orders the placement will match on-chain.
     const wantSide = sideCode === 0 ? 1 : 0; // buy matches sells, sell matches buys
-    const candidates: number[] = [];
-    for (let seq = 0; seq < suppliedSeq && candidates.length < MAX_FILLS; seq++) {
-      const o = simResult<RawOrder>(await dex.methods.get_order(seq).simulate({ from }));
-      const status = toNum(o.status);
-      if (
-        toNum(o.side) === wantSide &&
-        (status === 0 || status === 1) &&
-        toNum(o.price_bps) === priceBps &&
-        toNum(o.expiry_block) > currentBlock &&
-        toNum(o.remaining) > 0
-      ) {
-        candidates.push(seq);
-      }
-    }
+    // Read the whole book in parallel, then take the crossing candidates in seq
+    // order (oldest first) up to MAX_FILLS — same selection as a serial scan,
+    // but one batched round-trip instead of N sequential ones.
+    const book = await Promise.all(
+      Array.from({ length: suppliedSeq }, (_, seq) =>
+        dex.methods.get_order(seq).simulate({ from }).then((r) => simResult<RawOrder>(r))
+      )
+    );
+    const candidates = book
+      .filter((o) => {
+        const status = toNum(o.status);
+        return (
+          toNum(o.side) === wantSide &&
+          (status === 0 || status === 1) &&
+          toNum(o.price_bps) === priceBps &&
+          toNum(o.expiry_block) > currentBlock &&
+          toNum(o.remaining) > 0
+        );
+      })
+      .map((o) => toNum(o.seq))
+      .slice(0, MAX_FILLS);
     const makerSeqs = Array.from({ length: MAX_FILLS }, (_, i) => BigInt(candidates[i] ?? 0));
     const matchCount = candidates.length;
 
