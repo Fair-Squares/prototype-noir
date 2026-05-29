@@ -522,23 +522,20 @@ export async function placeDexOrder(
 }
 
 /**
- * Match a resting counterparty (maker) order. Under the V2 private-intents
- * model matching is address/counterparty-based (there is no public order book),
- * so the caller is the taker and supplies the maker's address. The route
- * locates the maker's first open private intent and settles atomically over
- * both parties' private balances via the AIP-20 Token's authwit transfer.
+ * FSFTDex V3: claim the proceeds (and/or refunds) accrued to one of your orders'
+ * anonymous owner_tag. Matching itself is automatic on-chain at placement, so
+ * there is no separate match call. `token`: "eur" | "fsft".
  */
-export async function matchDexOrder(
+export async function claimDexProceeds(
   address: string,
-  makerAddress: string,
-  fillAmount?: number,
+  seq: number,
+  token: "eur" | "fsft",
   accountIndex = 0
-): Promise<{ success: boolean; message?: string; error?: string; fillAmount?: number; eurNotional?: number }> {
-  const res = await fetch("/api/dex/match", {
+): Promise<{ success: boolean; message?: string; error?: string; txHash?: string }> {
+  const res = await fetch("/api/dex/claim", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    // orderId is required by the route validator but ignored on the V2 path.
-    body: JSON.stringify({ address, takerAddress: address, makerAddress, fillAmount, orderId: 0, accountIndex }),
+    body: JSON.stringify({ address, orderId: seq, token, accountIndex }),
   });
   return res.json();
 }

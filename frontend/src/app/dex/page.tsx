@@ -3,29 +3,34 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
+  ActionBar,
   Alert,
   Button,
+  DataTable,
   EmptyState,
+  FormField,
   KpiCard,
   KpiGrid,
   PageHeader,
   Section,
   SkeletonKpi,
+  StatusChip,
+  type Column,
 } from "@/components/ui";
-import { TradeBalances, TradeTicket, UserOrderRow } from "@/components/trade";
+import { TradeBalances, TradeTicket } from "@/components/trade";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   cancelDexOrder,
+  claimDexProceeds,
   fetchChainParams,
   fetchDexOrderbook,
   fetchPortfolio,
-  matchDexOrder,
   placeDexOrder,
   type ChainParams,
+  type DexOrder,
   type DexOrderbook,
   type PortfolioData,
 } from "@/lib/contracts";
-import { ActionBar, FormField } from "@/components/ui";
 
 function formatTtl(blocks: number, seconds: number): string {
   const mins = Math.round(seconds / 60);
@@ -35,6 +40,10 @@ function formatTtl(blocks: number, seconds: number): string {
   const hours = (mins / 60).toFixed(mins % 60 === 0 ? 0 : 1);
   return `${blockLabel} (~${hours} h)`;
 }
+
+const STATUS_KIND = {
+  open: "open", partial: "pending", filled: "completed", cancelled: "blocked", expired: "delayed",
+} as const;
 
 export default function DexPage() {
   const { activeAccount } = useWallet();
@@ -48,6 +57,7 @@ export default function DexPage() {
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [manageSeq, setManageSeq] = useState("");
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -74,18 +84,10 @@ export default function DexPage() {
 
   const notify = (type: "success" | "error", text: string) => {
     setMsg({ type, text });
-    setTimeout(() => setMsg(null), 6000);
+    if (type === "success") setTimeout(() => setMsg(null), 8000);
   };
 
-  const placeOrder = async ({
-    side,
-    amount,
-    limitPriceEur,
-  }: {
-    side: "buy" | "sell";
-    amount: number;
-    limitPriceEur?: number;
-  }) => {
+  const placeOrder = async ({ side, amount, limitPriceEur }: { side: "buy" | "sell"; amount: number; limitPriceEur?: number }) => {
     if (!address) {
       notify("error", "Connect your wallet first.");
       return;
@@ -97,78 +99,62 @@ export default function DexPage() {
         notify("error", result.error ?? "Order could not be placed.");
         return;
       }
-      notify("success", "Private order commitment recorded.");
+      // The placement matches on-chain if it crosses; otherwise it rests.
+      const seq = (result as { seq?: number }).seq;
+      notify("success", `${result.message ?? "Order placed."}${seq !== undefined ? ` (your order seq: ${seq})` : ""}`);
       await refresh();
     } finally {
       setBusy(false);
     }
   };
 
-  // Cancellation acts on a commitment by id. Reachable only if the orderbook
-  // snapshot ever surfaces the caller's own orders (empty by design today).
-  const cancelOrder = async (orderId: number) => {
-    if (!address) return;
-    setBusy(true);
-    try {
-      const result = await cancelDexOrder(address, orderId, accountIndex);
-      if (!result.success) {
-        notify("error", result.error ?? "Cancel failed.");
-        return;
-      }
-      notify("success", "Order commitment cancelled.");
-      await refresh();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // Advanced: take (match) a counterparty's resting private order. Matching is
-  // a matcher/taker action keyed by the maker's ADDRESS (orders are private
-  // commitments, so there is no public order to click). Settles atomically over
-  // both parties' private balances via the token's authwit transfer.
-  const [makerAddress, setMakerAddress] = useState("");
-  const [fillAmount, setFillAmount] = useState("");
-
-  const matchOrder = async () => {
-    if (!address) {
-      notify("error", "Connect your wallet first.");
-      return;
-    }
-    if (!makerAddress.trim()) {
-      notify("error", "Enter the counterparty (maker) address to match.");
+  const cancelOrder = async () => {
+    if (!address || !manageSeq.trim()) {
+      notify("error", "Enter your order's seq number.");
       return;
     }
     setBusy(true);
     try {
-      const fill = fillAmount.trim() ? Number(fillAmount) : undefined;
-      const result = await matchDexOrder(address, makerAddress.trim(), fill, accountIndex);
-      if (!result.success) {
-        notify("error", result.error ?? "Match failed.");
-        return;
-      }
-      notify(
-        "success",
-        `Matched ${result.fillAmount ?? ""} ${fundSymbol} against the counterparty's resting order.`,
-      );
-      setMakerAddress("");
-      setFillAmount("");
-      await refresh();
+      const result = await cancelDexOrder(address, Number(manageSeq), accountIndex);
+      notify(result.success ? "success" : "error", result.success ? (result.message ?? "Cancelled.") : (result.error ?? "Cancel failed."));
+      if (result.success) await refresh();
     } finally {
       setBusy(false);
     }
   };
 
-  const userOrders = orderbook?.userOrders ?? [];
+  const claim = async (token: "eur" | "fsft") => {
+    if (!address || !manageSeq.trim()) {
+      notify("error", "Enter your order's seq number.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await claimDexProceeds(address, Number(manageSeq), token, accountIndex);
+      notify(result.success ? "success" : "error", result.success ? (result.message ?? "Claimed.") : (result.error ?? "Nothing to claim."));
+      if (result.success) await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const canTrade = portfolio?.canTradeDex ?? false;
   const fundSymbol = portfolio?.fundTokenSymbol ?? "FSFT";
   const eurSymbol = portfolio?.eurTokenSymbol ?? "EUR";
+
+  const orderColumns: Column<DexOrder>[] = [
+    { key: "priceEur", header: "Price", align: "right", render: (o) => <span className="text-mono">€{o.priceEur.toFixed(4)}</span> },
+    { key: "remaining", header: `Open (${fundSymbol})`, align: "right", render: (o) => <span className="text-mono">{o.remaining.toLocaleString("en-EU")}</span> },
+    { key: "id", header: "Seq", align: "right", render: (o) => <span className="text-mono text-text-3">#{o.id}</span> },
+    { key: "status", header: "Status", render: (o) => <StatusChip status={STATUS_KIND[o.status as keyof typeof STATUS_KIND] ?? "open"} label={o.status} /> },
+  ];
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Secondary liquidity"
         title="Transfer your position"
-        description="A small, optional venue for moving Fund Share tokens between verified investors at a price tied to the fund’s net asset value. Most investors never need this — it is not where the fund is built."
+        description="A small, optional venue for moving Fund Share tokens between verified investors at a price tied to the fund's net asset value. Most investors never need this - it is not where the fund is built."
         actions={
           <Button variant="secondary" size="sm" className="inline-flex" disabled={loading} onClick={refresh}>
             Refresh
@@ -179,16 +165,12 @@ export default function DexPage() {
       {loadError ? (
         <Alert tone="danger" title="Could not load trade data">
           {loadError}{" "}
-          <button type="button" onClick={refresh} className="font-semibold underline">
-            Retry
-          </button>
+          <button type="button" onClick={refresh} className="font-semibold underline">Retry</button>
         </Alert>
       ) : null}
 
       <div aria-live="polite">
-        {msg ? (
-          <Alert tone={msg.type === "success" ? "success" : "danger"}>{msg.text}</Alert>
-        ) : null}
+        {msg ? <Alert tone={msg.type === "success" ? "success" : "danger"}>{msg.text}</Alert> : null}
       </div>
 
       <KpiGrid cols={3}>
@@ -200,45 +182,24 @@ export default function DexPage() {
           </>
         ) : orderbook ? (
           <>
-            <KpiCard
-              label="NAV reference price"
-              value={`€${orderbook.priceReferenceEur.toFixed(4)}`}
-              sub={`Per ${fundSymbol}, from net asset value`}
-              tone="accent"
-              hint="Trades are anchored to the fund’s net asset value per token, not an open market quote."
-            />
-            <KpiCard
-              label="Allowed price band"
-              value={`€${orderbook.priceBandMinEur.toFixed(4)}–€${orderbook.priceBandMaxEur.toFixed(4)}`}
-              sub="Orders outside this band are rejected"
-            />
-            <KpiCard
-              label="Max order lifetime"
-              value={
-                chainParams
-                  ? formatTtl(chainParams.dex.maxTtlBlocks, chainParams.dex.maxTtlSecondsEstimate)
-                  : "—"
-              }
-              sub="After expiry a commitment can no longer settle"
-            />
+            <KpiCard label="NAV reference price" value={`€${orderbook.priceReferenceEur.toFixed(4)}`} sub={`Per ${fundSymbol}, from net asset value`} tone="accent" hint="Trades anchor to the fund's net asset value per token, not an open-market quote." />
+            <KpiCard label="Allowed price band" value={`€${orderbook.priceBandMinEur.toFixed(4)}-€${orderbook.priceBandMaxEur.toFixed(4)}`} sub="Indicative NAV guardrail" />
+            <KpiCard label="Max order lifetime" value={chainParams ? formatTtl(chainParams.dex.maxTtlBlocks, chainParams.dex.maxTtlSecondsEstimate) : "-"} sub="After expiry an order can no longer settle" />
           </>
         ) : null}
       </KpiGrid>
 
       <Alert tone="info" title="How secondary trades work here">
-        Orders are <strong>private commitments</strong>, so there is no public order book to browse —
-        you will not see other investors’ bids or offers, and they will not see yours. A trade settles
-        directly over your <strong>private token balances</strong>: to <strong>buy</strong> {fundSymbol},
-        you must shield {eurSymbol} into your private balance first; to <strong>sell</strong>, you need
-        private {fundSymbol}. Every order is checked against the price band above and expires after its
-        lifetime.
+        The order book below is <strong>public</strong>, but <strong>who</strong> posted each order is not -
+        orders carry no owner on chain. Matching is <strong>automatic, on-chain</strong>: when you place an
+        order that crosses a resting one at the same price, it settles in the same transaction (no bot, no
+        waiting). Settlement is over <strong>private balances</strong> - to <strong>buy</strong> {fundSymbol} you
+        must shield {eurSymbol} into your private balance first; to <strong>sell</strong> you need private {fundSymbol}.
+        Proceeds accrue to your order and you <strong>claim</strong> them with your order's seq number.
       </Alert>
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-        <Section
-          title="Place an order"
-          description={`Record a private intent to buy or sell ${fundSymbol}. It settles only when a counter-order matches at a price inside the band.`}
-        >
+        <Section title="Place an order" description={`Buy or sell ${fundSymbol}. If it crosses a resting order at the same price it matches on-chain immediately; otherwise it rests in the book.`}>
           {portfolio && orderbook ? (
             <TradeTicket
               fundSymbol={fundSymbol}
@@ -251,112 +212,59 @@ export default function DexPage() {
               onPlace={placeOrder}
             />
           ) : !address ? (
-            <EmptyState
-              title="Connect a wallet to place orders"
-              description="Secondary trades settle over your private balances, so a connected, verified investor account is required."
-            />
+            <EmptyState title="Connect a wallet to place orders" description="Secondary trades settle over your private balances, so a connected, verified investor account is required." />
           ) : (
-            <p className="text-caption text-text-3">Loading…</p>
+            <p className="text-caption text-text-3">Loading...</p>
           )}
         </Section>
 
         <Section title="Your balances">
           {portfolio ? (
-            <TradeBalances
-              canTrade={canTrade}
-              fundSymbol={fundSymbol}
-              eurSymbol={eurSymbol}
-              fsftBalance={portfolio.balance}
-              eurBalance={portfolio.eurBalance}
-              lockedEur={portfolio.lockedEur}
-              lockedFsft={portfolio.lockedFsft}
-            />
+            <TradeBalances canTrade={canTrade} fundSymbol={fundSymbol} eurSymbol={eurSymbol} fsftBalance={portfolio.balance} eurBalance={portfolio.eurBalance} lockedEur={portfolio.lockedEur} lockedFsft={portfolio.lockedFsft} />
           ) : (
-            <EmptyState
-              title="No account connected"
-              description="Connect a verified investor wallet to see the private balances that trades settle over."
-            />
+            <EmptyState title="No account connected" description="Connect a verified investor wallet to see the private balances that trades settle over." />
           )}
         </Section>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Section title="Your orders">
-          {userOrders.length ? (
-            <div className="space-y-2">
-              {userOrders.map((order) => (
-                <UserOrderRow
-                  key={order.id}
-                  order={order}
-                  fundSymbol={fundSymbol}
-                  busy={busy}
-                  onCancel={cancelOrder}
-                />
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              title="No order list to show"
-              description="Because orders are private commitments, there is no list of your open intents to display here. Settlement happens privately over your balances once a counter-order matches."
-            />
-          )}
+        <Section title={`Bids - buying ${fundSymbol}`} description="Resting buy orders (best price first). Owners are anonymous.">
+          <DataTable columns={orderColumns} rows={orderbook?.buyOrders ?? []} dense empty={{ title: "No buy orders", description: "No one is bidding for shares right now." }} />
         </Section>
-
-        <Section
-          title="Match a resting order"
-          description="Advanced · matcher. Settle against a counterparty's open private order by their address. Both sides settle over private balances, so you need private funds for your leg (shield first)."
-        >
-          {canTrade ? (
-            <div className="space-y-3">
-              <FormField label="Counterparty (maker) address" htmlFor="maker-address">
-                <input
-                  id="maker-address"
-                  type="text"
-                  spellCheck={false}
-                  autoComplete="off"
-                  value={makerAddress}
-                  onChange={(e) => setMakerAddress(e.target.value)}
-                  placeholder="0x…"
-                  className="w-full rounded-md border border-border bg-card px-3 py-2 text-mono text-caption focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
-                />
-              </FormField>
-              <FormField label={`Fill amount (${fundSymbol})`} htmlFor="fill-amount" hint="Optional — defaults to the largest crossable size.">
-                <input
-                  id="fill-amount"
-                  type="number"
-                  inputMode="decimal"
-                  min={0}
-                  value={fillAmount}
-                  onChange={(e) => setFillAmount(e.target.value)}
-                  placeholder="Largest crossable…"
-                  className="w-full rounded-md border border-border bg-card px-3 py-2 text-mono text-caption focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
-                />
-              </FormField>
-              <ActionBar>
-                <Button variant="secondary" loading={busy} disabled={busy} onClick={matchOrder}>
-                  Match order
-                </Button>
-              </ActionBar>
-              <p className="text-caption text-text-3">
-                Matched trades settle privately — there is no public record of recent matches under the
-                private-intents model.
-              </p>
-            </div>
-          ) : (
-            <EmptyState
-              title="Verified investors only"
-              description="Matching a counterparty order requires a verified investor account."
-            />
-          )}
+        <Section title={`Asks - selling ${fundSymbol}`} description="Resting sell orders (best price first). Owners are anonymous.">
+          <DataTable columns={orderColumns} rows={orderbook?.sellOrders ?? []} dense empty={{ title: "No sell orders", description: "No shares are offered for sale right now." }} />
         </Section>
       </div>
 
+      <Section title="Manage your order" description="The book is anonymous, so manage an order by the seq number you got when you placed it. Cancel reclaims unfilled escrow; claim withdraws matched proceeds to your private balance.">
+        {canTrade ? (
+          <div className="space-y-3">
+            <FormField label="Your order seq" htmlFor="manage-seq" hint="The number returned when you placed the order.">
+              <input
+                id="manage-seq"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                value={manageSeq}
+                onChange={(e) => setManageSeq(e.target.value)}
+                placeholder="e.g. 3"
+                className="w-40 rounded-md border border-border bg-card px-3 py-2 text-mono text-caption focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
+              />
+            </FormField>
+            <ActionBar align="start">
+              <Button variant="secondary" size="sm" loading={busy} disabled={busy} onClick={() => claim("eur")}>Claim {eurSymbol}</Button>
+              <Button variant="secondary" size="sm" loading={busy} disabled={busy} onClick={() => claim("fsft")}>Claim {fundSymbol}</Button>
+              <Button variant="danger" size="sm" loading={busy} disabled={busy} onClick={cancelOrder}>Cancel order</Button>
+            </ActionBar>
+          </div>
+        ) : (
+          <EmptyState title="Verified investors only" description="Trading requires a verified investor account." />
+        )}
+      </Section>
+
       <p className="text-caption text-text-3">
         New to the fund? Building your position starts in the{" "}
-        <Link href="/invest" className="text-fs-teal hover:underline">
-          primary deposit flow
-        </Link>
-        , not here.
+        <Link href="/invest" className="text-fs-teal hover:underline">primary deposit flow</Link>, not here.
       </p>
     </div>
   );
