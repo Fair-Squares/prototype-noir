@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaucetPanel } from "@/components/invest/FaucetPanel";
 import { InvestQuote } from "@/components/invest/InvestQuote";
 import {
@@ -55,7 +55,7 @@ function shortHash(hash?: string | null): string {
   return hash.length > 16 ? `${hash.slice(0, 10)}…${hash.slice(-6)}` : hash;
 }
 
-export default function InvestPage() {
+function InvestPageInner() {
   const { activeAccount, connect, isConnecting } = useWallet();
   const address = activeAccount?.address ?? null;
   const accountIndex = activeAccount?.index ?? 0;
@@ -515,5 +515,33 @@ export default function InvestPage() {
         </Section>
       ) : null}
     </div>
+  );
+}
+
+// useSearchParams() forces a client bailout during static prerender, so the
+// page that reads it must sit under a Suspense boundary (Next.js App Router).
+function InvestPageFallback() {
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Invest"
+        title="Deposit into the housing fund"
+        description="Add cash to the fund to receive a private position in affordable-housing assets."
+      />
+      <KpiGrid cols={4}>
+        <SkeletonKpi />
+        <SkeletonKpi />
+        <SkeletonKpi />
+        <SkeletonKpi />
+      </KpiGrid>
+    </div>
+  );
+}
+
+export default function InvestPage() {
+  return (
+    <Suspense fallback={<InvestPageFallback />}>
+      <InvestPageInner />
+    </Suspense>
   );
 }

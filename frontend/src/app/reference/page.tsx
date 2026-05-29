@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Alert,
@@ -188,7 +188,7 @@ function formatFreshness(at: number | null): string {
   return `${m}m ago`;
 }
 
-export default function ReferencePage() {
+function ReferencePageInner() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -424,5 +424,28 @@ export default function ReferencePage() {
         ) : null}
       </Tabs>
     </div>
+  );
+}
+
+// useSearchParams() forces a client bailout during static prerender, so the
+// page that reads it must sit under a Suspense boundary (Next.js App Router).
+function ReferencePageFallback() {
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Protocol reference"
+        title="Parameters & transparency"
+        description="Chain timing, governance and market limits, deployed contract addresses, the reward schedule, and the exact distribution, NAV, and reward formulas this network runs."
+      />
+      <LoadingSkeleton lines={6} />
+    </div>
+  );
+}
+
+export default function ReferencePage() {
+  return (
+    <Suspense fallback={<ReferencePageFallback />}>
+      <ReferencePageInner />
+    </Suspense>
   );
 }
