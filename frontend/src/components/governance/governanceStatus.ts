@@ -1,11 +1,6 @@
 import type { StatusKind } from "@/components/ui";
 import type { Proposal } from "@/lib/contracts";
-import {
-  AZTEC_SLOT_DURATION_SEC,
-  BLOCK_PRODUCTION_MODE,
-  blocksToSeconds,
-  formatDuration,
-} from "@/lib/chainParams";
+import { AZTEC_SLOT_DURATION_SEC, BLOCK_PRODUCTION_MODE } from "@/lib/chainParams";
 
 // Maps the on-chain proposal status enum (0=active, 1=passed, 2=failed,
 // 3=executed) to a StatusChip kind. No invented states — only the four the
@@ -26,9 +21,11 @@ export interface VotingWindow {
   currentBlock: number;
   blocksRemaining: number;
   closed: boolean;
-  /** Human estimate of time left, e.g. "12m" — only meaningful while open. */
+  /** Block-denominated label, e.g. "5 blocks". Locally blocks advance with
+   * activity (a few seconds each), so this is more honest than a wall-clock
+   * estimate. Only meaningful while open. */
   remainingLabel: string;
-  /** True locally where blocks are sealed on demand, not on wall-clock. */
+  /** True locally where blocks advance with activity, not on a wall-clock cadence. */
   onDemand: boolean;
 }
 
@@ -44,9 +41,22 @@ export function votingWindowFor(proposal: Proposal): VotingWindow {
     closed,
     remainingLabel: closed
       ? "Closed"
-      : `${formatDuration(blocksToSeconds(blocksRemaining))} left`,
+      : `${blocksRemaining.toLocaleString()} block${blocksRemaining === 1 ? "" : "s"}`,
     onDemand: BLOCK_PRODUCTION_MODE === "on-demand",
   };
+}
+
+// On-chain status is sticky: a proposal stays ACTIVE (0) until someone calls
+// finalize_proposal, even after its voting-window block has passed. Surface that
+// "voting ended, awaiting finalisation" state for display so the chip doesn't
+// keep reading "Active" after the deadline block.
+export function isVotingEnded(proposal: Proposal): boolean {
+  return proposal.status === 0 && votingWindowFor(proposal).closed;
+}
+
+export function displayStatus(proposal: Proposal): { kind: StatusKind; label?: string } {
+  if (isVotingEnded(proposal)) return { kind: "pending", label: "Voting ended" };
+  return { kind: statusKindFor(proposal.status) };
 }
 
 export interface Quorum {

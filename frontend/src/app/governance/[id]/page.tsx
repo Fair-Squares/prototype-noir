@@ -6,7 +6,7 @@ import { Suspense, use, useCallback, useEffect, useState } from "react";
 import { DeedTab } from "@/components/governance/DeedTab";
 import { DistributionTab } from "@/components/governance/DistributionTab";
 import { OverviewTab } from "@/components/governance/OverviewTab";
-import { proposalLabel, statusKindFor, votingWindowFor } from "@/components/governance/governanceStatus";
+import { displayStatus, proposalLabel, votingWindowFor } from "@/components/governance/governanceStatus";
 import { VotesTab } from "@/components/governance/VotesTab";
 import {
   Alert,
@@ -205,6 +205,7 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
   }
 
   const window = votingWindowFor(proposal);
+  const status = displayStatus(proposal);
 
   return (
     <div className="space-y-6">
@@ -220,7 +221,7 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
         }
         actions={
           <div className="flex items-center gap-2">
-            <StatusChip status={statusKindFor(proposal.status)} />
+            <StatusChip status={status.kind} label={status.label} />
             <Link href="/governance" className="btn btn-ghost btn-sm">
               ← All requests
             </Link>

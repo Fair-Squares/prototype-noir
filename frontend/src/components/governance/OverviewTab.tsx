@@ -3,7 +3,7 @@
 import { Alert, Button, KpiCard, KpiGrid, Section, StatusChip } from "@/components/ui";
 import { formatEUR, type Proposal } from "@/lib/contracts";
 import { VotePanel } from "./VotePanel";
-import { quorumFor, SLOT_SECONDS, statusKindFor, votingWindowFor } from "./governanceStatus";
+import { displayStatus, quorumFor, votingWindowFor } from "./governanceStatus";
 
 export interface OverviewTabProps {
   proposal: Proposal;
@@ -36,7 +36,10 @@ export function OverviewTab({
 }: OverviewTabProps) {
   const window = votingWindowFor(proposal);
   const quorum = quorumFor(proposal);
+  const status = displayStatus(proposal);
   const isActive = proposal.status === 0;
+  // Active on-chain but the deadline block has passed: voting is effectively over.
+  const votingEnded = isActive && window.closed;
   const wouldPass = quorum.reached && quorum.majorityYes;
   // A passed-but-not-executed proposal (status 1) is what the execute action
   // acts on; failed (2) and executed (3) are terminal.
@@ -54,7 +57,7 @@ export function OverviewTab({
         <KpiCard label="Against" value={quorum.no.toLocaleString()} />
         <KpiCard
           label="Status"
-          value={<StatusChip status={statusKindFor(proposal.status)} />}
+          value={<StatusChip status={status.kind} label={status.label} />}
         />
       </KpiGrid>
 
@@ -104,17 +107,19 @@ export function OverviewTab({
 
       <Section title="Voting window">
         <p className="text-body text-text-1">
-          {isActive ? (
-            window.closed ? (
-              <>The window has been reached — this request can now be finalised.</>
-            ) : (
-              <>
-                Closes at block{" "}
-                <span className="text-mono">{window.deadlineBlock.toLocaleString()}</span> ·{" "}
-                <span className="text-mono">{window.blocksRemaining.toLocaleString()}</span> block
-                {window.blocksRemaining === 1 ? "" : "s"} remaining ({window.remainingLabel})
-              </>
-            )
+          {votingEnded ? (
+            <>
+              Voting closed at block{" "}
+              <span className="text-mono">{window.deadlineBlock.toLocaleString()}</span> — this
+              request can now be finalised.
+            </>
+          ) : isActive ? (
+            <>
+              Closes at block{" "}
+              <span className="text-mono">{window.deadlineBlock.toLocaleString()}</span> ·{" "}
+              <span className="text-mono">{window.blocksRemaining.toLocaleString()}</span> block
+              {window.blocksRemaining === 1 ? "" : "s"} remaining
+            </>
           ) : (
             <>
               Window closed at block{" "}
@@ -124,9 +129,9 @@ export function OverviewTab({
         </p>
         {isActive && !window.closed && window.onDemand ? (
           <p className="text-caption mt-2">
-            Locally, blocks are produced on demand (only when transactions happen), so the
-            time shown is a steady-state estimate at {SLOT_SECONDS}s per block — the window
-            advances as activity occurs.
+            Locally the window is measured in blocks, and blocks advance as transactions happen
+            (automine) — a few seconds each — so it closes much sooner than wall-clock time
+            would suggest.
           </p>
         ) : null}
       </Section>
@@ -139,6 +144,7 @@ export function OverviewTab({
           hasVoted={hasVoted}
           isVoting={isVoting}
           eligibilityReason={eligibilityReason}
+          windowClosed={window.closed}
           onVote={onVote}
         />
       </Section>

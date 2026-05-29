@@ -2,9 +2,9 @@ import Link from "next/link";
 import { StatusChip } from "@/components/ui";
 import { formatEUR, type Proposal } from "@/lib/contracts";
 import {
+  displayStatus,
   proposalLabel,
   quorumFor,
-  statusKindFor,
   votingWindowFor,
 } from "./governanceStatus";
 
@@ -32,7 +32,10 @@ export function GovernanceMemoCard({
 }: GovernanceMemoCardProps) {
   const window = votingWindowFor(proposal);
   const quorum = quorumFor(proposal);
+  const status = displayStatus(proposal);
   const isActive = proposal.status === 0;
+  // Active on-chain but the deadline block has passed: voting is over.
+  const votingOpen = isActive && !window.closed;
   const href = `/governance/${proposal.id}`;
 
   return (
@@ -44,7 +47,7 @@ export function GovernanceMemoCard({
             {proposalLabel(proposal)}
           </h3>
         </div>
-        <StatusChip status={statusKindFor(proposal.status)} />
+        <StatusChip status={status.kind} label={status.label} />
       </header>
 
       <div>
@@ -81,7 +84,7 @@ export function GovernanceMemoCard({
           {!isConnected
             ? "Connect a wallet to check your voting standing."
             : canVote
-              ? isActive
+              ? votingOpen
                 ? "You are cleared to vote on this proposal."
                 : "Voting is closed for this proposal."
               : (eligibilityReason ?? "You are not cleared to vote yet.")}
@@ -91,7 +94,7 @@ export function GovernanceMemoCard({
           className="btn btn-secondary btn-sm flex-shrink-0"
           aria-label={`Open ${proposalLabel(proposal)}`}
         >
-          {isActive && canVote ? "Review & vote" : "View memo"}
+          {votingOpen && canVote ? "Review & vote" : "View memo"}
         </Link>
       </div>
     </article>

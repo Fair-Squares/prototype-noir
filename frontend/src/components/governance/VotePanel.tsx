@@ -10,6 +10,8 @@ export interface VotePanelProps {
   hasVoted: boolean;
   isVoting: boolean;
   eligibilityReason?: string;
+  /** Deadline block has passed (on-chain status may still read ACTIVE). */
+  windowClosed?: boolean;
   /** Wraps the real castVote call. */
   onVote: (voteYes: boolean) => void;
 }
@@ -26,6 +28,7 @@ export function VotePanel({
   hasVoted,
   isVoting,
   eligibilityReason,
+  windowClosed = false,
   onVote,
 }: VotePanelProps) {
   if (proposal.status !== 0) {
@@ -46,6 +49,15 @@ export function VotePanel({
         You have already voted on this proposal. Each account votes once, and your
         ballot stays private.
       </Alert>
+    );
+  }
+
+  if (windowClosed) {
+    return (
+      <p className="text-caption">
+        The voting window has closed (the deadline block has passed), so no more ballots
+        can be cast. This proposal now needs finalising.
+      </p>
     );
   }
 

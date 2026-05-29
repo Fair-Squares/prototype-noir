@@ -1,14 +1,15 @@
-// Local-network timing constants. These mirror the aztec service settings in
-// docker-compose.yml — keep them in sync if you change the compose file.
-export const AZTEC_SLOT_DURATION_SEC = 36; // AZTEC_SLOT_DURATION
-export const ETHEREUM_SLOT_DURATION_SEC = 12; // ETHEREUM_SLOT_DURATION (Anvil --block-time)
+// Local-network timing constants. These are the protocol's NOMINAL slot/epoch
+// durations (the same values the testnet uses), surfaced for reference.
+export const AZTEC_SLOT_DURATION_SEC = 36; // nominal L2 slot
+export const ETHEREUM_SLOT_DURATION_SEC = 12; // nominal L1 slot
 export const EPOCH_DURATION_SLOTS = 2; // local-network forces epochDuration=2
 
-// Whether the local sequencer seals a block every slot ("steady") or only when
-// there are pending transactions ("on-demand"). We run on-demand: forcing
-// steady per-slot blocks destabilised checkpoint publishing on this local
-// network (frequent prunes that dropped user txs), so block-based deadlines
-// advance with activity rather than wall-clock time.
+// On the local network the node runs an automine L1 plus a slot-warping watcher:
+// it advances time to the next slot ~2 s after a transaction is pending. So
+// blocks are sealed quickly AS ACTIVITY HAPPENS (not on a fixed wall-clock
+// cadence, and far faster than the nominal 36 s slot). Block-denominated windows
+// (e.g. a voting deadline) therefore advance with on-chain activity — a few
+// seconds per block in practice — rather than tracking real time.
 export const BLOCK_PRODUCTION_MODE: "on-demand" | "steady" = "on-demand";
 
 export function blocksToSeconds(blocks: number): number {

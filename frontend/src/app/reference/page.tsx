@@ -112,18 +112,18 @@ const TAB_VALUES = new Set(TABS.map((t) => t.value));
 function timingRows(p: ChainParams): ParamRow[] {
   const t = p.timing;
   return [
-    { param: "L2 slot / block time", value: `${t.aztecSlotDurationSec}s`, note: "One L2 block per slot" },
-    { param: "L1 block time", value: `${t.ethereumSlotDurationSec}s`, note: "Anvil --block-time" },
+    { param: "L2 slot (nominal)", value: `${t.aztecSlotDurationSec}s`, note: "Protocol slot; locally automine warps across it" },
+    { param: "L1 slot (nominal)", value: `${t.ethereumSlotDurationSec}s`, note: "In-process automine anvil — no fixed block time" },
     {
       param: "Epoch",
       value: `${t.epochDurationSlots} slots`,
-      note: `${formatDuration(t.epochDurationSec)} at ${t.aztecSlotDurationSec}s/slot`,
+      note: `${formatDuration(t.epochDurationSec)} nominal at ${t.aztecSlotDurationSec}s/slot`,
     },
-    { param: "Block production", value: t.blockProductionMode, note: "When the sequencer seals a block" },
+    { param: "Block production", value: t.blockProductionMode, note: "Blocks advance with activity (automine), a few seconds each" },
     {
       param: "Single-tx inclusion",
-      value: `~1 slot (~${t.aztecSlotDurationSec}s)`,
-      note: "Plus client-side proof generation",
+      value: `~3-4s`,
+      note: "Automine warps to the next slot; proverless locally",
     },
   ];
 }
@@ -294,9 +294,11 @@ function ReferencePageInner() {
       ) : null}
 
       {onDemand ? (
-        <Alert tone="warning" title="Blocks are produced on-demand">
-          A new block is sealed only when there is a transaction, so the chain’s clock advances with
-          activity. The time estimates below assume a steady block every slot.
+        <Alert tone="info" title="Blocks advance with activity">
+          Locally the node runs an automine L1 and warps to the next slot ~2s after a transaction
+          is pending, so blocks are sealed quickly as activity happens — a few seconds each, far
+          faster than the nominal {params?.timing.aztecSlotDurationSec ?? 36}s slot.
+          Block-denominated windows (like a voting deadline) therefore pass in seconds of real time.
         </Alert>
       ) : null}
 
