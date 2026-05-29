@@ -70,6 +70,22 @@ log() { printf '\n[bootstrap] %s\n' "$1" >&2; }
 
 die() { log "FATAL: $1"; exit 1; }
 
+# Incremental-build skip: a compiled+transpiled artifact in <target_dir> is
+# "fresh" when it exists and no source under <src_dir> (*.nr / Nargo.toml) is
+# newer than it. Lets re-bootstraps in this controlled dev env skip recompiling
+# unchanged contracts (the vendored standards alone cost ~44s). Set
+# FS_FORCE_COMPILE=1 to always rebuild.
+artifact_is_fresh() {
+  local src_dir=$1 target_dir=$2
+  [ "${FS_FORCE_COMPILE:-0}" = "1" ] && return 1
+  local newest_artifact
+  newest_artifact=$(ls -t "$target_dir"/*.json 2>/dev/null | head -1)
+  [ -z "$newest_artifact" ] && return 1
+  # Any source newer than the artifact -> stale.
+  [ -n "$(find "$src_dir" \( -name '*.nr' -o -name 'Nargo.toml' \) -newer "$newest_artifact" 2>/dev/null | head -1)" ] && return 1
+  return 0
+}
+
 require_value() {
   local label=$1
   local value=${2:-}
@@ -172,9 +188,15 @@ wait_for_pxe() {
 
 compile_contracts() {
   for c in $CONTRACTS; do
-    log "Compiling contract: ${c}"
     artifact_dir="${ROOT_DIR}/contracts/${c}/target"
     cd "${ROOT_DIR}/contracts/${c}"
+
+    if artifact_is_fresh "${ROOT_DIR}/contracts/${c}/src" "${artifact_dir}"; then
+      log "Skipping ${c} (sources unchanged; artifact up to date)"
+      continue
+    fi
+
+    log "Compiling contract: ${c}"
 
     # Step 1: compile Noir to ACIR.
     # Prefer Aztec wrapper commands; fall back to raw nargo only if wrapper is unavailable.
@@ -223,6 +245,14 @@ print('Renamed functions in ${json_file}')
 # same AVM-transpile + VK + prefix-strip steps the custom contracts get.
 compile_standards() {
   std_target="${STANDARDS_DIR}/target"
+
+  # The vendored standards never change between runs; skip the whole ~44s
+  # compile+transpile when their sources are untouched.
+  if artifact_is_fresh "${STANDARDS_DIR}/src" "${std_target}"; then
+    log "Skipping vendored standards (sources unchanged; artifacts up to date)"
+    return
+  fi
+
   for c in $STANDARD_CONTRACTS; do
     log "Compiling standard contract: ${c}"
     cd "${STANDARDS_DIR}/src/${c}"

@@ -143,6 +143,13 @@ services:
       SEQ_TX_POLLING_INTERVAL_MS: "500"
       WS_BLOCK_CHECK_INTERVAL_MS: "500"
       ARCHIVER_VIEM_POLLING_INTERVAL_MS: "500"
+      # Per-tx latency knobs for fast local iteration. On a single-node network
+      # there is no real p2p, so the 2 s attestation-propagation assumption and
+      # the 2 s minimum tx-pool age are pure delay stacked on every tx. Zero them
+      # so a tx is included as soon as the automine watcher warps the slot
+      # (~6.5 s/tx -> ~3 s/tx across the ~26 bootstrap txs).
+      P2P_MIN_TX_POOL_AGE_MS: "0"
+      SEQ_ATTESTATION_PROPAGATION_TIME: "0"
       # Proverless client/wallet (the node already runs realProofs=false on a
       # local network). Saves ~4 s/tx of ClientIVC proving. Set true for realism.
       PXE_PROVER_ENABLED: ${PXE_PROVER_ENABLED:-false}
