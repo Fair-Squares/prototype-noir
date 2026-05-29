@@ -521,16 +521,24 @@ export async function placeDexOrder(
   return res.json();
 }
 
+/**
+ * Match a resting counterparty (maker) order. Under the V2 private-intents
+ * model matching is address/counterparty-based (there is no public order book),
+ * so the caller is the taker and supplies the maker's address. The route
+ * locates the maker's first open private intent and settles atomically over
+ * both parties' private balances via the AIP-20 Token's authwit transfer.
+ */
 export async function matchDexOrder(
   address: string,
-  orderId: number,
-  makerOrderId?: number,
+  makerAddress: string,
+  fillAmount?: number,
   accountIndex = 0
-): Promise<{ success: boolean; message?: string; error?: string }> {
+): Promise<{ success: boolean; message?: string; error?: string; fillAmount?: number; eurNotional?: number }> {
   const res = await fetch("/api/dex/match", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, orderId, makerOrderId, accountIndex }),
+    // orderId is required by the route validator but ignored on the V2 path.
+    body: JSON.stringify({ address, takerAddress: address, makerAddress, fillAmount, orderId: 0, accountIndex }),
   });
   return res.json();
 }

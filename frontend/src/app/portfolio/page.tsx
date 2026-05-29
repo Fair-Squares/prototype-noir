@@ -1,20 +1,41 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
-import { ActionPanel, MetricRow, PageHero } from "@/components/SimplePage";
+import { useEffect, useMemo, useState } from "react";
+import {
+  ActionBar,
+  Alert,
+  Button,
+  EmptyState,
+  PageHeader,
+  Section,
+  SkeletonKpi,
+} from "@/components/ui";
+import {
+  AccruedYield,
+  ActionLinks,
+  ClaimableByProposal,
+  FaucetPanel,
+  PortfolioHero,
+  ReadinessSummary,
+  WithdrawPanel,
+} from "@/components/portfolio";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   attestFsftForRewards,
+  claimProposalDistribution,
   claimRewards,
   fetchKYCProfile,
   fetchPortfolio,
+  fetchProposals,
   fetchRewardsStats,
-  formatEUR,
+  withdrawFunds,
   type KYCProfile,
   type PortfolioData,
+  type Proposal,
   type RewardsStats,
 } from "@/lib/contracts";
+
+const EMPTY_KYC: KYCProfile = { verified: false, isInvestor: false, roles: [] };
 
 export default function PortfolioPage() {
   const { activeAccount } = useWallet();
@@ -22,32 +43,35 @@ export default function PortfolioPage() {
   const accountIndex = activeAccount?.index ?? 0;
 
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
-  const [kycProfile, setKycProfile] = useState<KYCProfile>({
-    verified: false,
-    isInvestor: false,
-    roles: [],
-  });
+  const [kyc, setKyc] = useState<KYCProfile>(EMPTY_KYC);
   const [rewards, setRewards] = useState<RewardsStats | null>(null);
+  const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
+  const [claimingRewards, setClaimingRewards] = useState(false);
+  const [attesting, setAttesting] = useState(false);
+  const [claimingProposalId, setClaimingProposalId] = useState<number | null>(null);
 
   const loadAccountData = async (addr: string) => {
     setLoading(true);
     try {
-      const [nextPortfolio, nextProfile, nextRewards] = await Promise.all([
+      const [nextPortfolio, nextKyc, nextRewards, nextProposals] = await Promise.all([
         fetchPortfolio(addr, accountIndex),
         fetchKYCProfile(addr),
         fetchRewardsStats(addr, accountIndex),
+        fetchProposals(addr, accountIndex),
       ]);
       setPortfolio(nextPortfolio);
-      setKycProfile(nextProfile);
+      setKyc(nextKyc);
       setRewards(nextRewards);
+      setProposals(nextProposals);
       setError(null);
     } catch (loadError: unknown) {
       setError(loadError instanceof Error ? loadError.message : "Could not load account data.");
       setPortfolio(null);
       setRewards(null);
+      setProposals([]);
     } finally {
       setLoading(false);
     }
@@ -57,113 +81,204 @@ export default function PortfolioPage() {
     if (!address) {
       setPortfolio(null);
       setRewards(null);
-      setKycProfile({ verified: false, isInvestor: false, roles: [] });
+      setProposals([]);
+      setKyc(EMPTY_KYC);
       setError(null);
       return;
     }
     loadAccountData(address);
   }, [address, accountIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const rewardsSymbol = rewards?.token.symbol ?? portfolio?.protocolTokenSymbol ?? "FSP";
+  const rewardsClaimable = rewards?.claimable ?? portfolio?.rewardsClaimable ?? 0;
+  const canClaimRewards = rewards?.eligibility?.canClaimNow ?? false;
+
+  const claimableProposals = useMemo(
+    () => proposals.filter((p) => (p.claimableAmount ?? 0) > 0 || p.hasClaimed),
+    [proposals]
+  );
+
   const handleClaimRewards = async () => {
     if (!address) return;
-    const result = await claimRewards(address, accountIndex);
-    if (!result.success) {
-      setMessage(result.error ?? "Claim failed.");
-      return;
+    setNotice(null);
+    setClaimingRewards(true);
+    try {
+      const result = await claimRewards(address, accountIndex);
+      if (!result.success) {
+        setNotice({ tone: "danger", text: result.error ?? "Claim failed." });
+        return;
+      }
+      setNotice({
+        tone: "success",
+        text: `Claimed ${(result.claimed ?? 0).toLocaleString()} ${rewardsSymbol}.`,
+      });
+      await loadAccountData(address);
+    } finally {
+      setClaimingRewards(false);
     }
-    setMessage(`Claimed ${(result.claimed ?? 0).toLocaleString()} ${rewards?.token.symbol ?? "FSP"}.`);
-    await loadAccountData(address);
   };
 
   const handleAttestRewards = async () => {
     if (!address) return;
-    const result = await attestFsftForRewards(address, accountIndex);
-    if (!result.success) {
-      setMessage(result.error ?? "Private check failed.");
-      return;
+    setNotice(null);
+    setAttesting(true);
+    try {
+      const result = await attestFsftForRewards(address, accountIndex);
+      if (!result.success) {
+        setNotice({ tone: "danger", text: result.error ?? "Private fund-shares check failed." });
+        return;
+      }
+      setNotice({ tone: "success", text: "Private fund-shares check completed." });
+      await loadAccountData(address);
+    } finally {
+      setAttesting(false);
     }
-    setMessage("Private Fund Shares check completed.");
-    await loadAccountData(address);
   };
 
-  const metrics = portfolio
-    ? [
-        { label: "Cash (EURs)", value: formatEUR(portfolio.eurBalance) },
-        { label: "Fund Shares (FSFT)", value: portfolio.balance.toLocaleString() },
-        { label: "Deposited", value: formatEUR(portfolio.depositedAmount) },
-        {
-          label: "Rewards (FSP)",
-          value: (rewards?.claimable ?? 0).toLocaleString(),
-          accent: true,
-        },
-      ]
-    : [];
+  const handleClaimProposal = async (proposalId: number) => {
+    if (!address) return;
+    setNotice(null);
+    setClaimingProposalId(proposalId);
+    try {
+      const result = await claimProposalDistribution(proposalId, address, accountIndex);
+      if (!result.success) {
+        setNotice({ tone: "danger", text: result.error ?? "Distribution claim failed." });
+        return;
+      }
+      setNotice({
+        tone: "success",
+        text: `Claimed ${(result.claimedAmount ?? 0).toLocaleString()} from housing proposal #${proposalId}.`,
+      });
+      await loadAccountData(address);
+    } finally {
+      setClaimingProposalId(null);
+    }
+  };
+
+  const handleWithdraw = async (amount: number) => {
+    if (!address) return { success: false, error: "Connect your wallet first." };
+    const result = await withdrawFunds(address, amount, accountIndex);
+    if (result.success) await loadAccountData(address);
+    return result;
+  };
 
   return (
     <div className="space-y-6">
-      <PageHero
-        title="Account"
-        subtitle={address ? "Your balances and next actions." : "Connect your wallet to view your account."}
-        ctaHref="/invest"
-        ctaLabel="Deposit"
+      <PageHeader
+        eyebrow="Your account"
+        title="Portfolio"
+        description="Your position in the housing fund: capital, fund shares, accrued yield, and what you can claim."
       />
 
-      {error && (
-        <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+      {error ? (
+        <Alert tone="danger" title="Could not load your account">
           {error}
-        </div>
-      )}
-      {message && (
-        <div className="rounded-lg border border-fs-teal/20 bg-fs-teal/10 px-4 py-3 text-sm text-fs-teal-dark">
-          {message}
-        </div>
-      )}
+        </Alert>
+      ) : null}
+
+      <div aria-live="polite">
+        {notice ? <Alert tone={notice.tone}>{notice.text}</Alert> : null}
+      </div>
 
       {!address ? (
-        <div className="surface p-6 text-center">
-          <p className="font-semibold text-text-1">Connect your wallet</p>
-          <p className="mt-1 text-sm text-text-3">Use the account button in the top-right to view your balances and rewards.</p>
-        </div>
+        <Section>
+          <EmptyState
+            title="Connect your wallet"
+            description="Use the account button in the top-right to view your balances, accrued yield, and claimable rewards."
+          />
+        </Section>
       ) : loading && !portfolio ? (
-        <div className="h-20 rounded-2xl bg-bg animate-pulse" />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonKpi key={i} />
+          ))}
+        </div>
       ) : portfolio ? (
         <>
-          <MetricRow items={metrics} />
+          <PortfolioHero
+            portfolio={portfolio}
+            rewardsClaimable={rewardsClaimable}
+            rewardsSymbol={rewardsSymbol}
+          />
 
-          <ActionPanel title="What To Do Now" subtitle="Pick one">
-            <div className="grid gap-2 sm:grid-cols-2">
-              <button
-                onClick={handleClaimRewards}
-                disabled={loading || !rewards?.eligibility?.canClaimNow}
-                className="rounded-lg bg-fs-teal px-3 py-2 text-sm font-semibold text-white hover:bg-fs-teal-dark disabled:opacity-50"
-              >
-                Claim Rewards
-              </button>
-              <Link
-                href="/invest"
-                className="rounded-lg border border-border px-3 py-2 text-center text-sm font-semibold text-text-2 hover:bg-bg hover:text-text-1"
-              >
-                Deposit
-              </Link>
-            </div>
-            <div className="mt-3 flex gap-3 text-xs">
-              <button
-                onClick={handleAttestRewards}
-                disabled={loading}
-                className="text-fs-teal hover:underline disabled:opacity-50"
-              >
-                Run private Fund Shares check
-              </button>
-              {!kycProfile.isInvestor && (
-                <Link href="/kyc" className="text-fs-teal hover:underline">
-                  Complete KYC
-                </Link>
-              )}
-              <Link href="/explain" className="text-fs-teal hover:underline">
-                Advanced breakdown
-              </Link>
-            </div>
-          </ActionPanel>
+          <AccruedYield portfolio={portfolio} />
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <ReadinessSummary kyc={kyc} portfolio={portfolio} />
+
+            <Section
+              title={`Protocol rewards (${rewardsSymbol})`}
+              description="Rewards accrue over the program and can be claimed once an epoch opens."
+            >
+              <p className="text-kpi text-text-1">
+                {rewardsClaimable.toLocaleString()}
+                <span className="text-caption ml-2 text-text-3">claimable</span>
+              </p>
+              <ActionBar align="start" className="mt-4">
+                <Button
+                  onClick={handleClaimRewards}
+                  loading={claimingRewards}
+                  disabled={!canClaimRewards || claimingRewards}
+                >
+                  {claimingRewards ? "Claiming…" : "Claim rewards"}
+                </Button>
+                <Button variant="ghost" onClick={handleAttestRewards} loading={attesting}>
+                  {attesting ? "Checking…" : "Run private fund-shares check"}
+                </Button>
+              </ActionBar>
+              {!canClaimRewards ? (
+                <p className="text-caption mt-3 text-text-3">
+                  {rewards?.eligibility?.nextSteps?.[0] ??
+                    "Rewards are not claimable yet for this account."}
+                </p>
+              ) : null}
+            </Section>
+          </div>
+
+          <Section
+            title="Claimable by project"
+            description="Distributions you can claim from housing proposals you backed."
+          >
+            <ClaimableByProposal
+              proposals={claimableProposals}
+              claimingId={claimingProposalId}
+              onClaim={handleClaimProposal}
+              disabled={loading}
+            />
+          </Section>
+
+          <Section
+            title="Available actions"
+            description="Deposit, trade, or take part in governance."
+          >
+            <ActionLinks />
+          </Section>
+
+          <Section
+            title="Withdraw capital"
+            description="Move deposited capital back to your wallet."
+          >
+            <WithdrawPanel
+              depositedAmount={portfolio.depositedAmount}
+              onWithdraw={handleWithdraw}
+            />
+          </Section>
+
+          <FaucetPanel
+            address={address}
+            accountIndex={accountIndex}
+            onDripped={() => loadAccountData(address)}
+          />
+
+          <Section
+            title="Transaction history"
+            description="A record of your deposits, withdrawals, claims, and trades."
+          >
+            <EmptyState
+              title="No transaction history available yet"
+              description="The protocol does not yet expose a per-account event feed. Your live balances and claimable amounts above always reflect on-chain state."
+            />
+          </Section>
         </>
       ) : null}
     </div>

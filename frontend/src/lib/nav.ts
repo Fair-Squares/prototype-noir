@@ -12,23 +12,22 @@ export type NavSection = {
 
 export const NAV_SECTIONS: NavSection[] = [
   {
-    label: "App",
+    label: "Portal",
     items: [
-      { num: "01", label: "Home",    href: "/",           blurb: "Prototype index" },
-      { num: "02", label: "Fund",    href: "/fund",       blurb: "NAV, allocation, status" },
-      { num: "03", label: "Invest",  href: "/invest",     blurb: "Deposit and withdraw" },
-      { num: "04", label: "Account", href: "/portfolio",  blurb: "Your balances and rewards" },
-      { num: "05", label: "Vote",    href: "/governance", blurb: "Secret-ballot governance" },
-      { num: "06", label: "Trade",   href: "/dex",        blurb: "FSFT / EUR orderbook" },
-      { num: "07", label: "Rewards", href: "/rewards",    blurb: "Epoch rewards and claims" },
-      { num: "08", label: "KYC",     href: "/kyc",        blurb: "zkPassport verification" },
+      { num: "01", label: "Overview",     href: "/",           blurb: "Fund position at a glance" },
+      { num: "02", label: "Projects",     href: "/fund",       blurb: "Housing fund and properties" },
+      { num: "03", label: "Portfolio",    href: "/portfolio",  blurb: "Your balances and rewards" },
+      { num: "04", label: "Invest",       href: "/invest",     blurb: "Deposit and withdraw" },
+      { num: "05", label: "Governance",   href: "/governance", blurb: "Proposals and voting" },
+      { num: "06", label: "Trade",        href: "/dex",        blurb: "Shares and EUR orderbook" },
+      { num: "07", label: "Verification", href: "/kyc",        blurb: "Identity and investor status" },
     ],
   },
   {
     label: "Reference",
     items: [
-      { num: "09", label: "How it works", href: "/explain", blurb: "Mechanics and glossary" },
-      { num: "10", label: "Parameters", href: "/reference", blurb: "Chain & governance metrics" },
+      { num: "08", label: "Reference",    href: "/reference",  blurb: "Parameters and metrics" },
+      { num: "09", label: "How it works", href: "/explain",    blurb: "Mechanics and glossary" },
     ],
   },
 ];

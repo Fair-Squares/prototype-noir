@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_SECTIONS, findRoute } from "@/lib/nav";
+import RuntimeModeChip from "@/components/RuntimeModeChip";
 
 export function Sidebar() {
   const pathname = usePathname() ?? "/";
@@ -18,11 +19,11 @@ export function Sidebar() {
           </span>
           <span className="leading-tight">
             <span className="block font-semibold text-text-1">Fair Squares</span>
-            <span className="text-meta">Aztec / Noir prototype</span>
+            <span className="text-meta">Affordable-housing investor portal</span>
           </span>
         </Link>
         <div className="mt-4 flex items-center gap-2">
-          <span className="proto-stamp">Prototype · v4.3.0</span>
+          <RuntimeModeChip />
         </div>
       </div>
 
@@ -108,9 +109,7 @@ export function MobileBrand() {
       </span>
       <div className="leading-tight">
         <span className="block font-semibold text-text-1">Fair Squares</span>
-        <span className="proto-stamp" style={{ fontSize: "0.55rem", padding: "0.1rem 0.4rem" }}>
-          Prototype
-        </span>
+        <span className="text-meta">Investor portal</span>
       </div>
     </div>
   );

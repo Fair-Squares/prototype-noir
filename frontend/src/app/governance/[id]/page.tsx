@@ -1,12 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useState } from "react";
-import ProposalCard from "@/components/ProposalCard";
-import { PageHero } from "@/components/SimplePage";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, use, useCallback, useEffect, useState } from "react";
+import { DeedTab } from "@/components/governance/DeedTab";
+import { DistributionTab } from "@/components/governance/DistributionTab";
+import { OverviewTab } from "@/components/governance/OverviewTab";
+import { proposalLabel, statusKindFor, votingWindowFor } from "@/components/governance/governanceStatus";
+import { VotesTab } from "@/components/governance/VotesTab";
+import {
+  Alert,
+  LoadingSkeleton,
+  PageHeader,
+  Section,
+  StatusChip,
+  Tabs,
+  type TabItem,
+} from "@/components/ui";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   castVote,
+  claimProposalDistribution,
+  executeProposal,
   fetchGovernanceEligibility,
   fetchProposals,
   fetchProperties,
@@ -17,154 +32,273 @@ import {
 } from "@/lib/contracts";
 import { hasVotedLocally, markVoted } from "@/lib/votedStore";
 
-export default function ProposalDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const proposalId = Number.parseInt(id, 10);
+const TAB_VALUES = ["overview", "distribution", "deed", "votes"] as const;
+type TabValue = (typeof TAB_VALUES)[number];
 
+function isTabValue(value: string | null): value is TabValue {
+  return value !== null && (TAB_VALUES as readonly string[]).includes(value);
+}
+
+function ProposalDetail({ proposalId }: { proposalId: number }) {
   const { activeAccount } = useWallet();
   const address = activeAccount?.address ?? null;
   const accountIndex = activeAccount?.index ?? 0;
 
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const activeTab: TabValue = isTabValue(tabParam) ? tabParam : "overview";
+
+  const setTab = useCallback(
+    (value: string) => {
+      const next = new URLSearchParams(searchParams.toString());
+      next.set("tab", value);
+      router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+    },
+    [router, pathname, searchParams]
+  );
+
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [eligibility, setEligibility] = useState<GovernanceEligibility | null>(null);
-  const [isVoting, setIsVoting] = useState(false);
-  const [voted, setVoted] = useState(false);
   const [deed, setDeed] = useState<PropertyDeed | null>(null);
+  const [isVoting, setIsVoting] = useState(false);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [isClaiming, setIsClaiming] = useState(false);
+  const [voted, setVoted] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [notice, setNotice] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
+
+  const reloadProposal = useCallback(async () => {
+    const proposals = await fetchProposals(address ?? undefined, accountIndex);
+    setProposal(proposals.find((item) => item.id === proposalId) ?? null);
+  }, [address, accountIndex, proposalId]);
 
   useEffect(() => {
     setVoted(address ? hasVotedLocally(address, proposalId) : false);
   }, [address, proposalId]);
 
-  // If this proposal's asset has been acquired, a deed NFT exists for it.
+  useEffect(() => {
+    reloadProposal().catch((loadError: unknown) => {
+      setError(loadError instanceof Error ? loadError.message : "Could not load proposal.");
+    });
+  }, [reloadProposal]);
+
   useEffect(() => {
     fetchProperties()
       .then((deeds) => setDeed(deeds.find((d) => d.proposalId === proposalId) ?? null))
       .catch(() => setDeed(null));
-  }, [proposalId, message]);
-
-  useEffect(() => {
-    fetchProposals(address ?? undefined, accountIndex)
-      .then((proposals) => {
-        setProposal(proposals.find((item) => item.id === proposalId) ?? null);
-      })
-      .catch((loadError: unknown) => {
-        setError(loadError instanceof Error ? loadError.message : "Could not load proposal.");
-      });
-  }, [proposalId, address, accountIndex]);
+  }, [proposalId, notice]);
 
   useEffect(() => {
     if (!address) {
       setEligibility(null);
       return;
     }
-
     fetchGovernanceEligibility(address, accountIndex)
       .then(setEligibility)
       .catch((eligibilityError: unknown) => {
-        setError(eligibilityError instanceof Error ? eligibilityError.message : "Could not load vote readiness.");
+        setError(
+          eligibilityError instanceof Error
+            ? eligibilityError.message
+            : "Could not load vote readiness."
+        );
       });
   }, [address, accountIndex]);
 
-  const handleVote = async (pid: number, voteYes: boolean) => {
+  const handleVote = async (voteYes: boolean) => {
     if (!address) {
-      setMessage({ type: "error", text: "Connect your wallet first." });
+      setNotice({ tone: "danger", text: "Connect your wallet first." });
       return;
     }
-
     setIsVoting(true);
-    setMessage(null);
+    setNotice(null);
     try {
-      const result = await castVote(address, pid, voteYes, accountIndex);
+      const result = await castVote(address, proposalId, voteYes, accountIndex);
       if (!result.success) {
         const text = result.error ?? "Vote failed.";
-        // A duplicate-nullifier / already-voted rejection means this account
-        // has in fact already voted — record it so the UI reflects that.
+        // A duplicate-nullifier / already-voted rejection means this account has
+        // in fact already voted — record it so the UI reflects that.
         if (/already voted/i.test(text)) {
-          markVoted(address, pid);
+          markVoted(address, proposalId);
           setVoted(true);
         }
-        setMessage({ type: "error", text });
+        setNotice({ tone: "danger", text });
         return;
       }
-
-      markVoted(address, pid);
+      markVoted(address, proposalId);
       setVoted(true);
-      setMessage({ type: "success", text: `Vote recorded (${voteYes ? "Yes" : "No"}).` });
-      const proposals = await fetchProposals(address, accountIndex);
-      setProposal(proposals.find((item) => item.id === pid) ?? null);
+      setNotice({ tone: "success", text: `Ballot recorded (${voteYes ? "in favour" : "against"}).` });
+      await reloadProposal();
     } finally {
       setIsVoting(false);
     }
   };
 
+  const handleExecute = async () => {
+    setIsExecuting(true);
+    setNotice(null);
+    try {
+      const result = await executeProposal(proposalId, 0, accountIndex);
+      if (!result.success) {
+        setNotice({ tone: "danger", text: result.error ?? "Execution failed." });
+        return;
+      }
+      setNotice({ tone: "success", text: "Request executed and distribution opened." });
+      await reloadProposal();
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const handleClaim = async () => {
+    if (!address) {
+      setNotice({ tone: "danger", text: "Connect your wallet first." });
+      return;
+    }
+    setIsClaiming(true);
+    setNotice(null);
+    try {
+      const result = await claimProposalDistribution(proposalId, address, accountIndex);
+      if (!result.success) {
+        setNotice({ tone: "danger", text: result.error ?? "Claim failed." });
+        return;
+      }
+      setNotice({ tone: "success", text: "Distribution claimed." });
+      await reloadProposal();
+    } finally {
+      setIsClaiming(false);
+    }
+  };
+
+  const tabs: TabItem[] = [
+    { value: "overview", label: "Overview" },
+    { value: "distribution", label: "Distribution & allocation" },
+    { value: "deed", label: "Deed" },
+    { value: "votes", label: "Votes" },
+  ];
+
   if (!proposal) {
     return (
       <div className="space-y-6">
-        <PageHero
-          title={`Proposal #${proposalId}`}
-          subtitle="Loading proposal details..."
-          ctaHref="/governance"
-          ctaLabel="Back to Vote"
-          badge={false}
+        <PageHeader
+          eyebrow="Investment committee"
+          title={`Housing proposal #${proposalId}`}
+          description="Loading funding request…"
+          actions={
+            <Link href="/governance" className="btn btn-ghost btn-sm">
+              ← All requests
+            </Link>
+          }
         />
-        {error && <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+        {error ? (
+          <Alert tone="danger" title="Something went wrong">
+            {error}
+          </Alert>
+        ) : (
+          <Section>
+            <LoadingSkeleton lines={4} />
+          </Section>
+        )}
       </div>
     );
   }
 
+  const window = votingWindowFor(proposal);
+
   return (
     <div className="space-y-6">
-      <PageHero
-        title={`Proposal #${proposal.id}`}
-        subtitle="Headline, budget, status, and your vote action."
-        ctaHref="/governance"
-        ctaLabel="Back to Vote"
-        badge={false}
+      <PageHeader
+        eyebrow="Investment committee"
+        title={proposalLabel(proposal)}
+        description={
+          <>
+            {formatEUR(proposal.amount)} requested to acquire one affordable home ·{" "}
+            <span className="text-mono">block {window.deadlineBlock.toLocaleString()}</span>{" "}
+            voting deadline
+          </>
+        }
+        actions={
+          <div className="flex items-center gap-2">
+            <StatusChip status={statusKindFor(proposal.status)} />
+            <Link href="/governance" className="btn btn-ghost btn-sm">
+              ← All requests
+            </Link>
+          </div>
+        }
       />
 
-      {error && <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {error ? (
+        <Alert tone="danger" title="Something went wrong">
+          {error}
+        </Alert>
+      ) : null}
 
-      {message && (
-        <div
-          className={`rounded-lg border px-4 py-3 text-sm ${
-            message.type === "success"
-              ? "border-fs-teal/20 bg-fs-teal/10 text-fs-teal-dark"
-              : "border-red-100 bg-red-50 text-red-700"
-          }`}
-        >
-          {message.text}
-        </div>
-      )}
+      <div aria-live="polite">
+        {notice ? (
+          <Alert tone={notice.tone === "success" ? "success" : "danger"}>{notice.text}</Alert>
+        ) : null}
+      </div>
 
-      {deed && (
-        <div className="rounded-lg border border-fs-teal/20 bg-fs-teal/10 px-4 py-3 text-sm text-fs-teal-dark">
-          🏠 Property acquired — deed NFT <strong>#{deed.tokenId}</strong> (AIP-721) is held by the fund.
-          Valuation <strong>{formatEUR(deed.valuationEur)}</strong>.{" "}
-          <Link href="/fund" className="underline">View in Fund</Link>
-        </div>
-      )}
+      {deed ? (
+        <Alert tone="success" title="Home acquired">
+          Deed NFT #{deed.tokenId} (AIP-721) is held by the fund, valued at{" "}
+          {formatEUR(deed.valuationEur)}. See the Deed tab for details.
+        </Alert>
+      ) : null}
 
-      <ProposalCard
-        proposal={proposal}
-        mode="detail"
-        onVote={handleVote}
-        isVoting={isVoting}
-        hasVoted={voted}
-        isConnected={Boolean(address)}
-        canVote={Boolean(eligibility?.canVote)}
-      />
+      <Tabs tabs={tabs} value={activeTab} onValueChange={setTab} aria-label="Proposal details">
+        {activeTab === "overview" ? (
+          <OverviewTab
+            proposal={proposal}
+            isConnected={Boolean(address)}
+            canVote={Boolean(eligibility?.canVote)}
+            hasVoted={voted}
+            isVoting={isVoting}
+            eligibilityReason={eligibility?.reason}
+            onVote={handleVote}
+            onExecute={handleExecute}
+            isExecuting={isExecuting}
+          />
+        ) : null}
+        {activeTab === "distribution" ? (
+          <DistributionTab
+            proposal={proposal}
+            isConnected={Boolean(address)}
+            isClaiming={isClaiming}
+            onClaim={handleClaim}
+          />
+        ) : null}
+        {activeTab === "deed" ? <DeedTab deed={deed} /> : null}
+        {activeTab === "votes" ? <VotesTab proposal={proposal} /> : null}
+      </Tabs>
 
-      {!eligibility?.canVote && (
-        <p className="text-sm text-text-3">
-          {eligibility?.reason ?? "Complete voting requirements first."} See advanced checks on the{" "}
-          <Link href="/explain" className="text-fs-teal hover:underline">
-            Explain
+      {!eligibility?.canVote && proposal.status === 0 ? (
+        <p className="text-caption">
+          {eligibility?.reason ?? "Complete the Fund Shares check on the Funding decisions page to vote."}{" "}
+          <Link href="/governance" className="text-fs-teal hover:underline">
+            Get cleared to vote
           </Link>
-          {" "}page.
+          .
         </p>
-      )}
+      ) : null}
     </div>
+  );
+}
+
+export default function ProposalDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const proposalId = Number.parseInt(id, 10);
+
+  return (
+    <Suspense
+      fallback={
+        <Section>
+          <LoadingSkeleton lines={4} />
+        </Section>
+      }
+    >
+      <ProposalDetail proposalId={proposalId} />
+    </Suspense>
   );
 }

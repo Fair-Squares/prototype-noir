@@ -1,166 +1,173 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { ActionPanel, MetricRow, PageHero } from "@/components/SimplePage";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Alert,
+  Button,
+  KpiCard,
+  KpiGrid,
+  PageHeader,
+  Section,
+  SkeletonKpi,
+  SkeletonRow,
+} from "@/components/ui";
+import { ProjectsTable } from "@/components/projects/ProjectsTable";
+import { buildProjectRows, type ProjectRow } from "@/components/projects/ProjectRow";
+import { useWallet } from "@/contexts/WalletContext";
+import {
+  claimProposalDistribution,
   fetchFundStats,
   fetchProperties,
+  fetchProposals,
   formatEUR,
   type FundStats,
-  type PropertyDeed,
 } from "@/lib/contracts";
 
-export default function FundPage() {
+export default function ProjectsPage() {
+  const { activeAccount } = useWallet();
+  const address = activeAccount?.address ?? null;
+  const accountIndex = activeAccount?.index ?? 0;
+
   const [stats, setStats] = useState<FundStats | null>(null);
-  const [properties, setProperties] = useState<PropertyDeed[]>([]);
+  const [rows, setRows] = useState<ProjectRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [claimingId, setClaimingId] = useState<number | null>(null);
+  const [notice, setNotice] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [nextStats, proposals, deeds] = await Promise.all([
+        fetchFundStats(),
+        fetchProposals(address ?? undefined, accountIndex),
+        fetchProperties(),
+      ]);
+      setStats(nextStats);
+      setRows(buildProjectRows(proposals, deeds));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Could not load housing projects.");
+    } finally {
+      setLoading(false);
+    }
+  }, [address, accountIndex]);
 
   useEffect(() => {
-    let active = true;
-    fetchFundStats()
-      .then((nextStats) => {
-        if (!active) return;
-        setStats(nextStats);
-        setError(null);
-      })
-      .catch((e: unknown) => {
-        if (!active) return;
-        setError(e instanceof Error ? e.message : "Could not load fund data.");
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    // Property deeds are an optional, best-effort read (don't block fund stats).
-    fetchProperties()
-      .then((p) => {
-        if (active) setProperties(p);
-      })
-      .catch(() => {
-        if (active) setProperties([]);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+    void load();
+  }, [load]);
 
-  const metrics = useMemo(() => {
-    if (!stats) return [];
-    const fundValue = stats.navEur ?? Math.max(0, stats.totalDeposits + stats.totalYield);
-    const sharePrice =
-      stats.navPerFsftEur ?? (stats.totalSupply > 0 ? fundValue / stats.totalSupply : 0);
-    return [
-      { label: "Fund Value", value: formatEUR(fundValue) },
-      { label: "Share Price", value: `€${sharePrice.toFixed(4)}`, accent: true },
-      { label: "Available", value: formatEUR(stats.available) },
-      { label: "Supply", value: stats.totalSupply.toLocaleString() },
-    ];
+  const handleClaim = useCallback(
+    async (proposalId: number) => {
+      if (!address) {
+        setNotice({ tone: "danger", text: "Connect your wallet to claim a distribution." });
+        return;
+      }
+      setClaimingId(proposalId);
+      setNotice(null);
+      try {
+        const result = await claimProposalDistribution(proposalId, address, accountIndex);
+        if (!result.success) {
+          setNotice({ tone: "danger", text: result.error ?? "Claim failed." });
+          return;
+        }
+        const claimed =
+          typeof result.claimedAmount === "number" ? ` (${formatEUR(result.claimedAmount)})` : "";
+        setNotice({ tone: "success", text: `Distribution claimed for proposal #${proposalId}${claimed}.` });
+        await load();
+      } finally {
+        setClaimingId(null);
+      }
+    },
+    [address, accountIndex, load]
+  );
+
+  const capital = useMemo(() => {
+    if (!stats) return null;
+    return {
+      available: stats.available,
+      deployed: stats.totalInDefi,
+      allocated: stats.totalAllocated,
+    };
   }, [stats]);
 
   return (
-    <div className="space-y-6">
-      <PageHero
-        title="Fund"
-        subtitle="Track the fund in one view."
-        ctaHref="/invest"
-        ctaLabel="Deposit"
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        eyebrow="Deal room"
+        title="Housing projects"
+        description="Affordable-housing proposals funded by the pool, the property deeds they become, and the distributions flowing back to investors — all read straight from the contracts."
+        actions={
+          <Button variant="secondary" onClick={() => void load()} disabled={loading}>
+            {loading ? "Refreshing…" : "Refresh"}
+          </Button>
+        }
       />
 
-      {error && (
-        <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
+      {error ? <Alert tone="danger" title="Could not load housing projects">{error}</Alert> : null}
 
-      {loading ? (
-        <div className="space-y-4">
-          <div className="h-20 rounded-2xl bg-bg animate-pulse" />
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="h-32 rounded-2xl bg-bg animate-pulse" />
-            <div className="h-32 rounded-2xl bg-bg animate-pulse" />
+      <div aria-live="polite">
+        {notice ? (
+          <Alert tone={notice.tone} title={notice.tone === "success" ? "Done" : "Could not complete"}>
+            {notice.text}
+          </Alert>
+        ) : null}
+      </div>
+
+      <section aria-label="Fund capital">
+        {loading && !stats ? (
+          <KpiGrid cols={3}>
+            <SkeletonKpi />
+            <SkeletonKpi />
+            <SkeletonKpi />
+          </KpiGrid>
+        ) : capital ? (
+          <KpiGrid cols={3}>
+            <KpiCard
+              label="Available to deploy"
+              value={formatEUR(capital.available)}
+              sub="Uncommitted EUR ready for the next project"
+            />
+            <KpiCard
+              label="Deployed"
+              value={formatEUR(capital.deployed)}
+              tone="accent"
+              sub="Working in yield strategies"
+            />
+            <KpiCard
+              label="Allocated to projects"
+              value={formatEUR(capital.allocated)}
+              sub="Committed to funded housing"
+            />
+          </KpiGrid>
+        ) : null}
+      </section>
+
+      <Section
+        title="Projects"
+        description="On-chain only: each project is a funding proposal plus its property deed and distribution. Location, unit counts, tranches and covenant terms are not recorded on-chain and are not shown here."
+        actions={
+          <Link href="/governance" className="btn btn-ghost btn-sm">
+            Open governance
+          </Link>
+        }
+      >
+        {loading && rows.length === 0 ? (
+          <div className="flex flex-col gap-1">
+            <SkeletonRow cols={5} />
+            <SkeletonRow cols={5} />
+            <SkeletonRow cols={5} />
           </div>
-        </div>
-      ) : stats ? (
-        <>
-          <MetricRow items={metrics} />
-
-          <section className="grid gap-4 md:grid-cols-2">
-            <div className="surface p-5">
-              <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Fund Breakdown</p>
-              <div className="space-y-2 text-sm text-text-2">
-                <p>In DeFi: <strong className="text-text-1">{formatEUR(stats.totalInDefi)}</strong></p>
-                <p>Allocated: <strong className="text-text-1">{formatEUR(stats.totalAllocated)}</strong></p>
-                <p>Yield: <strong className="text-text-1">{formatEUR(stats.totalYield)}</strong></p>
-              </div>
-            </div>
-            <div className="surface p-5">
-              <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Health Check</p>
-              <div className="space-y-2 text-sm text-text-2">
-                <p>Investor count: <strong className="text-text-1">{stats.investorCount.toLocaleString()}</strong></p>
-                <p>Fund status: <strong className="text-text-1">{stats.isPaused ? "Paused" : "Active"}</strong></p>
-                <p>Data source: <strong className="text-text-1">{stats.source ?? "Live"}</strong></p>
-              </div>
-            </div>
-          </section>
-        </>
-      ) : null}
-
-      {properties.length > 0 && (
-        <section className="surface p-5">
-          <p className="text-xs uppercase tracking-wide text-text-3 mb-3">
-            Real-Estate Assets (AIP-721 deeds)
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {properties.map((p) => (
-              <div key={p.tokenId} className="rounded-xl border border-border bg-bg p-4">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-text-1">Property deed #{p.tokenId}</span>
-                  <span className="text-tag rounded-full bg-fs-mint px-2 py-0.5 text-fs-teal-dark">
-                    {p.distributionOpen ? "Distributing" : "Held"}
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-text-2">
-                  Acquired via{" "}
-                  <Link href={`/governance/${p.proposalId}`} className="text-fs-teal hover:underline">
-                    proposal #{p.proposalId}
-                  </Link>
-                </p>
-                <p className="mt-1 text-sm text-text-2">
-                  Valuation: <strong className="text-text-1">{formatEUR(p.valuationEur)}</strong>
-                </p>
-              </div>
-            ))}
-          </div>
-          <p className="mt-3 text-xs text-text-3">
-            Each acquired property is recorded on-chain as a non-fungible deed held by the fund.
-          </p>
-        </section>
-      )}
-
-      <ActionPanel title="What To Do Now" subtitle="Pick one">
-        <div className="grid gap-2 sm:grid-cols-2">
-          <Link
-            href="/invest"
-            className="rounded-lg bg-fs-teal px-3 py-2 text-center text-sm font-semibold text-white hover:bg-fs-teal-dark"
-          >
-            Deposit
-          </Link>
-          <Link
-            href="/governance"
-            className="rounded-lg border border-border px-3 py-2 text-center text-sm font-semibold text-text-2 hover:bg-bg hover:text-text-1"
-          >
-            Vote
-          </Link>
-        </div>
-        <p className="mt-3 text-xs text-text-3">
-          Need deeper formulas and market details? Open{" "}
-          <Link className="text-fs-teal hover:underline" href="/explain">
-            Explain
-          </Link>
-          .
-        </p>
-      </ActionPanel>
+        ) : (
+          <ProjectsTable
+            rows={rows}
+            address={address}
+            claimingId={claimingId}
+            onClaim={handleClaim}
+          />
+        )}
+      </Section>
     </div>
   );
 }

@@ -2,12 +2,27 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ActionPanel, MetricRow, PageHero } from "@/components/SimplePage";
+import {
+  Alert,
+  EmptyState,
+  KpiCard,
+  KpiGrid,
+  PageHeader,
+  Section,
+  SkeletonKpi,
+} from "@/components/ui";
+import { EligibilityPanel } from "@/components/rewards/EligibilityPanel";
+import { NextSteps } from "@/components/rewards/NextSteps";
 import { useWallet } from "@/contexts/WalletContext";
-import { fetchRewardsOverview, fetchRewardsStats, type RewardsOverview, type RewardsStats } from "@/lib/contracts";
+import {
+  fetchRewardsOverview,
+  fetchRewardsStats,
+  type RewardsOverview,
+  type RewardsStats,
+} from "@/lib/contracts";
 
 function formatDateTime(ts: number): string {
-  if (!Number.isFinite(ts) || ts <= 0) return "n/a";
+  if (!Number.isFinite(ts) || ts <= 0) return "—";
   return new Date(ts).toLocaleString("en-GB", {
     day: "2-digit",
     month: "short",
@@ -15,6 +30,10 @@ function formatDateTime(ts: number): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatToken(amount: number, symbol: string): string {
+  return `${amount.toLocaleString("en-GB")} ${symbol}`;
 }
 
 export default function RewardsPage() {
@@ -32,19 +51,22 @@ export default function RewardsPage() {
     setLoading(true);
     setError(null);
 
-    Promise.all([
+    // allSettled so an unavailable per-user stats read (needs a connected
+    // account / position) never blanks the public distribution schedule.
+    Promise.allSettled([
       fetchRewardsOverview(),
       address ? fetchRewardsStats(address, accountIndex) : Promise.resolve(null),
     ])
-      .then(([nextOverview, nextStats]) => {
+      .then(([overviewRes, statsRes]) => {
         if (!mounted) return;
-        setOverview(nextOverview);
-        setStats(nextStats);
-        setError(null);
-      })
-      .catch((e: unknown) => {
-        if (!mounted) return;
-        setError(e instanceof Error ? e.message : "Could not load rewards data.");
+        if (overviewRes.status === "fulfilled") setOverview(overviewRes.value);
+        if (statsRes.status === "fulfilled") setStats(statsRes.value);
+        if (overviewRes.status === "rejected" && statsRes.status === "rejected") {
+          const e = overviewRes.reason;
+          setError(e instanceof Error ? e.message : "Could not load rewards data.");
+        } else {
+          setError(null);
+        }
       })
       .finally(() => {
         if (mounted) setLoading(false);
@@ -56,92 +78,172 @@ export default function RewardsPage() {
   }, [address, accountIndex]);
 
   const symbol = overview?.token.symbol ?? "FSP";
-  const metrics = overview
-    ? [
-        {
-          label: "Claimable",
-          value: stats ? `${(stats.claimable ?? 0).toLocaleString()} ${symbol}` : "Connect wallet",
-          accent: true,
-        },
-        { label: "Epoch", value: `${overview.currentEpoch}/${overview.token.totalEpochs}` },
-        { label: "Remaining Pool", value: `${overview.remainingPool.toLocaleString()} ${symbol}` },
-        {
-          label: "Eligibility",
-          value: stats ? (stats.eligibility.canClaimNow ? "Ready" : "Not yet") : "—",
-        },
-      ]
-    : [];
+  const canClaim = Boolean(stats?.eligibility.canClaimNow);
 
   return (
     <div className="space-y-6">
-      <PageHero
+      <PageHeader
+        eyebrow="Participation rewards"
         title="Rewards"
-        subtitle="See if you can claim now and what to improve next."
-        ctaHref="/portfolio"
-        ctaLabel="Claim In Account"
+        description={
+          <>
+            A fixed pool of {symbol} tokens recognises long-term participation in
+            Fair Squares — for holding deposits, holding property tokens, and
+            voting. Rewards are released on a set schedule, not traded for yield.
+            Claiming itself happens in your account.
+          </>
+        }
+        actions={
+          <Link href="/portfolio" className="btn btn-primary">
+            {canClaim ? "Claim in account" : "Go to account"}
+          </Link>
+        }
       />
 
-      {error && (
-        <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+      {error ? (
+        <Alert tone="danger" title="Could not load rewards data">
           {error}
-        </div>
-      )}
-
-      {loading && !overview ? (
-        <div className="space-y-4">
-          <div className="h-20 rounded-2xl bg-bg animate-pulse" />
-          <div className="h-28 rounded-2xl bg-bg animate-pulse" />
-        </div>
-      ) : overview ? (
-        <>
-          <MetricRow items={metrics} />
-
-          <section className="surface p-5">
-            <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Progress</p>
-            <p className="text-sm text-text-2">
-              Emitted to date: <strong className="text-text-1">{overview.emittedToDate.toLocaleString()} {symbol}</strong>
-            </p>
-            <p className="mt-2 text-sm text-text-2">
-              Next epoch: <strong className="text-text-1">{formatDateTime(overview.nextEpochAt)}</strong>
-            </p>
-            {!address ? (
-              <p className="mt-2 text-sm text-text-3">Connect your wallet to see your personal rewards.</p>
-            ) : (
-              stats &&
-              !stats.eligibility.canClaimNow &&
-              stats.eligibility.nextSteps[0] && (
-                <p className="mt-2 text-sm text-text-2">
-                  Next step: <strong className="text-text-1">{stats.eligibility.nextSteps[0]}</strong>
-                </p>
-              )
-            )}
-          </section>
-        </>
+        </Alert>
       ) : null}
 
-      <ActionPanel title="What To Do Now" subtitle="Pick one">
-        <div className="grid gap-2 sm:grid-cols-2">
-          <Link
-            href="/portfolio"
-            className="rounded-lg bg-fs-teal px-3 py-2 text-center text-sm font-semibold text-white hover:bg-fs-teal-dark"
-          >
-            Claim
-          </Link>
-          <Link
-            href="/invest"
-            className="rounded-lg border border-border px-3 py-2 text-center text-sm font-semibold text-text-2 hover:bg-bg hover:text-text-1"
-          >
-            Improve Eligibility
-          </Link>
-        </div>
-        <p className="mt-3 text-xs text-text-3">
-          For full reward mechanics, open{" "}
-          <Link className="text-fs-teal hover:underline" href="/explain">
-            Explain
-          </Link>
-          .
-        </p>
-      </ActionPanel>
+      {loading && !overview ? (
+        <KpiGrid cols={4}>
+          <SkeletonKpi />
+          <SkeletonKpi />
+          <SkeletonKpi />
+          <SkeletonKpi />
+        </KpiGrid>
+      ) : overview ? (
+        <KpiGrid cols={4}>
+          <KpiCard
+            label="Claimable now"
+            tone={canClaim ? "success" : "default"}
+            value={
+              stats ? (
+                <span className="tabular-nums">
+                  {formatToken(stats.claimable, symbol)}
+                </span>
+              ) : (
+                "Connect wallet"
+              )
+            }
+            sub={
+              stats
+                ? canClaim
+                  ? "Available to claim in your account"
+                  : `Minimum to claim ${formatToken(stats.claimMin, symbol)}`
+                : "Connect to see your position"
+            }
+          />
+          <KpiCard
+            label="Your reward balance"
+            value={
+              stats ? (
+                <span className="tabular-nums">
+                  {formatToken(stats.balance, symbol)}
+                </span>
+              ) : (
+                "—"
+              )
+            }
+            sub={stats ? "Claimed to date and held" : undefined}
+          />
+          <KpiCard
+            label="Current epoch"
+            value={
+              <span className="tabular-nums">
+                {overview.currentEpoch} / {overview.token.totalEpochs}
+              </span>
+            }
+            sub={`Next epoch ${formatDateTime(overview.nextEpochAt)}`}
+            hint={`The ${formatToken(overview.token.distributionPool, symbol)} pool releases over ${overview.token.years} years across ${overview.token.totalEpochs} epochs.`}
+          />
+          <KpiCard
+            label="Distribution pool"
+            value={
+              <span className="tabular-nums">
+                {formatToken(overview.remainingPool, symbol)}
+              </span>
+            }
+            sub={`${formatToken(overview.emittedToDate, symbol)} released so far`}
+          />
+        </KpiGrid>
+      ) : null}
+
+      {overview ? (
+        <Section
+          title="Your eligibility"
+          description="Rewards are weighted across three forms of participation. Each is verified privately on-chain — Fair Squares never sees the underlying position."
+        >
+          {!address ? (
+            <EmptyState
+              title="Connect your wallet to check eligibility"
+              description="We can show the shared distribution schedule for everyone, but your personal claimable amount and bucket eligibility need a connected wallet."
+            />
+          ) : !stats ? (
+            <EmptyState
+              title="No rewards position yet"
+              description="Once you hold a deposit or property tokens, your participation buckets and claimable amount will appear here."
+              action={
+                <Link href="/invest" className="btn btn-secondary">
+                  Explore housing proposals
+                </Link>
+              }
+            />
+          ) : (
+            <div className="space-y-6">
+              <EligibilityPanel
+                eligibility={stats.eligibility}
+                weighting={stats.weighting}
+              />
+
+              {stats.eligibility.proofGuidance ? (
+                <Alert tone="info">{stats.eligibility.proofGuidance}</Alert>
+              ) : null}
+
+              {canClaim ? (
+                <Alert tone="success" title="You have rewards ready">
+                  {formatToken(stats.claimable, symbol)} is ready. Claiming runs
+                  from your account.{" "}
+                  <Link href="/portfolio" className="underline">
+                    Open your account
+                  </Link>
+                  .
+                </Alert>
+              ) : stats.eligibility.nextSteps.length > 0 ? (
+                <div>
+                  <p className="text-label mb-3">What to do next</p>
+                  <NextSteps
+                    steps={stats.eligibility.nextSteps}
+                    footer={
+                      <Link
+                        href="/invest"
+                        className="text-meta text-fs-teal-dark underline"
+                      >
+                        Explore housing proposals to participate
+                      </Link>
+                    }
+                  />
+                </div>
+              ) : null}
+            </div>
+          )}
+        </Section>
+      ) : null}
+
+      {overview ? (
+        <Section padding="tight">
+          <p className="text-meta text-text-3">
+            How rewards are weighted: {overview.weighting.deposit}% for deposits,{" "}
+            {overview.weighting.fsft}% for property tokens,{" "}
+            {overview.weighting.governance}% for governance. Full mechanics are in{" "}
+            <Link href="/explain" className="text-fs-teal-dark underline">
+              Explain
+            </Link>
+            .
+          </p>
+        </Section>
+      ) : null}
     </div>
   );
 }

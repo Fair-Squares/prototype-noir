@@ -1,9 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import InvestForm from "@/components/InvestForm";
-import { ActionPanel, MetricRow, PageHero } from "@/components/SimplePage";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FaucetPanel } from "@/components/invest/FaucetPanel";
+import { InvestQuote } from "@/components/invest/InvestQuote";
+import {
+  ActionBar,
+  Alert,
+  Button,
+  EmptyState,
+  FormField,
+  KpiCard,
+  KpiGrid,
+  PageHeader,
+  Section,
+  SkeletonKpi,
+  StatusChip,
+  Stepper,
+} from "@/components/ui";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   depositFunds,
@@ -11,7 +26,7 @@ import {
   fetchKYCProfile,
   fetchPortfolio,
   formatEUR,
-  requestTestEur,
+  formatEURDecimals,
   type DepositResult,
   type FundStats,
   type KYCProfile,
@@ -19,23 +34,51 @@ import {
 } from "@/lib/contracts";
 
 const FAUCET_AMOUNT = 50_000;
+const QUICK_AMOUNTS = [1_000, 5_000, 10_000];
+
+const STEP_LABELS = [
+  "Connect",
+  "Verify",
+  "Fund wallet",
+  "Amount",
+  "Review",
+  "Confirm",
+] as const;
+
+// The first three steps are gated by real on-chain state. Once an investor is
+// verified and has cash, they drive the amount → review → confirm sequence
+// themselves, so we track that tail explicitly.
+type ManualStep = 3 | 4 | 5;
+
+function shortHash(hash?: string | null): string {
+  if (!hash) return "—";
+  return hash.length > 16 ? `${hash.slice(0, 10)}…${hash.slice(-6)}` : hash;
+}
 
 export default function InvestPage() {
-  const { activeAccount } = useWallet();
+  const { activeAccount, connect, isConnecting } = useWallet();
   const address = activeAccount?.address ?? null;
   const accountIndex = activeAccount?.index ?? 0;
 
-  const [kycProfile, setKycProfile] = useState<KYCProfile>({
-    verified: false,
-    isInvestor: false,
-    roles: [],
-  });
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [kycProfile, setKycProfile] = useState<KYCProfile | null>(null);
   const [stats, setStats] = useState<FundStats | null>(null);
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
+  const [accountLoading, setAccountLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [faucetBusy, setFaucetBusy] = useState(false);
-  const [faucetMsg, setFaucetMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  // Deposit form + submission state.
+  const [amount, setAmount] = useState("");
+  const [amountError, setAmountError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [result, setResult] = useState<DepositResult | null>(null);
+  const [manualStep, setManualStep] = useState<ManualStep>(3);
+  const amountInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Data loading ──────────────────────────────────────────────────────────
   useEffect(() => {
     fetchFundStats()
       .then(setStats)
@@ -46,11 +89,11 @@ export default function InvestPage() {
 
   useEffect(() => {
     if (!address) {
-      setKycProfile({ verified: false, isInvestor: false, roles: [] });
+      setKycProfile(null);
       setPortfolio(null);
       return;
     }
-
+    setAccountLoading(true);
     Promise.all([fetchKYCProfile(address), fetchPortfolio(address, accountIndex)])
       .then(([profile, nextPortfolio]) => {
         setKycProfile(profile);
@@ -59,129 +102,418 @@ export default function InvestPage() {
       })
       .catch((error: unknown) => {
         setLoadError(error instanceof Error ? error.message : "Could not load account data.");
-      });
+      })
+      .finally(() => setAccountLoading(false));
   }, [address, accountIndex]);
 
-  const refreshPortfolio = async () => {
+  const refreshPortfolio = useCallback(async () => {
     if (!address) return;
     const nextPortfolio = await fetchPortfolio(address, accountIndex);
     setPortfolio(nextPortfolio);
-  };
+  }, [address, accountIndex]);
 
-  const handleDeposit = async (amount: string): Promise<DepositResult> => {
-    if (!address) return { success: false, error: "Connect your wallet first." };
+  // ── Derived real state ──────────────────────────────────────────────────────
+  const isConnected = Boolean(address);
+  const isInvestor = Boolean(kycProfile?.isInvestor && kycProfile?.verified);
+  const eurBalance = portfolio?.eurBalance ?? 0;
+  const hasCash = eurBalance > 0;
 
-    const result = await depositFunds(address, Number.parseFloat(amount), accountIndex);
-    if (result.success) {
-      await refreshPortfolio();
+  const navPerFsftEur = useMemo(() => {
+    if (portfolio?.navPerFsftEur != null) return portfolio.navPerFsftEur;
+    if (stats?.navPerFsftEur != null) return stats.navPerFsftEur;
+    if (stats && stats.totalSupply > 0) {
+      const fundValue = stats.navEur ?? Math.max(0, stats.totalDeposits + stats.totalYield);
+      return fundValue / stats.totalSupply;
     }
-    return result;
+    return 0;
+  }, [portfolio, stats]);
+
+  const parsedAmount = Number.parseFloat(amount);
+  const amountEur = Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : 0;
+
+  // The current step index for the Stepper. Gated steps resolve from real
+  // state; once funded, the manual tail (amount/review/confirm) takes over.
+  const currentStep: number = useMemo(() => {
+    if (result?.success) return 5; // Confirm — completed deposit.
+    if (!isConnected) return 0;
+    if (!isInvestor) return 1;
+    if (!hasCash) return 2;
+    return manualStep;
+  }, [result, isConnected, isInvestor, hasCash, manualStep]);
+
+  // ── URL ?step= sync (reflect the manual tail only) ──────────────────────────
+  useEffect(() => {
+    const raw = searchParams.get("step");
+    if (!raw) return;
+    const n = Number.parseInt(raw, 10);
+    if (n === 3 || n === 4 || n === 5) setManualStep(n as ManualStep);
+  }, [searchParams]);
+
+  const goToManualStep = useCallback(
+    (next: ManualStep) => {
+      setManualStep(next);
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("step", String(next));
+      router.replace(`/invest?${params.toString()}`, { scroll: false });
+    },
+    [router, searchParams]
+  );
+
+  // ── Amount validation ───────────────────────────────────────────────────────
+  const validateAmount = (): boolean => {
+    if (amountEur <= 0) {
+      setAmountError("Enter an amount greater than zero.");
+      amountInputRef.current?.focus();
+      return false;
+    }
+    if (amountEur > eurBalance) {
+      setAmountError(`Amount exceeds your available cash of ${formatEURDecimals(eurBalance)}.`);
+      amountInputRef.current?.focus();
+      return false;
+    }
+    setAmountError(null);
+    return true;
   };
 
-  const handleFaucet = async () => {
-    if (!address) return;
-    setFaucetBusy(true);
-    setFaucetMsg(null);
+  const handleReviewAmount = () => {
+    if (validateAmount()) goToManualStep(4);
+  };
+
+  // ── Deposit submit (preserves depositFunds wiring) ──────────────────────────
+  const handleConfirm = async () => {
+    if (!address) {
+      setSubmitError("Connect your account first.");
+      return;
+    }
+    if (!validateAmount()) {
+      goToManualStep(3);
+      return;
+    }
+    setSubmitting(true);
+    setSubmitError(null);
+    setResult(null);
     try {
-      const result = await requestTestEur(address, FAUCET_AMOUNT, accountIndex);
-      if (!result.success) {
-        setFaucetMsg({ type: "error", text: result.error ?? "Faucet failed." });
+      const res = await depositFunds(address, amountEur, accountIndex);
+      if (!res.success) {
+        setSubmitError(res.error ?? "Deposit failed.");
         return;
       }
-      setFaucetMsg({ type: "success", text: result.message ?? `Dripped ${formatEUR(FAUCET_AMOUNT)}.` });
+      setResult(res);
+      setAmount("");
       await refreshPortfolio();
     } catch (e: unknown) {
-      setFaucetMsg({ type: "error", text: e instanceof Error ? e.message : "Faucet failed." });
+      setSubmitError(e instanceof Error ? e.message : "Deposit failed.");
     } finally {
-      setFaucetBusy(false);
+      setSubmitting(false);
     }
   };
 
-  const sharePrice = useMemo(() => {
-    if (!stats) return 0;
-    const fundValue = stats.navEur ?? Math.max(0, stats.totalDeposits + stats.totalYield);
-    return stats.navPerFsftEur ?? (stats.totalSupply > 0 ? fundValue / stats.totalSupply : 0);
-  }, [stats]);
+  const startAnotherDeposit = () => {
+    setResult(null);
+    setSubmitError(null);
+    setAmount("");
+    goToManualStep(3);
+  };
 
-  const metrics = [
-    { label: "Cash (EURs)", value: formatEUR(portfolio?.eurBalance ?? 0) },
-    { label: "Current Position", value: formatEUR(portfolio?.depositedAmount ?? 0) },
-    { label: "Share Price", value: `€${sharePrice.toFixed(4)}`, accent: true },
-    { label: "KYC", value: kycProfile.isInvestor ? "Ready" : "Required" },
-  ];
+  // ── KPI strip ─────────────────────────────────────────────────────────────
+  const verifyChip = !isConnected ? null : isInvestor ? (
+    <StatusChip status="verified" label="Verified investor" />
+  ) : (
+    <StatusChip status="pending" label="Verification required" />
+  );
 
   return (
     <div className="space-y-6">
-      <PageHero
-        title="Invest"
-        subtitle="Deposit cash into the fund in one step."
-        ctaHref="/portfolio"
-        ctaLabel="Open Account"
+      <PageHeader
+        eyebrow="Invest"
+        title="Deposit into the housing fund"
+        description="Add cash to the fund to receive a private position in affordable-housing assets. The flow below confirms you are connected and verified, then settles your deposit on-chain."
       />
 
-      {loadError && (
-        <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {loadError}
-        </div>
-      )}
+      {loadError ? <Alert tone="danger" title="Could not load data">{loadError}</Alert> : null}
 
-      <MetricRow items={metrics} />
+      <Section padding="tight">
+        <Stepper steps={STEP_LABELS.map((label) => ({ label }))} current={currentStep} />
+      </Section>
 
-      <ActionPanel title="Primary Action" subtitle="Deposit">
-        <InvestForm
-          isInvestor={kycProfile.isInvestor}
-          isConnected={Boolean(address)}
-          eurBalance={portfolio?.eurBalance ?? 0}
-          onDeposit={handleDeposit}
-        />
-      </ActionPanel>
+      {/* Position summary */}
+      <KpiGrid cols={4}>
+        {accountLoading && !portfolio ? (
+          <>
+            <SkeletonKpi />
+            <SkeletonKpi />
+            <SkeletonKpi />
+            <SkeletonKpi />
+          </>
+        ) : (
+          <>
+            <KpiCard
+              label="Available cash"
+              value={formatEUR(eurBalance)}
+              sub="EUR in your wallet"
+            />
+            <KpiCard
+              label="Current position"
+              value={formatEUR(portfolio?.depositedAmount ?? 0)}
+              sub="Deposited in the fund"
+            />
+            <KpiCard
+              label="NAV per share"
+              value={navPerFsftEur > 0 ? `€${navPerFsftEur.toFixed(4)}` : "—"}
+              tone="accent"
+              sub={navPerFsftEur > 0 ? "Net asset value per FSFT" : "Not yet established"}
+            />
+            <KpiCard
+              label="Verification"
+              value={isInvestor ? "Ready" : "Required"}
+              tone={isInvestor ? "success" : "warning"}
+              sub="Investor eligibility"
+            />
+          </>
+        )}
+      </KpiGrid>
 
-      <section className="surface p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-text-3 mb-1">Test EUR Faucet</p>
-            <p className="text-sm text-text-2">
-              Mint test EURs to your account via the on-chain Dripper (AIP-20).
+      {/* ── Step 1: Connect ─────────────────────────────────────────────────── */}
+      {!isConnected ? (
+        <Section
+          title="Connect your account"
+          description="Connect an Aztec account to begin. Your deposit and position are held privately to your account."
+        >
+          <ActionBar align="start">
+            <Button onClick={() => connect(0)} loading={isConnecting}>
+              {isConnecting ? "Connecting…" : "Connect account"}
+            </Button>
+          </ActionBar>
+          <p className="text-caption mt-3 text-text-3">
+            To pick a different account, use the account button in the top-right
+            of the page.
+          </p>
+        </Section>
+      ) : null}
+
+      {/* ── Step 2: Verify ──────────────────────────────────────────────────── */}
+      {isConnected && !isInvestor ? (
+        <Section
+          title="Verify investor eligibility"
+          description="Depositing requires a verified investor credential. Verification is a private KYC check held to your account."
+          actions={verifyChip}
+        >
+          {accountLoading && !kycProfile ? (
+            <p className="text-caption text-text-3" aria-live="polite">
+              Checking your verification status…
             </p>
-          </div>
-          <button
-            type="button"
-            onClick={handleFaucet}
-            disabled={!address || faucetBusy}
-            className="rounded-lg bg-fs-anthracite px-4 py-2 text-sm font-semibold text-white hover:bg-fs-anthracite/90 disabled:opacity-50"
-          >
-            {faucetBusy ? "Dripping…" : `Get ${formatEUR(FAUCET_AMOUNT)}`}
-          </button>
-        </div>
-        {!address && (
-          <p className="mt-2 text-xs text-text-3">Connect your wallet to use the faucet.</p>
-        )}
-        {faucetMsg && (
-          <div
-            className={`mt-3 rounded-lg border px-3 py-2 text-sm ${
-              faucetMsg.type === "success"
-                ? "border-fs-teal/20 bg-fs-teal/10 text-fs-teal-dark"
-                : "border-red-100 bg-red-50 text-red-700"
-            }`}
-          >
-            {faucetMsg.text}
-          </div>
-        )}
-      </section>
+          ) : (
+            <ActionBar align="start">
+              <Link href="/kyc" className="btn btn-primary">
+                Go to verification
+              </Link>
+            </ActionBar>
+          )}
+        </Section>
+      ) : null}
 
-      <section className="surface p-5">
-        <p className="text-xs uppercase tracking-wide text-text-3 mb-2">Quick Checklist</p>
-        <ol className="space-y-2 text-sm text-text-2">
-          <li>1. Connect your account.</li>
-          <li>2. Complete KYC if needed.</li>
-          <li>3. Deposit cash and track position in Account.</li>
-        </ol>
-        {!kycProfile.isInvestor && (
-          <Link href="/kyc" className="mt-3 inline-block text-sm font-semibold text-fs-teal hover:underline">
-            Go to KYC
-          </Link>
-        )}
-      </section>
+      {/* ── Step 3: Fund wallet (faucet is test-only) ───────────────────────── */}
+      {isConnected && isInvestor && !hasCash ? (
+        <Section
+          title="Fund your wallet"
+          description="You need EUR in your wallet before depositing. On testnet you can add test EUR below."
+          actions={verifyChip}
+        >
+          <EmptyState
+            title="No cash available to deposit"
+            description="Your wallet holds no EUR yet. Use the test faucet to add funds, then continue."
+          />
+          <div className="mt-4 rounded-md border border-dashed border-[rgba(196,22,103,0.35)] p-4">
+            <FaucetPanel
+              address={address}
+              accountIndex={accountIndex}
+              amount={FAUCET_AMOUNT}
+              onFunded={refreshPortfolio}
+            />
+          </div>
+        </Section>
+      ) : null}
+
+      {/* ── Steps 4–6: Amount → Review → Confirm ────────────────────────────── */}
+      {isConnected && isInvestor && hasCash && !result?.success ? (
+        <Section
+          title="Make your deposit"
+          description="Enter an amount, review the quote, then confirm. Your deposit settles as a private position in the fund."
+          actions={verifyChip}
+        >
+          {/* Step 4: Amount */}
+          {manualStep === 3 ? (
+            <div className="space-y-4">
+              <div className="surface-muted flex items-baseline justify-between gap-3 p-4">
+                <span className="text-label">Available cash</span>
+                <span className="text-num text-text-1">{formatEURDecimals(eurBalance)}</span>
+              </div>
+
+              <FormField
+                label="Deposit amount"
+                htmlFor="deposit-amount"
+                required
+                hint="Amount of EUR to deposit into the fund."
+                error={amountError ?? undefined}
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    id="deposit-amount"
+                    ref={amountInputRef}
+                    type="number"
+                    min="0"
+                    step="100"
+                    inputMode="decimal"
+                    value={amount}
+                    onChange={(e) => {
+                      setAmount(e.target.value);
+                      if (amountError) setAmountError(null);
+                    }}
+                    placeholder="0"
+                    aria-invalid={amountError ? true : undefined}
+                    aria-describedby={amountError ? "deposit-amount-error" : "deposit-amount-hint"}
+                    className="text-num w-full rounded-md border border-border bg-card px-3 py-2 text-text-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fs-teal"
+                  />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setAmount(String(eurBalance));
+                      if (amountError) setAmountError(null);
+                    }}
+                  >
+                    Max
+                  </Button>
+                </div>
+              </FormField>
+
+              <div className="flex flex-wrap gap-2">
+                {QUICK_AMOUNTS.filter((q) => q <= eurBalance).map((quick) => (
+                  <Button
+                    key={quick}
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setAmount(String(quick));
+                      if (amountError) setAmountError(null);
+                    }}
+                  >
+                    {formatEUR(quick)}
+                  </Button>
+                ))}
+              </div>
+
+              <ActionBar>
+                <Button onClick={handleReviewAmount} disabled={amountEur <= 0}>
+                  Review deposit
+                </Button>
+              </ActionBar>
+            </div>
+          ) : null}
+
+          {/* Step 5: Review quote */}
+          {manualStep === 4 ? (
+            <div className="space-y-4">
+              <InvestQuote
+                amountEur={amountEur}
+                eurBalance={eurBalance}
+                navPerFsftEur={navPerFsftEur}
+              />
+
+              {submitting ? (
+                <Alert tone="info" title={`Submitting deposit… (${formatEUR(amountEur)})`}>
+                  Generating the private proof and sending two on-chain
+                  transactions — an EUR transfer and your private deposit. This
+                  usually takes 30&ndash;60 seconds; your position updates once the
+                  deposit is included in a block.
+                </Alert>
+              ) : null}
+
+              <div aria-live="polite">
+                {submitError ? (
+                  <Alert tone="danger" title="Deposit failed">{submitError}</Alert>
+                ) : null}
+              </div>
+
+              <ActionBar align="between">
+                <Button
+                  variant="secondary"
+                  onClick={() => goToManualStep(3)}
+                  disabled={submitting}
+                >
+                  Back
+                </Button>
+                <Button onClick={handleConfirm} loading={submitting}>
+                  {submitting ? "Submitting…" : `Confirm deposit of ${formatEUR(amountEur)}`}
+                </Button>
+              </ActionBar>
+            </div>
+          ) : null}
+
+          <p className="text-caption mt-4 text-text-3">
+            After depositing, secondary liquidity is available on Trade, subject
+            to a net-asset-value price band.
+          </p>
+        </Section>
+      ) : null}
+
+      {/* ── Step 6: Confirmation ─────────────────────────────────────────────── */}
+      {result?.success ? (
+        <Section
+          title="Deposit confirmed"
+          description="Your deposit has been included on-chain and your private position is updated."
+          actions={<StatusChip status="completed" label="Included on-chain" />}
+        >
+          <div aria-live="polite" className="space-y-4">
+            <Alert
+              tone="success"
+              title={
+                result.blockNumber != null
+                  ? `Deposit included — block ${result.blockNumber}`
+                  : "Deposit included on-chain"
+              }
+            >
+              Your cash has been transferred and your private position recorded.
+            </Alert>
+
+            <dl className="divide-y divide-border rounded-md border border-border">
+              {result.eurTransferTxHash ? (
+                <div className="flex min-w-0 items-baseline justify-between gap-3 px-4 py-3">
+                  <dt className="text-caption text-text-2">
+                    EUR transfer
+                    {result.eurTransferBlockNumber != null
+                      ? ` · block ${result.eurTransferBlockNumber}`
+                      : ""}
+                  </dt>
+                  <dd className="text-mono min-w-0 truncate text-right text-text-1">
+                    {shortHash(result.eurTransferTxHash)}
+                  </dd>
+                </div>
+              ) : null}
+              <div className="flex min-w-0 items-baseline justify-between gap-3 px-4 py-3">
+                <dt className="text-caption text-text-2">
+                  Private deposit{result.status ? ` · ${result.status}` : ""}
+                </dt>
+                <dd className="text-mono min-w-0 truncate text-right text-text-1">
+                  {shortHash(result.txHash)}
+                </dd>
+              </div>
+            </dl>
+
+            <p className="text-caption text-text-3">
+              Secondary liquidity is available on Trade, subject to a
+              net-asset-value price band.
+            </p>
+
+            <ActionBar align="between">
+              <Link href="/portfolio" className="btn btn-secondary">
+                View your position
+              </Link>
+              <Button onClick={startAnotherDeposit}>Deposit again</Button>
+            </ActionBar>
+          </div>
+        </Section>
+      ) : null}
     </div>
   );
 }

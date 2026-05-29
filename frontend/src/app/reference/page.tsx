@@ -1,144 +1,428 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { PageHero } from "@/components/SimplePage";
-import { fetchChainParams, type ChainParams } from "@/lib/contracts";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  Alert,
+  EmptyState,
+  KpiCard,
+  KpiGrid,
+  LoadingSkeleton,
+  PageHeader,
+  Section,
+  StatusChip,
+  Tabs,
+  type TabItem,
+} from "@/components/ui";
+import {
+  fetchChainParams,
+  fetchRewardsOverview,
+  type ChainParams,
+  type RewardsOverview,
+} from "@/lib/contracts";
 import { formatDuration } from "@/lib/chainParams";
+import {
+  ContractAddressTable,
+  type ContractRow,
+} from "@/components/reference/ContractAddressTable";
+import { ParamTable, type ParamRow } from "@/components/reference/ParamTable";
+import { ProtocolFormulas } from "@/components/reference/ProtocolFormulas";
+import { RewardScheduleTable } from "@/components/reference/RewardScheduleTable";
 
-interface RewardsOverview {
-  currentEpoch: number;
-  token: { distributionPool: number; totalEpochs: number };
-  emittedToDate: number;
+// NEXT_PUBLIC_* values are inlined at build time, so they are readable here in
+// the client bundle. An unset key resolves to "" and renders as "Not deployed"
+// in the table rather than a fabricated zero address.
+const CONTRACT_ROWS: ContractRow[] = [
+  {
+    name: "KYC Verifier",
+    envKey: "NEXT_PUBLIC_KYC_VERIFIER_ADDRESS",
+    address: process.env.NEXT_PUBLIC_KYC_VERIFIER_ADDRESS ?? "",
+    role: "Private investor credentials and role checks",
+  },
+  {
+    name: "Housing Fund",
+    envKey: "NEXT_PUBLIC_HOUSING_FUND_ADDRESS",
+    address: process.env.NEXT_PUBLIC_HOUSING_FUND_ADDRESS ?? "",
+    role: "Private deposits, NAV accounting, distributions",
+  },
+  {
+    name: "Fund Token (FSFT)",
+    envKey: "NEXT_PUBLIC_FUND_TOKEN_ADDRESS",
+    address: process.env.NEXT_PUBLIC_FUND_TOKEN_ADDRESS ?? "",
+    role: "Fund share token",
+  },
+  {
+    name: "EUR Token",
+    envKey: "NEXT_PUBLIC_EUR_TOKEN_ADDRESS",
+    address: process.env.NEXT_PUBLIC_EUR_TOKEN_ADDRESS ?? "",
+    role: "Settlement currency (AIP-20)",
+  },
+  {
+    name: "Dripper",
+    envKey: "NEXT_PUBLIC_DRIPPER_ADDRESS",
+    address: process.env.NEXT_PUBLIC_DRIPPER_ADDRESS ?? "",
+    role: "Test-EUR faucet (test tooling only)",
+  },
+  {
+    name: "Governance",
+    envKey: "NEXT_PUBLIC_GOVERNANCE_ADDRESS",
+    address: process.env.NEXT_PUBLIC_GOVERNANCE_ADDRESS ?? "",
+    role: "Proposals and secret-ballot voting",
+  },
+  {
+    name: "Property NFT",
+    envKey: "NEXT_PUBLIC_PROPERTY_NFT_ADDRESS",
+    address: process.env.NEXT_PUBLIC_PROPERTY_NFT_ADDRESS ?? "",
+    role: "Real-estate deed NFTs (AIP-721)",
+  },
+  {
+    name: "DeFi Vault",
+    envKey: "NEXT_PUBLIC_DEFI_VAULT_ADDRESS",
+    address: process.env.NEXT_PUBLIC_DEFI_VAULT_ADDRESS ?? "",
+    role: "Idle-capital allocation",
+  },
+  {
+    name: "FSFT DEX",
+    envKey: "NEXT_PUBLIC_FSFT_DEX_ADDRESS",
+    address: process.env.NEXT_PUBLIC_FSFT_DEX_ADDRESS ?? "",
+    role: "Private FSFT / EUR secondary market",
+  },
+  {
+    name: "Protocol Rewards",
+    envKey: "NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS",
+    address: process.env.NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS ?? "",
+    role: "FSP emission and claims",
+  },
+  {
+    name: "Protocol Token (FSP)",
+    envKey: "NEXT_PUBLIC_PROTOCOL_TOKEN_ADDRESS",
+    address: process.env.NEXT_PUBLIC_PROTOCOL_TOKEN_ADDRESS ?? "",
+    role: "Protocol reward token",
+  },
+];
+
+const TABS: TabItem[] = [
+  { value: "chain", label: "Chain & limits" },
+  { value: "contracts", label: "Contracts" },
+  { value: "rewards", label: "Rewards" },
+  { value: "formulas", label: "Formulas" },
+];
+const TAB_VALUES = new Set(TABS.map((t) => t.value));
+
+function timingRows(p: ChainParams): ParamRow[] {
+  const t = p.timing;
+  return [
+    { param: "L2 slot / block time", value: `${t.aztecSlotDurationSec}s`, note: "One L2 block per slot" },
+    { param: "L1 block time", value: `${t.ethereumSlotDurationSec}s`, note: "Anvil --block-time" },
+    {
+      param: "Epoch",
+      value: `${t.epochDurationSlots} slots`,
+      note: `${formatDuration(t.epochDurationSec)} at ${t.aztecSlotDurationSec}s/slot`,
+    },
+    { param: "Block production", value: t.blockProductionMode, note: "When the sequencer seals a block" },
+    {
+      param: "Single-tx inclusion",
+      value: `~1 slot (~${t.aztecSlotDurationSec}s)`,
+      note: "Plus client-side proof generation",
+    },
+  ];
 }
 
-function Row({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <div className="flex items-start justify-between gap-4 border-b border-border py-2 last:border-0">
-      <div className="min-w-0">
-        <p className="text-sm text-text-1">{label}</p>
-        {hint && <p className="text-meta text-text-3">{hint}</p>}
-      </div>
-      <p className="shrink-0 text-sm font-semibold text-text-1">{value}</p>
-    </div>
-  );
+function governanceRows(p: ChainParams): ParamRow[] {
+  const g = p.governance;
+  const slot = p.timing.aztecSlotDurationSec;
+  return [
+    {
+      param: "Voting window",
+      value: `${g.votingWindowBlocks} blocks`,
+      note: `≈ ${formatDuration(g.votingWindowSecondsEstimate)} at ${slot}s/block`,
+    },
+    { param: "Quorum", value: `${g.minQuorumVotes} votes`, note: "Minimum total votes for a valid result" },
+    { param: "Vote weight", value: "1 / account", note: "One account, one vote — not token-weighted" },
+    { param: "Pass rule", value: "quorum met & Yes > No", note: "Tallied at finalize" },
+    { param: "Ballot", value: "private", note: "A nullifier prevents double-voting without revealing the voter" },
+  ];
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-2xl border border-border bg-card p-5">
-      <h2 className="text-heading mb-2">{title}</h2>
-      <div>{children}</div>
-    </section>
-  );
+function dexRows(p: ChainParams): ParamRow[] {
+  const d = p.dex;
+  const slot = p.timing.aztecSlotDurationSec;
+  return [
+    {
+      param: "Price band",
+      value: `±${(d.priceBandBps / 100).toFixed(2)}%`,
+      note: `${d.priceBandBps} bps from the reference price`,
+    },
+    {
+      param: "Max order TTL",
+      value: `${d.maxTtlBlocks} blocks`,
+      note: `≈ ${formatDuration(d.maxTtlSecondsEstimate)} at ${slot}s/block`,
+    },
+  ];
+}
+
+function rewardsConfigRows(p: ChainParams, o: RewardsOverview): ParamRow[] {
+  return [
+    { param: "Distribution pool", value: `${o.token.distributionPool.toLocaleString()} ${o.token.symbol}` },
+    { param: "Total supply", value: `${o.token.totalSupply.toLocaleString()} ${o.token.symbol}` },
+    { param: "Schedule", value: `${o.token.years} years`, note: `${o.token.totalEpochs} epochs` },
+    {
+      param: "Weighting",
+      value: `${o.weighting.deposit} / ${o.weighting.fsft} / ${o.weighting.governance}`,
+      note: "Deposit / FSFT / governance (%)",
+    },
+    { param: "Current epoch", value: `${o.currentEpoch}`, note: `${o.epochsRemaining} remaining` },
+    { param: "Emitted to date", value: `${o.emittedToDate.toLocaleString()} ${o.token.symbol}` },
+    { param: "Total claimed", value: `${o.totalClaimed.toLocaleString()} ${o.token.symbol}` },
+    { param: "Remaining pool", value: `${o.remainingPool.toLocaleString()} ${o.token.symbol}` },
+    { param: "Claim minimum", value: `${p.rewards.claimMin} ${o.token.symbol}`, note: "Smallest claimable amount" },
+  ];
+}
+
+function formatFreshness(at: number | null): string {
+  if (at === null) return "—";
+  const secondsAgo = Math.max(0, Math.round((Date.now() - at) / 1000));
+  if (secondsAgo < 5) return "just now";
+  if (secondsAgo < 60) return `${secondsAgo}s ago`;
+  const m = Math.floor(secondsAgo / 60);
+  return `${m}m ago`;
 }
 
 export default function ReferencePage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const tabParam = searchParams.get("tab");
+  const activeTab = tabParam && TAB_VALUES.has(tabParam) ? tabParam : "chain";
+
   const [params, setParams] = useState<ChainParams | null>(null);
-  const [rewards, setRewards] = useState<RewardsOverview | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [overview, setOverview] = useState<RewardsOverview | null>(null);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
+  const [paramsError, setParamsError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [fetchedAt, setFetchedAt] = useState<number | null>(null);
 
   useEffect(() => {
-    fetchChainParams()
-      .then(setParams)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Could not load parameters."));
-    // Rewards overview is a live read and may be slow/unavailable; treat as optional.
-    fetch("/api/rewards/overview", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (d && !d.error) setRewards(d as RewardsOverview);
-      })
-      .catch(() => setRewards(null));
+    let cancelled = false;
+    setLoading(true);
+    // Both reads are independent: chain params come from env/config (always
+    // available); the rewards overview requires live mode and may legitimately
+    // be unavailable. settle each on its own so one failing does not blank both.
+    Promise.allSettled([fetchChainParams(), fetchRewardsOverview()]).then((results) => {
+      if (cancelled) return;
+      const [paramsResult, overviewResult] = results;
+
+      if (paramsResult.status === "fulfilled") {
+        setParams(paramsResult.value);
+        setParamsError(null);
+      } else {
+        setParamsError(
+          paramsResult.reason instanceof Error
+            ? paramsResult.reason.message
+            : "Could not load chain parameters."
+        );
+      }
+
+      if (overviewResult.status === "fulfilled") {
+        setOverview(overviewResult.value);
+        setOverviewError(null);
+      } else {
+        setOverview(null);
+        setOverviewError(
+          overviewResult.reason instanceof Error
+            ? overviewResult.reason.message
+            : "Could not load rewards overview."
+        );
+      }
+
+      setFetchedAt(Date.now());
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const t = params?.timing;
-  const g = params?.governance;
-  const d = params?.dex;
+  const setTab = useCallback(
+    (value: string) => {
+      const next = new URLSearchParams(searchParams.toString());
+      next.set("tab", value);
+      router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams]
+  );
+
+  // Source comes straight from the overview read ("live" | "simulation").
+  // Fall back to "unknown" only when no overview loaded — never invent "live".
+  const mode = overview?.source ?? null;
+  const isSimulation = mode === "simulation";
+
+  const onDemand = params?.timing.blockProductionMode === "on-demand";
+
+  const headerActions = useMemo(
+    () => (
+      <div className="flex flex-wrap items-center gap-2">
+        {mode === "live" ? (
+          <span className="chip chip-neutral" aria-label="Data source: live local network">
+            Live · local network
+          </span>
+        ) : isSimulation ? (
+          <StatusChip status="simulation" />
+        ) : null}
+        <span className="text-caption text-text-3" aria-live="polite">
+          Updated {loading ? "…" : formatFreshness(fetchedAt)}
+        </span>
+      </div>
+    ),
+    [mode, isSimulation, loading, fetchedAt]
+  );
 
   return (
     <div className="space-y-6">
-      <PageHero
-        title="Parameters"
-        subtitle="Chain timing, governance rules, and protocol limits for this local network."
-        ctaHref="/explain"
-        ctaLabel="How it works"
-        badge={false}
+      <PageHeader
+        eyebrow="Protocol reference"
+        title="Parameters & transparency"
+        description="Chain timing, governance and market limits, deployed contract addresses, the reward schedule, and the exact distribution, NAV, and reward formulas this network runs."
+        actions={headerActions}
       />
 
-      {error && (
-        <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
-      )}
+      {paramsError ? (
+        <Alert tone="danger" title="Chain parameters unavailable">
+          {paramsError}
+        </Alert>
+      ) : null}
 
-      {t?.blockProductionMode === "on-demand" && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Blocks are currently produced <strong>on-demand</strong> — a new block is sealed only when there
-          is a transaction, so the chain&apos;s clock advances with activity. Time estimates below assume a
-          steady block every slot (set <code>SEQ_MIN_TX_PER_BLOCK=0</code> on the node for that).
-        </div>
-      )}
+      {onDemand ? (
+        <Alert tone="warning" title="Blocks are produced on-demand">
+          A new block is sealed only when there is a transaction, so the chain’s clock advances with
+          activity. The time estimates below assume a steady block every slot.
+        </Alert>
+      ) : null}
 
-      {!params ? (
-        <div className="rounded-2xl border border-border bg-card p-5 text-sm text-text-3">Loading parameters…</div>
-      ) : (
-        <>
-          <Card title="Chain timing">
-            <Row label="L2 slot / block time" value={`${t!.aztecSlotDurationSec}s`} hint="One L2 block per slot" />
-            <Row label="L1 (Anvil) block time" value={`${t!.ethereumSlotDurationSec}s`} />
-            <Row
-              label="Epoch"
-              value={`${t!.epochDurationSlots} slots (${formatDuration(t!.epochDurationSec)})`}
-            />
-            <Row label="Block production" value={t!.blockProductionMode} />
-            <Row label="Single tx inclusion" value={`~1 slot (~${t!.aztecSlotDurationSec}s)`} hint="Plus client-side proof generation" />
-          </Card>
+      <Tabs tabs={TABS} value={activeTab} onValueChange={setTab} aria-label="Reference sections">
+        {activeTab === "chain" ? (
+          <div className="space-y-6">
+            <Section title="Chain timing" description="L1/L2 block cadence and transaction inclusion.">
+              {loading ? (
+                <LoadingSkeleton lines={5} />
+              ) : params ? (
+                <ParamTable rows={timingRows(params)} caption="Chain timing parameters" />
+              ) : (
+                <EmptyState title="No timing data" description="Chain parameters could not be loaded." />
+              )}
+            </Section>
 
-          <Card title="Governance & voting">
-            <Row
-              label="Voting window"
-              value={`${g!.votingWindowBlocks} blocks`}
-              hint={`≈ ${formatDuration(g!.votingWindowSecondsEstimate)} at ${t!.aztecSlotDurationSec}s/block`}
-            />
-            <Row label="Quorum (votes needed)" value={`${g!.minQuorumVotes}`} hint="Minimum total votes for a valid result" />
-            <Row label="Vote weight" value="1 vote / account" hint="One account, one vote — not token-weighted" />
-            <Row label="Eligibility" value="KYC + fund position" hint="Investor credential plus a deposit or FSFT holding" />
-            <Row label="Pass rule" value="quorum met & Yes > No" />
-            <Row label="Finalize" value="after window closes" hint="Anyone can finalize once the deadline block is reached" />
-            <Row label="Ballot privacy" value="private (1 per account)" hint="A nullifier prevents double-voting without revealing the voter" />
-          </Card>
+            <Section
+              title="Governance & voting"
+              description="Proposal voting window, quorum, and ballot rules."
+            >
+              {loading ? (
+                <LoadingSkeleton lines={5} />
+              ) : params ? (
+                <ParamTable rows={governanceRows(params)} caption="Governance parameters" />
+              ) : (
+                <EmptyState title="No governance data" description="Chain parameters could not be loaded." />
+              )}
+            </Section>
 
-          <Card title="Proposal lifecycle (estimated)">
-            <Row label="1. Create proposal" value="~1 slot" hint="One transaction by an eligible investor" />
-            <Row
-              label="2. Voting open"
-              value={`${g!.votingWindowBlocks} blocks (~${formatDuration(g!.votingWindowSecondsEstimate)})`}
-            />
-            <Row label="3. Finalize" value="~1 slot" hint="Tally and mark passed/failed after the window" />
-            <Row label="4. Execute" value="~1 slot" hint="Opens the distribution for claims" />
-          </Card>
+            <Section
+              title="Secondary market limits (FSFT / EUR)"
+              description="Price band and order time-to-live on the DEX."
+            >
+              {loading ? (
+                <LoadingSkeleton lines={2} />
+              ) : params ? (
+                <ParamTable rows={dexRows(params)} caption="DEX parameters" />
+              ) : (
+                <EmptyState title="No market data" description="Chain parameters could not be loaded." />
+              )}
+            </Section>
+          </div>
+        ) : null}
 
-          <Card title="DEX (FSFT / EUR)">
-            <Row label="Price band" value={`±${(d!.priceBandBps / 100).toFixed(2)}%`} hint="Allowed deviation from the reference price" />
-            <Row
-              label="Max order TTL"
-              value={`${d!.maxTtlBlocks} blocks`}
-              hint={`≈ ${formatDuration(d!.maxTtlSecondsEstimate)} at ${t!.aztecSlotDurationSec}s/block`}
-            />
-          </Card>
+        {activeTab === "contracts" ? (
+          <Section
+            title="Deployed contracts"
+            description="On-chain instance for each protocol component in this environment."
+          >
+            <ContractAddressTable rows={CONTRACT_ROWS} />
+          </Section>
+        ) : null}
 
-          <Card title="Protocol rewards (FSP)">
-            <Row label="Claim minimum" value={`${params.rewards.claimMin} FSP`} />
-            {rewards ? (
-              <>
-                <Row label="Distribution pool" value={rewards.token.distributionPool.toLocaleString()} />
-                <Row label="Total epochs" value={`${rewards.token.totalEpochs}`} />
-                <Row label="Current epoch" value={`${rewards.currentEpoch}`} />
-                <Row label="Emitted to date" value={rewards.emittedToDate.toLocaleString()} />
-              </>
-            ) : (
-              <Row label="Live rewards data" value="unavailable" hint="Connect / live mode required" />
-            )}
-          </Card>
-        </>
-      )}
+        {activeTab === "rewards" ? (
+          <div className="space-y-6">
+            <Section
+              title="Reward pool & weighting (FSP)"
+              description="Emission configuration read from the Protocol Rewards contract."
+            >
+              {loading ? (
+                <LoadingSkeleton lines={6} />
+              ) : overview && params ? (
+                <>
+                  <KpiGrid cols={4} className="mb-5">
+                    <KpiCard
+                      label="Distribution pool"
+                      value={overview.token.distributionPool.toLocaleString()}
+                      sub={`${overview.token.symbol} over ${overview.token.years} years`}
+                    />
+                    <KpiCard
+                      label="Total epochs"
+                      value={overview.token.totalEpochs.toLocaleString()}
+                      sub={`Epoch ${overview.currentEpoch} now`}
+                    />
+                    <KpiCard
+                      label="Emitted to date"
+                      value={overview.emittedToDate.toLocaleString()}
+                      sub={`${overview.totalClaimed.toLocaleString()} claimed`}
+                    />
+                    <KpiCard
+                      label="Weighting"
+                      value={`${overview.weighting.deposit}/${overview.weighting.fsft}/${overview.weighting.governance}`}
+                      sub="Deposit / FSFT / governance"
+                    />
+                  </KpiGrid>
+                  <ParamTable rows={rewardsConfigRows(params, overview)} caption="Reward configuration" />
+                </>
+              ) : (
+                <EmptyState
+                  title="Live rewards data unavailable"
+                  description={
+                    overviewError
+                      ? overviewError
+                      : "The rewards overview requires live mode and a deployed Protocol Rewards contract."
+                  }
+                />
+              )}
+            </Section>
+
+            <Section
+              title="Emission schedule"
+              description="Front-loaded yearly FSP curve from the Protocol Rewards configuration."
+            >
+              {loading ? (
+                <LoadingSkeleton lines={6} />
+              ) : overview ? (
+                <RewardScheduleTable overview={overview} />
+              ) : (
+                <EmptyState
+                  title="No schedule available"
+                  description="The yearly emission curve loads with the rewards overview in live mode."
+                />
+              )}
+            </Section>
+          </div>
+        ) : null}
+
+        {activeTab === "formulas" ? (
+          <Section
+            title="Protocol formulas"
+            description="The exact distribution, NAV, and reward calculations this network runs, as implemented in the contracts and API layer."
+          >
+            <ProtocolFormulas />
+          </Section>
+        ) : null}
+      </Tabs>
     </div>
   );
 }
