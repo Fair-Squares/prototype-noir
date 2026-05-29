@@ -1,8 +1,11 @@
-export { PortfolioHero } from "./PortfolioHero";
-export type { PortfolioHeroProps } from "./PortfolioHero";
+export { PositionSummary } from "./PositionSummary";
+export type { PositionSummaryProps } from "./PositionSummary";
 
-export { AccruedYield } from "./AccruedYield";
-export type { AccruedYieldProps } from "./AccruedYield";
+export { HoldingsBreakdown } from "./HoldingsBreakdown";
+export type { HoldingsBreakdownProps } from "./HoldingsBreakdown";
+
+export { RewardsPanel } from "./RewardsPanel";
+export type { RewardsPanelProps } from "./RewardsPanel";
 
 export { ReadinessSummary } from "./ReadinessSummary";
 export type { ReadinessSummaryProps } from "./ReadinessSummary";
@@ -15,5 +18,3 @@ export type { WithdrawPanelProps } from "./WithdrawPanel";
 
 export { FaucetPanel } from "./FaucetPanel";
 export type { FaucetPanelProps } from "./FaucetPanel";
-
-export { ActionLinks } from "./ActionLinks";

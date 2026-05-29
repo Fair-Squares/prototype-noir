@@ -1,8 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
-  ActionBar,
   Alert,
   Button,
   EmptyState,
@@ -11,12 +11,12 @@ import {
   SkeletonKpi,
 } from "@/components/ui";
 import {
-  AccruedYield,
-  ActionLinks,
   ClaimableByProposal,
   FaucetPanel,
-  PortfolioHero,
+  HoldingsBreakdown,
+  PositionSummary,
   ReadinessSummary,
+  RewardsPanel,
   WithdrawPanel,
 } from "@/components/portfolio";
 import { useWallet } from "@/contexts/WalletContext";
@@ -167,7 +167,22 @@ export default function PortfolioPage() {
       <PageHeader
         eyebrow="Your account"
         title="Portfolio"
-        description="Your position in the housing fund: capital, fund shares, accrued yield, and what you can claim."
+        description="What you own in the housing fund, what it is worth, what is verified, and what you can do next."
+        actions={
+          <>
+            <Link href="/invest" className="btn btn-primary">
+              Invest
+            </Link>
+            {address && rewardsClaimable > 0 && canClaimRewards ? (
+              <Button variant="secondary" onClick={handleClaimRewards} loading={claimingRewards}>
+                {claimingRewards ? "Claiming…" : "Claim rewards"}
+              </Button>
+            ) : null}
+            <Link href="/dex" className="btn btn-ghost">
+              Trade shares
+            </Link>
+          </>
+        }
       />
 
       {error ? (
@@ -184,56 +199,49 @@ export default function PortfolioPage() {
         <Section>
           <EmptyState
             title="Connect your wallet"
-            description="Use the account button in the top-right to view your balances, accrued yield, and claimable rewards."
+            description="Use the account button in the top bar to see your holdings, what they are worth, and what you can claim."
           />
         </Section>
       ) : loading && !portfolio ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
             <SkeletonKpi key={i} />
           ))}
         </div>
       ) : portfolio ? (
         <>
-          <PortfolioHero
+          <PositionSummary
             portfolio={portfolio}
             rewardsClaimable={rewardsClaimable}
             rewardsSymbol={rewardsSymbol}
           />
 
-          <AccruedYield portfolio={portfolio} />
-
-          <div className="grid gap-6 lg:grid-cols-2">
-            <ReadinessSummary kyc={kyc} portfolio={portfolio} />
-
+          <div className="grid gap-6 lg:grid-cols-3">
             <Section
-              title={`Protocol rewards (${rewardsSymbol})`}
-              description="Rewards accrue over the program and can be claimed once an epoch opens."
+              title="Holdings"
+              description="Every balance the fund reports for your account, with its value where one is published."
+              className="lg:col-span-2"
             >
-              <p className="text-kpi text-text-1">
-                {rewardsClaimable.toLocaleString()}
-                <span className="text-caption ml-2 text-text-3">claimable</span>
-              </p>
-              <ActionBar align="start" className="mt-4">
-                <Button
-                  onClick={handleClaimRewards}
-                  loading={claimingRewards}
-                  disabled={!canClaimRewards || claimingRewards}
-                >
-                  {claimingRewards ? "Claiming…" : "Claim rewards"}
-                </Button>
-                <Button variant="ghost" onClick={handleAttestRewards} loading={attesting}>
-                  {attesting ? "Checking…" : "Run private fund-shares check"}
-                </Button>
-              </ActionBar>
-              {!canClaimRewards ? (
-                <p className="text-caption mt-3 text-text-3">
-                  {rewards?.eligibility?.nextSteps?.[0] ??
-                    "Rewards are not claimable yet for this account."}
-                </p>
-              ) : null}
+              <HoldingsBreakdown
+                portfolio={portfolio}
+                rewardsClaimable={rewardsClaimable}
+                rewardsSymbol={rewardsSymbol}
+              />
             </Section>
+
+            <ReadinessSummary kyc={kyc} portfolio={portfolio} />
           </div>
+
+          <RewardsPanel
+            rewardsSymbol={rewardsSymbol}
+            rewardsClaimable={rewardsClaimable}
+            canClaim={canClaimRewards}
+            nextStep={rewards?.eligibility?.nextSteps?.[0]}
+            claiming={claimingRewards}
+            attesting={attesting}
+            onClaim={handleClaimRewards}
+            onRunCheck={handleAttestRewards}
+          />
 
           <Section
             title="Claimable by project"
@@ -245,13 +253,6 @@ export default function PortfolioPage() {
               onClaim={handleClaimProposal}
               disabled={loading}
             />
-          </Section>
-
-          <Section
-            title="Available actions"
-            description="Deposit, trade, or take part in governance."
-          >
-            <ActionLinks />
           </Section>
 
           <Section

@@ -1,13 +1,21 @@
 import { StatusChip, type StatusKind } from "@/components/ui";
+import { displayStatus } from "@/components/governance/governanceStatus";
 import type { ProjectRow } from "./ProjectRow";
 
 /**
- * Maps a project's on-chain lifecycle to a single status chip. Distribution
- * state takes precedence once an executed proposal starts paying out, so a row
- * reads as Claimed / Distributing rather than just "Executed".
+ * A project's single lifecycle chip.
+ *
+ * Pre-funding, this defers entirely to the canonical governance
+ * `displayStatus` so a project reads exactly as its proposal does in the
+ * governance board — Active / Voting ended / Approved / Rejected / Funded —
+ * including the honest "voting ended, awaiting finalisation" state that a naive
+ * status-enum read would miss.
+ *
+ * Once an executed proposal opens its distribution, the payout lifecycle takes
+ * precedence (Distributing → Fully claimed) because that is the more current,
+ * more useful truth for a funded home.
  */
 export function projectStatus(row: ProjectRow): { status: StatusKind; label: string } {
-  // Distribution lifecycle (only meaningful once a deed/payout exists).
   if (row.distributionOpened) {
     const amount = row.distributionAmount ?? 0;
     const claimed = row.distributionClaimed ?? 0;
@@ -17,18 +25,19 @@ export function projectStatus(row: ProjectRow): { status: StatusKind; label: str
     return { status: "open", label: "Distributing" };
   }
 
-  switch (row.status) {
-    case 0:
-      return { status: "active", label: "Voting open" };
-    case 1:
-      return { status: "passed", label: "Approved" };
-    case 2:
-      return { status: "failed", label: "Rejected" };
-    case 3:
-      return { status: "executed", label: "Funded" };
-    default:
-      return { status: "pending", label: "Pending" };
-  }
+  // Reuse the governance board's lifecycle mapping verbatim.
+  const gov = displayStatus(row.proposal);
+  const FALLBACK_LABEL: Record<string, string> = {
+    active: "Voting open",
+    passed: "Approved",
+    failed: "Rejected",
+    executed: "Funded",
+    pending: "Voting ended",
+  };
+  return {
+    status: gov.kind,
+    label: gov.label ?? FALLBACK_LABEL[gov.kind] ?? gov.kind,
+  };
 }
 
 export function ProjectStatusChip({ row }: { row: ProjectRow }) {

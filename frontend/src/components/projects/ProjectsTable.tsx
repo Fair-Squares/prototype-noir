@@ -1,99 +1,36 @@
-import Link from "next/link";
-import {
-  Button,
-  DataTable,
-  EmptyState,
-  type Column,
-} from "@/components/ui";
+import { DataTable, EmptyState, type Column } from "@/components/ui";
 import { formatEUR } from "@/lib/contracts";
+import { votingWindowFor } from "@/components/governance/governanceStatus";
 import type { ProjectRow } from "./ProjectRow";
 import { ProjectStatusChip } from "./ProjectStatusChip";
 
 export interface ProjectsTableProps {
   rows: ProjectRow[];
-  /** Connected wallet address — gates the eligibility/claim column. */
-  address: string | null;
-  /** Proposal id currently being claimed (disables that row's button). */
-  claimingId: number | null;
-  /** Invoke the on-chain claim for a project's distribution. */
-  onClaim: (proposalId: number) => void;
 }
 
-function EligibilityCell({ row, connected }: { row: ProjectRow; connected: boolean }) {
-  if (!connected) {
-    return <span className="text-caption text-text-3">Connect wallet</span>;
-  }
-  if (!row.distributionOpened) {
-    return <span className="text-caption text-text-3">—</span>;
-  }
-  if (row.hasClaimed) {
-    return <span className="text-caption text-text-2">Claimed</span>;
-  }
-  const claimable = row.claimableAmount ?? 0;
-  if (claimable > 0) {
-    return (
-      <span className="text-mono text-[var(--color-success)]">
-        {formatEUR(claimable)}
-      </span>
-    );
-  }
-  return <span className="text-caption text-text-3">Not eligible</span>;
+/** Em dash for an absent on-chain field — kept consistent across columns. */
+function Empty() {
+  return <span className="text-caption text-text-3">—</span>;
 }
 
-function ActionCell({
-  row,
-  connected,
-  claiming,
-  onClaim,
-}: {
-  row: ProjectRow;
-  connected: boolean;
-  claiming: boolean;
-  onClaim: (id: number) => void;
-}) {
-  const canClaim =
-    connected &&
-    row.distributionOpened &&
-    !row.hasClaimed &&
-    (row.claimableAmount ?? 0) > 0;
-
-  return (
-    <div className="flex items-center justify-end gap-2">
-      {canClaim ? (
-        <Button
-          size="sm"
-          variant="primary"
-          loading={claiming}
-          onClick={() => onClaim(row.id)}
-        >
-          {claiming ? "Claiming…" : "Claim"}
-        </Button>
-      ) : null}
-      <Link
-        href={`/governance/${row.id}`}
-        className="btn btn-secondary btn-sm"
-      >
-        {row.status === 0 ? "Vote" : "View"}
-      </Link>
-    </div>
-  );
-}
-
-export function ProjectsTable({ rows, address, claimingId, onClaim }: ProjectsTableProps) {
-  const connected = Boolean(address);
-
+/**
+ * The dense, read-only on-chain view of every funding request. This is the
+ * explorer-style table the design doc reserves for transparency: raw amounts,
+ * deed token ids, distribution snapshots and block windows. The calm primary
+ * flow (claim / vote / your position) lives in the ProjectCard list above; this
+ * table only reports the underlying fields verbatim.
+ */
+export function ProjectsTable({ rows }: ProjectsTableProps) {
   const columns: Column<ProjectRow>[] = [
     {
       key: "project",
-      header: "Project",
+      header: "Request",
       render: (row) => (
         <div className="min-w-0">
-          <span className="text-body font-medium text-text-1">
-            Housing proposal #{row.id}
-          </span>
+          <span className="text-body font-medium text-text-1">#{row.id}</span>
           {row.hasDeed ? (
             <span className="text-caption mt-0.5 block text-text-3">
-              Deed #{row.deedTokenId} held by fund
+              Deed token #{row.deedTokenId}
             </span>
           ) : null}
         </div>
@@ -111,15 +48,37 @@ export function ProjectsTable({ rows, address, claimingId, onClaim }: ProjectsTa
       render: (row) => <ProjectStatusChip row={row} />,
     },
     {
+      key: "votes",
+      header: "Yes / No",
+      align: "right",
+      hideOnMobile: true,
+      render: (row) => (
+        <span className="text-mono text-text-2">
+          {row.yesVotes.toLocaleString()} / {row.noVotes.toLocaleString()}
+        </span>
+      ),
+    },
+    {
+      key: "window",
+      header: "Closes (block)",
+      align: "right",
+      hideOnMobile: true,
+      render: (row) => (
+        <span className="text-mono text-text-2">
+          {votingWindowFor(row.proposal).deadlineBlock.toLocaleString()}
+        </span>
+      ),
+    },
+    {
       key: "pool",
-      header: "Fund-share pool",
+      header: "Distribution pool",
       align: "right",
       hideOnMobile: true,
       render: (row) =>
         row.distributionOpened && row.distributionAmount != null ? (
           <span className="text-mono">{formatEUR(row.distributionAmount)}</span>
         ) : (
-          <span className="text-caption text-text-3">—</span>
+          <Empty />
         ),
     },
     {
@@ -131,7 +90,21 @@ export function ProjectsTable({ rows, address, claimingId, onClaim }: ProjectsTa
         row.distributionOpened && row.distributionClaimed != null ? (
           <span className="text-mono text-text-2">{formatEUR(row.distributionClaimed)}</span>
         ) : (
-          <span className="text-caption text-text-3">—</span>
+          <Empty />
+        ),
+    },
+    {
+      key: "snapshot",
+      header: "Snapshot deposits",
+      align: "right",
+      hideOnMobile: true,
+      render: (row) =>
+        row.distributionSnapshotDeposits != null ? (
+          <span className="text-mono text-text-2">
+            {formatEUR(row.distributionSnapshotDeposits)}
+          </span>
+        ) : (
+          <Empty />
         ),
     },
     {
@@ -143,40 +116,22 @@ export function ProjectsTable({ rows, address, claimingId, onClaim }: ProjectsTa
         row.valuationEur != null ? (
           <span className="text-mono">{formatEUR(row.valuationEur)}</span>
         ) : (
-          <span className="text-caption text-text-3">—</span>
+          <Empty />
         ),
-    },
-    {
-      key: "eligibility",
-      header: "Your eligibility",
-      align: "right",
-      render: (row) => <EligibilityCell row={row} connected={connected} />,
-    },
-    {
-      key: "action",
-      header: <span className="sr-only">Action</span>,
-      align: "right",
-      render: (row) => (
-        <ActionCell
-          row={row}
-          connected={connected}
-          claiming={claimingId === row.id}
-          onClaim={onClaim}
-        />
-      ),
     },
   ];
 
   return (
     <DataTable
-      caption="Housing projects: on-chain proposals, their property deeds, and distributions."
+      dense
+      caption="On-chain fields for every funding request: amounts, votes, distribution pool, snapshot deposits and deed valuation."
       columns={columns}
       rows={rows}
       rowKey={(row) => row.id}
       empty={
         <EmptyState
-          title="No housing projects yet"
-          description="Projects appear here once a funding proposal is created on-chain. Approved proposals become property deeds held by the fund."
+          title="No funding requests on-chain yet"
+          description="Each row appears once a funding proposal is created. Approved requests become property deeds held by the fund."
         />
       }
     />

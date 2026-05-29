@@ -3,50 +3,71 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
+  AdvancedDetails,
   Alert,
   Button,
-  KpiCard,
-  KpiGrid,
-  PageHeader,
   Section,
-  SkeletonKpi,
+  SkeletonRow,
   StatusChip,
 } from "@/components/ui";
-import { NextStepCard, type NextStep } from "@/components/overview/NextStepCard";
+import {
+  FundHealthKpis,
+  FundHealthKpisSkeleton,
+  FundParticipationKpis,
+} from "@/components/overview/FundHealthKpis";
+import { FundingRequestsPreview } from "@/components/overview/FundingRequestsPreview";
+import { DataHealthRail } from "@/components/overview/DataHealthRail";
+import {
+  OverviewNextStep,
+  deriveNextStep,
+} from "@/components/overview/OverviewNextStep";
 import { ProjectsPreview } from "@/components/overview/ProjectsPreview";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   fetchChainParams,
   fetchFundStats,
   fetchKYCProfile,
+  fetchPortfolio,
   fetchProperties,
+  fetchProposals,
   formatEUR,
-  formatEURDecimals,
   type ChainParams,
   type FundStats,
   type KYCProfile,
+  type PortfolioData,
   type PropertyDeed,
+  type Proposal,
 } from "@/lib/contracts";
 
 export default function OverviewPage() {
   const { activeAccount, isConnected, isConnecting, connect } = useWallet();
   const address = activeAccount?.address ?? null;
 
+  // ── System (public) data — independent of any wallet ─────────────────────
   const [stats, setStats] = useState<FundStats | null>(null);
+  const [proposals, setProposals] = useState<Proposal[]>([]);
   const [properties, setProperties] = useState<PropertyDeed[]>([]);
   const [chain, setChain] = useState<ChainParams | null>(null);
-  const [kyc, setKyc] = useState<KYCProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // System-level data: fund stats, properties, chain params. Independent of wallet.
+  // ── Wallet-scoped (private) data — only drives the personalized next step ─
+  const [kyc, setKyc] = useState<KYCProfile | null>(null);
+  const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
+
   useEffect(() => {
     let active = true;
     setLoading(true);
-    Promise.all([fetchFundStats(), fetchProperties(), fetchChainParams()])
-      .then(([nextStats, nextProps, nextChain]) => {
+    Promise.all([
+      fetchFundStats(),
+      fetchProposals(),
+      fetchProperties(),
+      fetchChainParams(),
+    ])
+      .then(([nextStats, nextProposals, nextProps, nextChain]) => {
         if (!active) return;
         setStats(nextStats);
+        setProposals(nextProposals);
         setProperties(nextProps);
         setChain(nextChain);
         setError(null);
@@ -63,10 +84,12 @@ export default function OverviewPage() {
     };
   }, []);
 
-  // Wallet-scoped KYC, used only to pick the personalized next step.
+  // KYC + portfolio are advisory here (they only choose the next-step CTA), so
+  // a wallet-scoped read failure must not break the public overview.
   useEffect(() => {
     if (!address) {
       setKyc(null);
+      setPortfolio(null);
       return;
     }
     let active = true;
@@ -77,30 +100,46 @@ export default function OverviewPage() {
       .catch(() => {
         if (active) setKyc(null);
       });
+    fetchPortfolio(address)
+      .then((data) => {
+        if (active) setPortfolio(data);
+      })
+      .catch(() => {
+        if (active) setPortfolio(null);
+      });
     return () => {
       active = false;
     };
   }, [address]);
 
-  const nextStep = deriveNextStep(isConnected, kyc);
-  const isSimulation = stats?.source === "simulation";
+  const nextStep = deriveNextStep(isConnected, kyc, portfolio);
+  const isSimulation = stats != null && stats.source !== "live";
+  const liveRequests = proposals.filter((p) => p.status === 0).length;
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Overview"
-        title="Fair Squares housing fund"
-        description="A private, affordable-housing investment fund on Aztec. Capital is pooled, deployed to acquire homes through member-approved proposals, and held as on-chain property deeds."
-        actions={
-          isConnected ? (
+      {/* Header — housing-finance framing, no marketing hero */}
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 max-w-2xl">
+          <p className="text-label mb-1.5">Overview</p>
+          <h1 className="text-display text-text-1">Fair Squares housing fund</h1>
+          <p className="text-body mt-2 text-text-2">
+            A private fund that pools capital to acquire affordable homes.
+            Members vote to approve each acquisition; idle capital earns yield
+            while it waits, and every position is held and verified privately
+            on Aztec.
+          </p>
+        </div>
+        <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
+          {isConnected ? (
             <StatusChip status="verified" label={activeAccount?.alias ?? "Connected"} />
           ) : (
             <Button onClick={() => connect()} loading={isConnecting}>
               {isConnecting ? "Connecting…" : "Connect account"}
             </Button>
-          )
-        }
-      />
+          )}
+        </div>
+      </header>
 
       {isSimulation ? (
         <Alert tone="info" title="Simulation data">
@@ -121,71 +160,52 @@ export default function OverviewPage() {
         </Alert>
       ) : null}
 
-      {/* Headline figures */}
-      <KpiGrid cols={4}>
+      {/* Fund health: how much capital is available vs deployed */}
+      <section className="space-y-3" aria-label="Fund health">
         {loading || !stats ? (
-          <>
-            <SkeletonKpi />
-            <SkeletonKpi />
-            <SkeletonKpi />
-            <SkeletonKpi />
-            <SkeletonKpi />
-            <SkeletonKpi />
-            <SkeletonKpi />
-          </>
+          <FundHealthKpisSkeleton />
         ) : (
           <>
-            <KpiCard
-              label="Fund NAV"
-              value={stats.navEur != null ? formatEUR(stats.navEur) : "—"}
-              sub="Net asset value"
-              tone="accent"
-              hint="Total value of the fund: capital plus deployed assets and property deeds."
-            />
-            <KpiCard
-              label="Available capital"
-              value={formatEUR(stats.available)}
-              sub="Ready to deploy"
-            />
-            <KpiCard
-              label="Deployed in DeFi"
-              value={formatEUR(stats.totalInDefi)}
-              sub="Earning while parked"
-              hint="Idle capital parked in DeFi yield while awaiting acquisitions."
-            />
-            <KpiCard
-              label="Allocated to homes"
-              value={formatEUR(stats.totalAllocated)}
-              sub="Acquisitions"
-              hint="Capital committed to property acquisitions through approved proposals."
-            />
-            <KpiCard
-              label="Share supply"
-              value={stats.totalSupply.toLocaleString()}
-              sub={
-                stats.navPerFsftEur != null
-                  ? `${formatEURDecimals(stats.navPerFsftEur)} per share`
-                  : "FSFT shares"
-              }
-              hint="FSFT shares outstanding. Each represents a claim on the fund's net asset value."
-            />
-            <KpiCard
-              label="Investors"
-              value={stats.investorCount.toLocaleString()}
-              sub="Verified members"
-            />
-            <KpiCard
-              label="Active projects"
-              value={properties.length.toLocaleString()}
-              sub="Property deeds held"
-            />
+            <FundHealthKpis stats={stats} />
+            <FundParticipationKpis stats={stats} />
           </>
         )}
-      </KpiGrid>
+      </section>
 
-      {/* Personalized next action */}
-      <NextStepCard
+      {/* What is verified + how fresh the data is */}
+      <DataHealthRail stats={stats} kyc={kyc} isConnected={isConnected} />
+
+      {/* Live funding requests — the deal-room preview, links to Governance */}
+      <Section
+        title="Live funding requests"
+        description={
+          loading
+            ? "Loading current requests…"
+            : liveRequests > 0
+              ? `${liveRequests} request${liveRequests === 1 ? "" : "s"} open for member votes.`
+              : "Proposals to commit fund capital to acquire a home."
+        }
+        actions={
+          <Link href="/governance" className="btn btn-secondary btn-sm">
+            View all requests
+          </Link>
+        }
+      >
+        {loading ? (
+          <div className="space-y-2">
+            <SkeletonRow />
+            <SkeletonRow />
+            <SkeletonRow />
+          </div>
+        ) : (
+          <FundingRequestsPreview proposals={proposals} />
+        )}
+      </Section>
+
+      {/* Your next step — single primary action from real wallet/KYC/portfolio */}
+      <OverviewNextStep
         step={nextStep}
+        portfolio={portfolio}
         connectAction={
           nextStep === "connect"
             ? { onConnect: () => connect(), busy: isConnecting }
@@ -193,63 +213,87 @@ export default function OverviewPage() {
         }
       />
 
-      {/* Active housing projects preview */}
+      {/* Homes the fund already owns — links to the projects deal room */}
       <Section
-        title="Active housing projects"
-        description="Homes the fund has acquired through approved proposals."
+        title="Homes acquired"
+        description="Property deeds the fund holds after an approved acquisition."
         actions={
           <Link href="/fund" className="btn btn-secondary btn-sm">
-            View all projects
+            View all homes
           </Link>
         }
       >
         {loading ? (
-          <SkeletonKpi className="!bg-transparent" />
+          <div className="space-y-2">
+            <SkeletonRow />
+            <SkeletonRow />
+          </div>
         ) : (
           <ProjectsPreview properties={properties} />
         )}
       </Section>
 
-      {/* Parameters footnote — only real chain params, no invented fields */}
-      {chain ? (
-        <Section title="Fund parameters" padding="tight">
+      {/* Raw protocol / parameter detail — opt-in, kept out of the calm flow */}
+      {stats || chain ? (
+        <AdvancedDetails summary="Protocol parameters & raw figures">
           <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
-            <ParamRow
-              label="Governance quorum"
-              value={`${chain.governance.minQuorumVotes.toLocaleString()} votes`}
-            />
-            <ParamRow
-              label="Voting window"
-              value={`${chain.governance.votingWindowBlocks.toLocaleString()} blocks`}
-            />
-            <ParamRow
-              label="Trade price band"
-              value={`±${(chain.dex.priceBandBps / 100).toFixed(2)}%`}
-            />
+            {stats ? (
+              <>
+                <RawRow label="Total deposits" value={formatEUR(stats.totalDeposits)} />
+                <RawRow
+                  label="Lifetime yield"
+                  value={formatEUR(stats.totalYield)}
+                />
+                {stats.parkedAllocationBps != null ? (
+                  <RawRow
+                    label="Parked allocation"
+                    value={`${(stats.parkedAllocationBps / 100).toFixed(2)}%`}
+                  />
+                ) : null}
+                {stats.tokenPriceBps != null ? (
+                  <RawRow
+                    label="Token price"
+                    value={`${(stats.tokenPriceBps / 100).toFixed(2)}%`}
+                  />
+                ) : null}
+                <RawRow label="Data source" value={stats.source ?? "unknown"} />
+              </>
+            ) : null}
+            {chain ? (
+              <>
+                <RawRow
+                  label="Governance quorum"
+                  value={`${chain.governance.minQuorumVotes.toLocaleString()} votes`}
+                />
+                <RawRow
+                  label="Voting window"
+                  value={`${chain.governance.votingWindowBlocks.toLocaleString()} blocks`}
+                />
+                <RawRow
+                  label="Trade price band"
+                  value={`±${(chain.dex.priceBandBps / 100).toFixed(2)}%`}
+                />
+                <RawRow
+                  label="Block production"
+                  value={chain.timing.blockProductionMode}
+                />
+              </>
+            ) : null}
           </dl>
           <p className="text-caption mt-4 text-text-3">
             See{" "}
             <Link href="/reference" className="text-fs-teal-dark hover:underline">
               Reference
             </Link>{" "}
-            for the full parameter set.
+            for the full parameter set, contract addresses, and verifier keys.
           </p>
-        </Section>
+        </AdvancedDetails>
       ) : null}
     </div>
   );
 }
 
-/** Map real wallet + KYC state to the single most relevant next action. */
-function deriveNextStep(isConnected: boolean, kyc: KYCProfile | null): NextStep {
-  if (!isConnected) return "connect";
-  if (!kyc || !kyc.verified) return "verify";
-  // Verified, but no position yet → prompt the first deposit.
-  if (!kyc.hasDepositTicket && !kyc.hasFsftExposure) return "invest";
-  return "portfolio";
-}
-
-function ParamRow({ label, value }: { label: string; value: string }) {
+function RawRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
       <dt className="text-label">{label}</dt>
