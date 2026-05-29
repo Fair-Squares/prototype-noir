@@ -135,11 +135,51 @@ Pattern lives in `noir-projects/noir-contracts/contracts/test/public_immutable_c
 4. ProtocolRewards — allocate_reward_private → RewardClaimNote present; claim_reward_private consumes and re-claim rejected.
 5. FSFTDex — place_order_private → commitment OPEN; cancel_order_private flips to CANCELLED.
 
-## Frontend design system
+## Frontend design system & app shell
 
-Use the type scale defined in `frontend/src/app/globals.css` and the primitives in `frontend/src/components/SimplePage.tsx`. Do not invent new sizes per page.
+The frontend is a **user-facing app, not an admin console**. The north-star
+direction lives in [`docs/frontend-redesign-design-doc.md`](./docs/frontend-redesign-design-doc.md)
+— read it before any frontend work. Core principle: *affordable-housing finance
+first, protocol mechanics second, token mechanics third.* No new dependencies
+(no shadcn/lucide/icon libs); build only on the `@theme` tokens in
+`frontend/src/app/globals.css`, the primitives in `@/components/ui`, and Plus
+Jakarta Sans. Only ever render real on-chain/API data — never invent fields.
 
-- Single font: Plus Jakarta Sans (400 / 500 / 600 / 700).
-- Four sizes: page title (h1 / `.text-display` 28px), section heading (h2 / `.text-heading` 18px), body (16px default), meta (`.text-meta` 14px).
-- Single card style: `rounded-2xl border border-border bg-card p-5`.
-- Reuse `PageHero`, `MetricRow`, `PrimaryCard`, `ActionPanel`, `AdvancedDetails` instead of building per-page chrome.
+### App shell (`@/components/shell`)
+
+There is **no left sidebar**. The only persistent chrome is a single calm
+**top bar** (`shell/TopBar.tsx`) over a single full-width `max-w-6xl` content
+column (`app/layout.tsx`): brand · primary tabs · "More" disclosure · TrustChip
+· runtime (live/sim) chip · wallet. Mobile uses `shell/MobileDrawer.tsx`
+(accessible slide-over) + a tab scroll strip. `shell/ShellProvider.tsx` holds
+open-state. Privacy is shown as assurance via `shell/TrustChip.tsx` (a compact
+worst-of-state summary expanding to the `ui/ProofRail` data).
+
+Navigation tiers live in `frontend/src/lib/nav.ts`: `PRIMARY_ITEMS` (everyday:
+Overview, Projects, Portfolio, Invest, Governance) vs `MORE_ACCOUNT_ITEMS`
+(Trade, Rewards, Verification) vs `MORE_REFERENCE_ITEMS` (Reference, Explain).
+**Trade is never central.** Keep Reference + Explain reachable but demoted.
+
+### Primitives — import from `@/components/ui`
+
+Reuse these; do **not** build per-page chrome or invent type sizes:
+`PageHeader`, `Section`, `KpiGrid`/`KpiCard`, `DataTable`, `StatusChip`,
+`ProofChip`, `Tabs`, `Stepper`, `FormField`, `Button`, `Alert`, `EmptyState`,
+`LoadingSkeleton`/`SkeletonKpi`/`SkeletonRow`, `ActionBar`, `ProofRail`.
+
+- **Type scale** (classes in `globals.css`): `.text-kpi` · `.text-heading` ·
+  `.text-label` · `.text-body` · `.text-caption` · `.text-mono`. Don't repeat
+  one-off `text-xs uppercase tracking-wide` — use the label class.
+- **Progressive disclosure** — advanced is always opt-in. Wrap dense/technical
+  detail in `ui/AdvancedDetails`; never put it in the primary flow.
+- **Tooltips/help** — use `ui/Tooltip` + `InfoDot` (dependency-free, accessible:
+  hover/focus/Escape, `aria-describedby`). Add an `InfoDot` next to a term
+  rather than a paragraph of explanation.
+- **Status** — `StatusChip` kinds, never color alone. Past-deadline-but-still-
+  ACTIVE governance proposals must show "Voting ended" via
+  `governanceStatus.displayStatus()`, not the raw on-chain status.
+- Font: Plus Jakarta Sans (400/500/600/700), self-hosted via `next/font`.
+
+`SimplePage.tsx` is legacy (only `explain` still uses it) — migrate off it, do
+not extend it. Any client page reading `useSearchParams()` must be wrapped in a
+`<Suspense>` boundary or the Vercel static build fails.
