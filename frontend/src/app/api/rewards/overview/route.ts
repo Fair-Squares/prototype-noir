@@ -48,16 +48,30 @@ export async function GET() {
       return NextResponse.json({ error: "NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS not set" }, { status: 500 });
     }
 
-    const { getTestAccount } = await import("@/lib/serverWallet");
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
-    const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
+    // These module imports + the wallet/artifact loads are all independent
+    // of each other, so resolve them concurrently (fastest single load
+    // instead of the sum). loadGeneratedArtifactJson is memoized, so a
+    // concurrent call is safe.
+    const [
+      { getTestAccount },
+      { Contract },
+      { loadContractArtifact },
+      { AztecAddress },
+      { loadGeneratedArtifactJson },
+    ] = await Promise.all([
+      import("@/lib/serverWallet"),
+      import("@aztec/aztec.js/contracts"),
+      import("@aztec/aztec.js/abi"),
+      import("@aztec/aztec.js/addresses"),
+      import("@/lib/artifactLoader"),
+    ]);
 
-    const admin = await getTestAccount(0);
+    const [admin, RewardsJson] = await Promise.all([
+      getTestAccount(0),
+      loadGeneratedArtifactJson("protocol_rewards-ProtocolRewards.json"),
+    ]);
     const from = AztecAddress.fromString(admin.address);
 
-    const RewardsJson = await loadGeneratedArtifactJson("protocol_rewards-ProtocolRewards.json");
     const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
     const rewardsContract = await Contract.at(AztecAddress.fromString(rewardsAddr), rewardsArtifact, admin.wallet);
 

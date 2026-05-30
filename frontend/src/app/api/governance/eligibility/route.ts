@@ -54,21 +54,23 @@ export async function GET(request: NextRequest) {
       loadGeneratedArtifactJson("token_contract-Token.json"),
     ]);
 
-    const kycContract = await Contract.at(
-      AztecAddress.fromString(kycAddr),
-      loadContractArtifact(kycJson as Parameters<typeof loadContractArtifact>[0]),
-      actor.wallet
-    );
-    const hfContract = await Contract.at(
-      AztecAddress.fromString(housingFundAddr),
-      loadContractArtifact(hfJson as Parameters<typeof loadContractArtifact>[0]),
-      actor.wallet
-    );
-    const ftContract = await Contract.at(
-      AztecAddress.fromString(fundTokenAddr),
-      loadContractArtifact(ftJson as Parameters<typeof loadContractArtifact>[0]),
-      actor.wallet
-    );
+    const [kycContract, hfContract, ftContract] = await Promise.all([
+      Contract.at(
+        AztecAddress.fromString(kycAddr),
+        loadContractArtifact(kycJson as Parameters<typeof loadContractArtifact>[0]),
+        actor.wallet
+      ),
+      Contract.at(
+        AztecAddress.fromString(housingFundAddr),
+        loadContractArtifact(hfJson as Parameters<typeof loadContractArtifact>[0]),
+        actor.wallet
+      ),
+      Contract.at(
+        AztecAddress.fromString(fundTokenAddr),
+        loadContractArtifact(ftJson as Parameters<typeof loadContractArtifact>[0]),
+        actor.wallet
+      ),
+    ]);
 
     // V2 eligibility: count private notes instead of reading public maps.
     // FSFT exposure is now the AIP-20 public balance (balance_of_public > 0).

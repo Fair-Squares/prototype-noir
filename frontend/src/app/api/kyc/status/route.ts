@@ -76,17 +76,22 @@ export async function GET(request: NextRequest) {
     }
 
     // Use admin wallet to query (utility functions are read-only, no signing needed)
-    const { getTestAccount } = await import("@/lib/serverWallet");
+    // Module imports + the admin wallet load are independent of each other.
+    const [
+      { getTestAccount },
+      { Contract },
+      { loadContractArtifact },
+      { AztecAddress },
+      { loadGeneratedArtifactJson },
+    ] = await Promise.all([
+      import("@/lib/serverWallet"),
+      import("@aztec/aztec.js/contracts"),
+      import("@aztec/aztec.js/abi"),
+      import("@aztec/aztec.js/addresses"),
+      import("@/lib/artifactLoader"),
+    ]);
     const admin = await getTestAccount(0);
     const wallet = admin.wallet;
-
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
-    const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
-    const KycArtifactJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
-    const kycArtifact = loadContractArtifact(KycArtifactJson as Parameters<typeof loadContractArtifact>[0]);
-    const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet);
 
     const userAddress = AztecAddress.fromString(address);
     // Read the user's OWN private notes from their account scope. Simulating
@@ -94,12 +99,54 @@ export async function GET(request: NextRequest) {
     // notes, so we use the queried address (all local test accounts are
     // registered in the server PXE) as the `from` for these reads.
     const readFrom = userAddress;
+
+    // All artifact loads are independent (memoized loader is concurrency-safe),
+    // as are the three Contract.at instantiations once the wallet exists. The
+    // HF/FT block is gated on env vars, not on the KYC result, so it runs
+    // alongside the KYC read rather than after it.
+    const hasHfFt = Boolean(housingFundAddr && fundTokenAddr);
+    const [KycArtifactJson, HfArtifactJson, FtArtifactJson] = await Promise.all([
+      loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json"),
+      hasHfFt ? loadGeneratedArtifactJson("housing_fund-HousingFund.json") : Promise.resolve(null),
+      hasHfFt ? loadGeneratedArtifactJson("token_contract-Token.json") : Promise.resolve(null),
+    ]);
+    const kycArtifact = loadContractArtifact(KycArtifactJson as Parameters<typeof loadContractArtifact>[0]);
+    const [kycContract, hfContract, ftContract] = await Promise.all([
+      Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet),
+      hasHfFt
+        ? Contract.at(
+            AztecAddress.fromString(housingFundAddr),
+            loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]),
+            wallet
+          )
+        : Promise.resolve(null),
+      hasHfFt
+        ? Contract.at(
+            AztecAddress.fromString(fundTokenAddr),
+            loadContractArtifact(FtArtifactJson as Parameters<typeof loadContractArtifact>[0]),
+            wallet
+          )
+        : Promise.resolve(null),
+    ]);
+
     // V2: a user is "verified investor" iff they own a non-revoked KYC
     // credential note. Replaces the V1 public is_verified / is_investor
     // map lookups, which leaked address→KYC linkage in public state.
-    const credentialsResult = simResult<{ len: bigint }>(
-      await kycContract.methods.get_my_kyc_credentials(userAddress, 0).simulate({ from: readFrom })
-    );
+    // V2: deposit-ticket existence = "does the user own ≥1 DepositNote?"
+    // FSFT exposure uses the AIP-20 token's public balance check. The V2
+    // token has no private-holder-proof primitive, so exposure is the
+    // public balance alone. All three reads are independent.
+    const [credentialsRaw, depositNotesRaw, fsftPublicBalance] = await Promise.all([
+      kycContract.methods.get_my_kyc_credentials(userAddress, 0).simulate({ from: readFrom }),
+      hasHfFt
+        ? hfContract!.methods.get_my_deposit_notes(userAddress, 0).simulate({ from: readFrom })
+        : Promise.resolve(null),
+      hasHfFt
+        ? ftContract!.methods.balance_of_public(userAddress).simulate({ from: readFrom })
+        : Promise.resolve(null),
+    ]);
+
+    const credentialsResult = simResult<{ len: bigint }>(credentialsRaw);
     const isInvestor = credentialsResult.len > 0n;
     const verified = isInvestor;
     const roles: string[] = [];
@@ -107,26 +154,9 @@ export async function GET(request: NextRequest) {
 
     let hasDepositTicket = false;
     let hasFsftExposure = false;
-    if (housingFundAddr && fundTokenAddr) {
-      const [HfArtifactJson, FtArtifactJson] = await Promise.all([
-        loadGeneratedArtifactJson("housing_fund-HousingFund.json"),
-        loadGeneratedArtifactJson("token_contract-Token.json"),
-      ]);
-      const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
-      const ftArtifact = loadContractArtifact(FtArtifactJson as Parameters<typeof loadContractArtifact>[0]);
-      const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, wallet);
-      const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, wallet);
-      // V2: deposit-ticket existence = "does the user own ≥1 DepositNote?"
-      const depositNotesResult = simResult<{ len: bigint }>(
-        await hfContract.methods.get_my_deposit_notes(userAddress, 0).simulate({ from: readFrom })
-      );
+    if (hasHfFt) {
+      const depositNotesResult = simResult<{ len: bigint }>(depositNotesRaw);
       hasDepositTicket = depositNotesResult.len > 0n;
-      // FSFT exposure uses the AIP-20 token's public balance check. The V2
-      // token has no private-holder-proof primitive, so exposure is the
-      // public balance alone.
-      const fsftPublicBalance = await ftContract.methods
-        .balance_of_public(userAddress)
-        .simulate({ from: readFrom });
       hasFsftExposure = Number(simResult(fsftPublicBalance)) > 0;
     }
     const canVote = Boolean(isInvestor) && (hasDepositTicket || hasFsftExposure);

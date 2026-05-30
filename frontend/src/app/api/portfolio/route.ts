@@ -90,69 +90,177 @@ export async function GET(request: NextRequest) {
     let rewardsClaimable = 0;
     let investorRole = false;
 
-    const KycJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
-    const kycArtifact = loadContractArtifact(KycJson as Parameters<typeof loadContractArtifact>[0]);
-    const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet);
+    // All of the on-chain reads below are independent of one another: each
+    // contract's artifact load + Contract.at + .simulate() consumes only the
+    // request inputs (addresses, wallet), never another read's result. Fire
+    // them as parallel async blocks so the route's latency is the slowest
+    // single read instead of the sum of all reads. The conditional blocks
+    // (defiVault / protocolToken / protocolRewards) resolve to their default
+    // when the address env var is unset, exactly as the sequential code did.
+
     // V2: investor status = "does this account own a non-revoked KYC credential note?"
-    const credentialsResult = simResult<{ len: bigint }>(
-      await kycContract.methods.get_my_kyc_credentials(ownerAddr, 0).simulate({ from: selectedAddr })
-    );
-    investorRole = credentialsResult.len > 0n;
+    const kycRead = (async () => {
+      const KycJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
+      const kycArtifact = loadContractArtifact(KycJson as Parameters<typeof loadContractArtifact>[0]);
+      const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet);
+      const credentialsResult = simResult<{ len: bigint }>(
+        await kycContract.methods.get_my_kyc_credentials(ownerAddr, 0).simulate({ from: selectedAddr })
+      );
+      return credentialsResult.len > 0n;
+    })();
 
     // EUR is an AIP-20 token (vendored standards): balance_of_private (utility)
     // and balance_of_public (view).
-    const EurJson = await loadGeneratedArtifactJson("token_contract-Token.json");
-    const eurArtifact = loadContractArtifact(EurJson as Parameters<typeof loadContractArtifact>[0]);
-    const eurContract = await Contract.at(AztecAddress.fromString(eurTokenAddr), eurArtifact, wallet);
-    const privateEur = toNumberStrict(
-      simResult(await eurContract.methods.balance_of_private(ownerAddr).simulate({ from: selectedAddr })),
-      "EURToken.balance_of_private"
-    );
-    const publicEur = toNumberStrict(
-      simResult(await eurContract.methods.balance_of_public(ownerAddr).simulate({ from: selectedAddr })),
-      "EURToken.balance_of_public"
-    );
-    eurBalance = privateEur + publicEur;
+    const eurRead = (async () => {
+      const EurJson = await loadGeneratedArtifactJson("token_contract-Token.json");
+      const eurArtifact = loadContractArtifact(EurJson as Parameters<typeof loadContractArtifact>[0]);
+      const eurContract = await Contract.at(AztecAddress.fromString(eurTokenAddr), eurArtifact, wallet);
+      const [privateEur, publicEur] = await Promise.all([
+        eurContract.methods
+          .balance_of_private(ownerAddr)
+          .simulate({ from: selectedAddr })
+          .then((r) => toNumberStrict(simResult(r), "EURToken.balance_of_private")),
+        eurContract.methods
+          .balance_of_public(ownerAddr)
+          .simulate({ from: selectedAddr })
+          .then((r) => toNumberStrict(simResult(r), "EURToken.balance_of_public")),
+      ]);
+      return privateEur + publicEur;
+    })();
 
-    const FtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
-    const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);
-    const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, wallet);
-    const privateFsft = toNumberStrict(
-      simResult(await ftContract.methods.balance_of_private(ownerAddr).simulate({ from: selectedAddr })),
-      "FundToken.balance_of_private"
-    );
-    publicFsftBalance = toNumberStrict(
-      simResult(await ftContract.methods.balance_of_public(ownerAddr).simulate({ from: selectedAddr })),
-      "FundToken.balance_of_public"
-    );
+    const ftRead = (async () => {
+      const FtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
+      const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);
+      const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, wallet);
+      const [privateFsft, publicFsft, supply] = await Promise.all([
+        ftContract.methods
+          .balance_of_private(ownerAddr)
+          .simulate({ from: selectedAddr })
+          .then((r) => toNumberStrict(simResult(r), "FundToken.balance_of_private")),
+        ftContract.methods
+          .balance_of_public(ownerAddr)
+          .simulate({ from: selectedAddr })
+          .then((r) => toNumberStrict(simResult(r), "FundToken.balance_of_public")),
+        ftContract.methods
+          .total_supply()
+          .simulate({ from: selectedAddr })
+          .then((r) => toNumberStrict(simResult(r), "FundToken.total_supply")),
+      ]);
+      return { privateFsft, publicFsft, supply };
+    })();
+
+    const hfRead = (async () => {
+      const HfJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
+      const hfArtifact = loadContractArtifact(HfJson as Parameters<typeof loadContractArtifact>[0]);
+      const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, wallet);
+
+      const [stats, depositNotesResult, valuation] = await Promise.all([
+        hfContract.methods
+          .get_fund_stats()
+          .simulate({ from: selectedAddr })
+          .then((r) =>
+            simResult<{
+              total_deposits: bigint;
+              total_in_defi: bigint;
+              total_allocated: bigint;
+              available: bigint;
+            }>(r)
+          ),
+        // V2: sum the caller's private DepositNotes from their PXE-side set.
+        // This replaces the V1 public deposit_tickets[ownerAddr] map read so
+        // the per-user deposit position is no longer exposed in public state.
+        // get_my_deposit_notes returns BoundedVec<HintedNote<DepositNote>>, so each
+        // storage entry is a HintedNote whose payload is under `.note` (the amount
+        // lives at `.note.amount`, not directly on the hint wrapper).
+        hfContract.methods
+          .get_my_deposit_notes(ownerAddr, 0)
+          .simulate({ from: selectedAddr })
+          .then((r) =>
+            simResult<{
+              len: bigint;
+              storage: Array<{ note?: { amount?: bigint } } | undefined>;
+            }>(r)
+          ),
+        hfContract.methods
+          .get_valuation()
+          .simulate({ from: selectedAddr })
+          .then((r) =>
+            simResult<{
+              last_asset_sale_price: bigint;
+              last_fsft_minted: bigint;
+              last_token_price_bps: bigint;
+              last_valuation_block: bigint;
+            }>(r)
+          ),
+      ]);
+      return { stats, depositNotesResult, valuation };
+    })();
+
+    const dvRead = defiVaultAddr
+      ? (async () => {
+          const DvJson = await loadGeneratedArtifactJson("defi_vault-DeFiVault.json");
+          const dvArtifact = loadContractArtifact(DvJson as Parameters<typeof loadContractArtifact>[0]);
+          const dvContract = await Contract.at(AztecAddress.fromString(defiVaultAddr), dvArtifact, wallet);
+          return toNumberStrict(
+            simResult(await dvContract.methods.get_accrued_yield().simulate({ from: selectedAddr })),
+            "DeFiVault.get_accrued_yield"
+          );
+        })()
+      : Promise.resolve(0);
+
+    const ptRead = protocolTokenAddr
+      ? (async () => {
+          const PtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
+          const ptArtifact = loadContractArtifact(PtJson as Parameters<typeof loadContractArtifact>[0]);
+          const ptContract = await Contract.at(AztecAddress.fromString(protocolTokenAddr), ptArtifact, wallet);
+          const [privateProtocol, publicProtocol] = await Promise.all([
+            ptContract.methods
+              .balance_of_private(ownerAddr)
+              .simulate({ from: selectedAddr })
+              .then((r) => toNumberStrict(simResult(r), "ProtocolToken.balance_of_private")),
+            ptContract.methods
+              .balance_of_public(ownerAddr)
+              .simulate({ from: selectedAddr })
+              .then((r) => toNumberStrict(simResult(r), "ProtocolToken.balance_of_public")),
+          ]);
+          return privateProtocol + publicProtocol;
+        })()
+      : Promise.resolve(0);
+
+    const rewardsRead = protocolRewardsAddr
+      ? (async () => {
+          const RewardsJson = await loadGeneratedArtifactJson("protocol_rewards-ProtocolRewards.json");
+          const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
+          const rewardsContract = await Contract.at(
+            AztecAddress.fromString(protocolRewardsAddr),
+            rewardsArtifact,
+            wallet
+          );
+          return toNumberStrict(
+            simResult(await rewardsContract.methods.get_claimable(ownerAddr).simulate({ from: selectedAddr })),
+            "ProtocolRewards.get_claimable"
+          );
+        })()
+      : Promise.resolve(0);
+
+    const [investorRoleResult, eurResult, ftResult, hfResult, dvResult, ptResult, rewardsResult] =
+      await Promise.all([kycRead, eurRead, ftRead, hfRead, dvRead, ptRead, rewardsRead]);
+
+    investorRole = investorRoleResult;
+
+    eurBalance = eurResult;
+
+    const { privateFsft, publicFsft, supply } = ftResult;
+    publicFsftBalance = publicFsft;
     fsftBalance = privateFsft + publicFsftBalance;
-    totalSupply = toNumberStrict(simResult(await ftContract.methods.total_supply().simulate({ from: selectedAddr })), "FundToken.total_supply");
+    totalSupply = supply;
 
-    const HfJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
-    const hfArtifact = loadContractArtifact(HfJson as Parameters<typeof loadContractArtifact>[0]);
-    const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, wallet);
-
-    const stats = simResult<{
-      total_deposits: bigint;
-      total_in_defi: bigint;
-      total_allocated: bigint;
-      available: bigint;
-    }>(await hfContract.methods.get_fund_stats().simulate({ from: selectedAddr }));
+    const { stats, depositNotesResult, valuation } = hfResult;
     totalFundDeposits = toNumberStrict(stats.total_deposits, "HousingFund.get_fund_stats.total_deposits");
     totalInDefi = toNumberStrict(stats.total_in_defi, "HousingFund.get_fund_stats.total_in_defi");
     totalAllocated = toNumberStrict(stats.total_allocated, "HousingFund.get_fund_stats.total_allocated");
     available = toNumberStrict(stats.available, "HousingFund.get_fund_stats.available");
 
-    // V2: sum the caller's private DepositNotes from their PXE-side set.
-    // This replaces the V1 public deposit_tickets[ownerAddr] map read so
-    // the per-user deposit position is no longer exposed in public state.
-    // get_my_deposit_notes returns BoundedVec<HintedNote<DepositNote>>, so each
-    // storage entry is a HintedNote whose payload is under `.note` (the amount
-    // lives at `.note.amount`, not directly on the hint wrapper).
-    const depositNotesResult = simResult<{
-      len: bigint;
-      storage: Array<{ note?: { amount?: bigint } } | undefined>;
-    }>(await hfContract.methods.get_my_deposit_notes(ownerAddr, 0).simulate({ from: selectedAddr }));
     const depositNotesLen = Number(depositNotesResult.len);
     let depositSum = 0;
     for (let i = 0; i < depositNotesLen; i++) {
@@ -161,54 +269,13 @@ export async function GET(request: NextRequest) {
     }
     depositTicket = depositSum;
 
-    const valuation = simResult<{
-      last_asset_sale_price: bigint;
-      last_fsft_minted: bigint;
-      last_token_price_bps: bigint;
-      last_valuation_block: bigint;
-    }>(await hfContract.methods.get_valuation().simulate({ from: selectedAddr }));
     lastAssetSalePrice = toNumberStrict(valuation.last_asset_sale_price, "HousingFund.get_valuation.last_asset_sale_price");
     lastFsftMinted = toNumberStrict(valuation.last_fsft_minted, "HousingFund.get_valuation.last_fsft_minted");
     tokenPriceBps = toNumberStrict(valuation.last_token_price_bps, "HousingFund.get_valuation.last_token_price_bps");
 
-    if (defiVaultAddr) {
-      const DvJson = await loadGeneratedArtifactJson("defi_vault-DeFiVault.json");
-      const dvArtifact = loadContractArtifact(DvJson as Parameters<typeof loadContractArtifact>[0]);
-      const dvContract = await Contract.at(AztecAddress.fromString(defiVaultAddr), dvArtifact, wallet);
-      totalYield = toNumberStrict(
-        simResult(await dvContract.methods.get_accrued_yield().simulate({ from: selectedAddr })),
-        "DeFiVault.get_accrued_yield"
-      );
-    }
-
-    if (protocolTokenAddr) {
-      const PtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
-      const ptArtifact = loadContractArtifact(PtJson as Parameters<typeof loadContractArtifact>[0]);
-      const ptContract = await Contract.at(AztecAddress.fromString(protocolTokenAddr), ptArtifact, wallet);
-      const privateProtocol = toNumberStrict(
-        simResult(await ptContract.methods.balance_of_private(ownerAddr).simulate({ from: selectedAddr })),
-        "ProtocolToken.balance_of_private"
-      );
-      const publicProtocol = toNumberStrict(
-        simResult(await ptContract.methods.balance_of_public(ownerAddr).simulate({ from: selectedAddr })),
-        "ProtocolToken.balance_of_public"
-      );
-      protocolTokenBalance = privateProtocol + publicProtocol;
-    }
-
-    if (protocolRewardsAddr) {
-      const RewardsJson = await loadGeneratedArtifactJson("protocol_rewards-ProtocolRewards.json");
-      const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
-      const rewardsContract = await Contract.at(
-        AztecAddress.fromString(protocolRewardsAddr),
-        rewardsArtifact,
-        wallet
-      );
-      rewardsClaimable = toNumberStrict(
-        simResult(await rewardsContract.methods.get_claimable(ownerAddr).simulate({ from: selectedAddr })),
-        "ProtocolRewards.get_claimable"
-      );
-    }
+    totalYield = dvResult;
+    protocolTokenBalance = ptResult;
+    rewardsClaimable = rewardsResult;
 
     const sharePercent = totalSupply > 0 ? Math.round((fsftBalance / totalSupply) * 10000) / 100 : 0;
     const tokenPriceEur = tokenPriceBps > 0 ? tokenPriceBps / 10000 : 0;

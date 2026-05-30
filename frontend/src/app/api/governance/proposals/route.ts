@@ -83,34 +83,55 @@ export async function GET(request: NextRequest) {
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
-    const reader = await getTestAccount(accountIndex);
+    const [reader, GovArtifactJson, HfArtifactJson] = await Promise.all([
+      getTestAccount(accountIndex),
+      loadGeneratedArtifactJson("governance-Governance.json"),
+      loadGeneratedArtifactJson("housing_fund-HousingFund.json"),
+    ]);
     const wallet = reader.wallet;
     const from = AztecAddress.fromString(reader.address);
 
-    const GovArtifactJson = await loadGeneratedArtifactJson("governance-Governance.json");
-    const HfArtifactJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
     const govArtifact = loadContractArtifact(GovArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
 
-    const govContract = await Contract.at(AztecAddress.fromString(govAddr), govArtifact, wallet);
-    const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, wallet);
+    const [govContract, hfContract] = await Promise.all([
+      Contract.at(AztecAddress.fromString(govAddr), govArtifact, wallet),
+      Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, wallet),
+    ]);
 
-    const count = Number(simResult(await govContract.methods.get_proposal_count().simulate({ from })));
-    const currentBlock = await getBlockNumber();
-    const quorum = Number(simResult(await govContract.methods.get_min_quorum_votes().simulate({ from })));
+    const [count, currentBlock, quorum] = await Promise.all([
+      govContract.methods.get_proposal_count().simulate({ from }).then((r) => Number(simResult(r))),
+      getBlockNumber(),
+      govContract.methods.get_min_quorum_votes().simulate({ from }).then((r) => Number(simResult(r))),
+    ]);
     const requestedAddress = address ? AztecAddress.fromString(address) : null;
 
     const proposals = await Promise.all(
       Array.from({ length: count }, async (_, id) => {
-        const proposal = simResult<{
-          desc_hash: bigint;
-          amount: bigint;
-          yes_votes: bigint;
-          no_votes: bigint;
-          status: bigint;
-          created_block: bigint;
-          deadline_block: bigint;
-        }>(await govContract.methods.get_proposal(id).simulate({ from }));
+        const [proposal, distribution] = await Promise.all([
+          govContract.methods.get_proposal(id).simulate({ from }).then((r) =>
+            simResult<{
+              desc_hash: bigint;
+              amount: bigint;
+              yes_votes: bigint;
+              no_votes: bigint;
+              status: bigint;
+              created_block: bigint;
+              deadline_block: bigint;
+            }>(r)
+          ),
+          hfContract.methods.get_distribution_status(id).simulate({ from }).then((r) =>
+            simResult<{
+              open: boolean;
+              amount: bigint;
+              snapshot_total: bigint;
+              small_total: bigint;
+              small_pool: bigint;
+              fifo_cap: bigint;
+              claimed_total: bigint;
+            }>(r)
+          ),
+        ]);
 
         const descHash = toBigIntStrict(proposal.desc_hash, `Governance.get_proposal(${id}).desc_hash`);
         const amount = Number(toBigIntStrict(proposal.amount, `Governance.get_proposal(${id}).amount`));
@@ -121,15 +142,6 @@ export async function GET(request: NextRequest) {
         const deadlineBlock = Number(toBigIntStrict(proposal.deadline_block, `Governance.get_proposal(${id}).deadline_block`));
         const totalVotes = yesVotes + noVotes;
 
-        const distribution = simResult<{
-          open: boolean;
-          amount: bigint;
-          snapshot_total: bigint;
-          small_total: bigint;
-          small_pool: bigint;
-          fifo_cap: bigint;
-          claimed_total: bigint;
-        }>(await hfContract.methods.get_distribution_status(id).simulate({ from }));
         const distributionOpened = Boolean(distribution.open);
         const distributionAmount = Number(
           toBigIntStrict(distribution.amount, `HousingFund.get_distribution_status(${id}).amount`)
@@ -155,26 +167,36 @@ export async function GET(request: NextRequest) {
             )
           );
           if (recordCount > 0) {
+            const records = await Promise.all(
+              Array.from({ length: recordCount }, async (__, index) => {
+                const record = simResult<{
+                  seq: bigint;
+                  amount: bigint;
+                  cum_before: bigint;
+                  is_small: boolean;
+                }>(await hfContract.methods.get_my_deposit_record(requestedAddress, index).simulate({ from }));
+                const seq = toBigIntStrict(record.seq, `HousingFund.get_my_deposit_record(${id},${index}).seq`);
+                const [recordClaimedRaw, claimableRaw] = await Promise.all([
+                  hfContract.methods.has_claimed(id, requestedAddress, seq).simulate({ from }),
+                  hfContract.methods.get_claimable_amount(id, requestedAddress, seq).simulate({ from }),
+                ]);
+                const recordClaimed = Boolean(simResult(recordClaimedRaw));
+                const claimable = recordClaimed
+                  ? 0
+                  : Number(
+                      toBigIntStrict(
+                        simResult(claimableRaw),
+                        `HousingFund.get_claimable_amount(${id},${seq})`
+                      )
+                    );
+                return { recordClaimed, claimable };
+              })
+            );
             let allClaimed = true;
-            for (let index = 0; index < recordCount; index += 1) {
-              const record = simResult<{
-                seq: bigint;
-                amount: bigint;
-                cum_before: bigint;
-                is_small: boolean;
-              }>(await hfContract.methods.get_my_deposit_record(requestedAddress, index).simulate({ from }));
-              const seq = toBigIntStrict(record.seq, `HousingFund.get_my_deposit_record(${id},${index}).seq`);
-              const recordClaimed = Boolean(
-                simResult(await hfContract.methods.has_claimed(id, requestedAddress, seq).simulate({ from }))
-              );
+            for (const { recordClaimed, claimable } of records) {
               if (!recordClaimed) {
                 allClaimed = false;
-                claimableAmount += Number(
-                  toBigIntStrict(
-                    simResult(await hfContract.methods.get_claimable_amount(id, requestedAddress, seq).simulate({ from })),
-                    `HousingFund.get_claimable_amount(${id},${seq})`
-                  )
-                );
+                claimableAmount += claimable;
               }
             }
             hasClaimed = allClaimed;

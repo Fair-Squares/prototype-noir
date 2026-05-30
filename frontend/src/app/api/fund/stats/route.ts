@@ -73,54 +73,74 @@ export async function GET() {
     const admin = await getTestAccount(0);
     const from = AztecAddress.fromString(admin.address);
 
-    const HfJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
-    const FtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
+    const [HfJson, FtJson] = await Promise.all([
+      loadGeneratedArtifactJson("housing_fund-HousingFund.json"),
+      loadGeneratedArtifactJson("token_contract-Token.json"),
+    ]);
 
     const hfArtifact = loadContractArtifact(HfJson as Parameters<typeof loadContractArtifact>[0]);
     const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);
 
-    const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, admin.wallet);
-    const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, admin.wallet);
+    const [hfContract, ftContract] = await Promise.all([
+      Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, admin.wallet),
+      Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, admin.wallet),
+    ]);
 
-    const stats = simResult<{
-      total_deposits: bigint;
-      total_in_defi: bigint;
-      total_allocated: bigint;
-      available: bigint;
-    }>(await hfContract.methods.get_fund_stats().simulate({ from }));
+    const [
+      stats,
+      valuation,
+      parkedPolicy,
+      investorCount,
+      isPaused,
+      totalSupply,
+      totalYield,
+    ] = await Promise.all([
+      hfContract.methods.get_fund_stats().simulate({ from }).then((r) =>
+        simResult<{
+          total_deposits: bigint;
+          total_in_defi: bigint;
+          total_allocated: bigint;
+          available: bigint;
+        }>(r)
+      ),
+      hfContract.methods.get_valuation().simulate({ from }).then((r) =>
+        simResult<{
+          last_asset_sale_price: bigint;
+          last_fsft_minted: bigint;
+          last_token_price_bps: bigint;
+          last_valuation_block: bigint;
+        }>(r)
+      ),
+      hfContract.methods.get_parked_capital_policy().simulate({ from }).then((r) =>
+        simResult<{
+          target_bps: bigint;
+          min_bps: bigint;
+          max_bps: bigint;
+        }>(r)
+      ),
+      hfContract.methods.get_investor_count().simulate({ from }).then((r) =>
+        toNumberStrict(simResult(r), "HousingFund.get_investor_count")
+      ),
+      hfContract.methods.is_paused().simulate({ from }).then((r) => Boolean(simResult(r))),
+      ftContract.methods.total_supply().simulate({ from }).then((r) =>
+        toNumberStrict(simResult(r), "FundToken.total_supply")
+      ),
+      (async () => {
+        if (!defiVaultAddr) return 0;
+        const DvJson = await loadGeneratedArtifactJson("defi_vault-DeFiVault.json");
+        const dvArtifact = loadContractArtifact(DvJson as Parameters<typeof loadContractArtifact>[0]);
+        const dvContract = await Contract.at(AztecAddress.fromString(defiVaultAddr), dvArtifact, admin.wallet);
+        return toNumberStrict(
+          simResult(await dvContract.methods.get_accrued_yield().simulate({ from })),
+          "DeFiVault.get_accrued_yield"
+        );
+      })(),
+    ]);
 
-    const valuation = simResult<{
-      last_asset_sale_price: bigint;
-      last_fsft_minted: bigint;
-      last_token_price_bps: bigint;
-      last_valuation_block: bigint;
-    }>(await hfContract.methods.get_valuation().simulate({ from }));
-    const parkedPolicy = simResult<{
-      target_bps: bigint;
-      min_bps: bigint;
-      max_bps: bigint;
-    }>(await hfContract.methods.get_parked_capital_policy().simulate({ from }));
-
-    const investorCount = toNumberStrict(
-      simResult(await hfContract.methods.get_investor_count().simulate({ from })),
-      "HousingFund.get_investor_count"
-    );
-    const isPaused = Boolean(simResult(await hfContract.methods.is_paused().simulate({ from })));
-    const totalSupply = toNumberStrict(simResult(await ftContract.methods.total_supply().simulate({ from })), "FundToken.total_supply");
     const totalDeposits = toNumberStrict(stats.total_deposits, "HousingFund.get_fund_stats.total_deposits");
     const totalInDefi = toNumberStrict(stats.total_in_defi, "HousingFund.get_fund_stats.total_in_defi");
     const totalAllocated = toNumberStrict(stats.total_allocated, "HousingFund.get_fund_stats.total_allocated");
     const available = toNumberStrict(stats.available, "HousingFund.get_fund_stats.available");
-    let totalYield = 0;
-    if (defiVaultAddr) {
-      const DvJson = await loadGeneratedArtifactJson("defi_vault-DeFiVault.json");
-      const dvArtifact = loadContractArtifact(DvJson as Parameters<typeof loadContractArtifact>[0]);
-      const dvContract = await Contract.at(AztecAddress.fromString(defiVaultAddr), dvArtifact, admin.wallet);
-      totalYield = toNumberStrict(
-        simResult(await dvContract.methods.get_accrued_yield().simulate({ from })),
-        "DeFiVault.get_accrued_yield"
-      );
-    }
     const navEur = Math.max(0, totalDeposits + totalYield);
     const navPerFsftEur = totalSupply > 0 ? Math.round((navEur / totalSupply) * 10000) / 10000 : 0;
 

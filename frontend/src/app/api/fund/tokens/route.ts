@@ -58,19 +58,71 @@ export async function GET(request: NextRequest) {
     const { callNodeRpc } = await import("@/lib/aztecClient");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
-    const tips = await callNodeRpc<{ proposed: { hash: string } }>("node_getL2Tips");
-    const bh = tips.proposed.hash;
     const fundTokenAddr = process.env.NEXT_PUBLIC_FUND_TOKEN_ADDRESS ?? "";
     const eurTokenAddr = process.env.NEXT_PUBLIC_EUR_TOKEN_ADDRESS ?? "";
 
     // FSFT is the vendored AIP-20 Token; total_supply is at slot 8 in its
     // storage layout (name/symbol/decimals/private_balances precede it). The
     // old bespoke FundToken had it at slot 2. See src/artifacts/Token.ts.
-    const totalSupplyRaw = await callNodeRpc<string>(
-      "node_getPublicStorageAt",
-      [bh, fundTokenAddr, "0x" + BigInt(8).toString(16).padStart(64, "0")]
-    );
-    const totalSupply = totalSupplyRaw ? Number(BigInt(totalSupplyRaw)) : 0;
+    // The total-supply read depends on the L2 tip hash, so it stays a 2-step
+    // chain; the per-account balance reads are independent and run alongside
+    // it (and each other) in the same batch.
+    const [totalSupply, eurBalance, fsftBalance] = await Promise.all([
+      (async () => {
+        const tips = await callNodeRpc<{ proposed: { hash: string } }>("node_getL2Tips");
+        const bh = tips.proposed.hash;
+        const totalSupplyRaw = await callNodeRpc<string>(
+          "node_getPublicStorageAt",
+          [bh, fundTokenAddr, "0x" + BigInt(8).toString(16).padStart(64, "0")]
+        );
+        return totalSupplyRaw ? Number(BigInt(totalSupplyRaw)) : 0;
+      })(),
+      (async () => {
+        if (!address || !eurTokenAddr) return 0;
+        try {
+          const { getTestAccount } = await import("@/lib/serverWallet");
+          const { Contract } = await import("@aztec/aztec.js/contracts");
+          const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
+          const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+          const admin = await getTestAccount(0);
+          const w = admin.wallet;
+          // EUR is an AIP-20 token (vendored standards): balance_of_public.
+          const EurJson = await loadGeneratedArtifactJson("token_contract-Token.json");
+          const eurC = await Contract.at(
+            AztecAddress.fromString(eurTokenAddr),
+            loadContractArtifact(EurJson as Parameters<typeof loadContractArtifact>[0]),
+            w
+          );
+          return Number(
+            simResult(await eurC.methods.balance_of_public(AztecAddress.fromString(address)).simulate({
+              from: AztecAddress.fromString(admin.address),
+            }))
+          );
+        } catch { return 0; }
+      })(),
+      (async () => {
+        if (!address || !fundTokenAddr) return 0;
+        try {
+          const { getTestAccount } = await import("@/lib/serverWallet");
+          const { Contract } = await import("@aztec/aztec.js/contracts");
+          const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
+          const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+          const admin = await getTestAccount(0);
+          const w = admin.wallet;
+          const FtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
+          const ftC = await Contract.at(
+            AztecAddress.fromString(fundTokenAddr),
+            loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]),
+            w
+          );
+          return Number(
+            simResult(await ftC.methods.balance_of_public(AztecAddress.fromString(address)).simulate({
+              from: AztecAddress.fromString(admin.address),
+            }))
+          );
+        } catch { return 0; }
+      })(),
+    ]);
 
     return NextResponse.json({
       fundToken: {
@@ -98,51 +150,8 @@ export async function GET(request: NextRequest) {
         distribution: "8M over 10 years",
         description: "Protocol token distributed for deposits, governance participation, and FSFT holder activity.",
       },
-      eurBalance: await (async () => {
-        if (!address || !eurTokenAddr) return 0;
-        try {
-          const { getTestAccount } = await import("@/lib/serverWallet");
-          const { Contract } = await import("@aztec/aztec.js/contracts");
-          const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-          const { AztecAddress } = await import("@aztec/aztec.js/addresses");
-          const admin = await getTestAccount(0);
-          const w = admin.wallet;
-          // EUR is an AIP-20 token (vendored standards): balance_of_public.
-          const EurJson = await loadGeneratedArtifactJson("token_contract-Token.json");
-          const eurC = await Contract.at(
-            AztecAddress.fromString(eurTokenAddr),
-            loadContractArtifact(EurJson as Parameters<typeof loadContractArtifact>[0]),
-            w
-          );
-          return Number(
-            simResult(await eurC.methods.balance_of_public(AztecAddress.fromString(address)).simulate({
-              from: AztecAddress.fromString(admin.address),
-            }))
-          );
-        } catch { return 0; }
-      })(),
-      fsftBalance: await (async () => {
-        if (!address || !fundTokenAddr) return 0;
-        try {
-          const { getTestAccount } = await import("@/lib/serverWallet");
-          const { Contract } = await import("@aztec/aztec.js/contracts");
-          const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-          const { AztecAddress } = await import("@aztec/aztec.js/addresses");
-          const admin = await getTestAccount(0);
-          const w = admin.wallet;
-          const FtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
-          const ftC = await Contract.at(
-            AztecAddress.fromString(fundTokenAddr),
-            loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]),
-            w
-          );
-          return Number(
-            simResult(await ftC.methods.balance_of_public(AztecAddress.fromString(address)).simulate({
-              from: AztecAddress.fromString(admin.address),
-            }))
-          );
-        } catch { return 0; }
-      })(),
+      eurBalance,
+      fsftBalance,
       protocolBalance: 0,
       address: address || null,
       source: "live",

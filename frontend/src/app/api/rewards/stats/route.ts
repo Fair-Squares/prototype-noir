@@ -119,14 +119,50 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
     }
 
-    const RewardsJson = await loadGeneratedArtifactJson("protocol_rewards-ProtocolRewards.json");
-    const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
-    const rewardsContract = await Contract.at(AztecAddress.fromString(rewardsAddr), rewardsArtifact, actor.wallet);
+    const origin = new URL(request.url).origin;
 
-    const [configSim, userSim, eligibilitySim] = await Promise.all([
-      rewardsContract.methods.get_rewards_config().simulate({ from: actorAddress }),
-      rewardsContract.methods.get_user_stats(userAddress).simulate({ from: actorAddress }),
-      rewardsContract.methods.has_fsft_rewards_eligibility(userAddress).simulate({ from: actorAddress }),
+    // The three independent read groups below have no data dependency on one
+    // another, so kick them all off concurrently:
+    //   1. the ProtocolRewards contract reads (config + user stats + eligibility),
+    //   2. the optional FSP token balance read, and
+    //   3. the portfolio + governance HTTP pre-checks.
+    const rewardsReadsP = (async () => {
+      const RewardsJson = await loadGeneratedArtifactJson("protocol_rewards-ProtocolRewards.json");
+      const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
+      const rewardsContract = await Contract.at(AztecAddress.fromString(rewardsAddr), rewardsArtifact, actor.wallet);
+      return Promise.all([
+        rewardsContract.methods.get_rewards_config().simulate({ from: actorAddress }),
+        rewardsContract.methods.get_user_stats(userAddress).simulate({ from: actorAddress }),
+        rewardsContract.methods.has_fsft_rewards_eligibility(userAddress).simulate({ from: actorAddress }),
+      ]);
+    })();
+
+    const balanceP = (async () => {
+      if (!protocolTokenAddr) return 0;
+      const FtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
+      const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);
+      const tokenContract = await Contract.at(
+        AztecAddress.fromString(protocolTokenAddr),
+        ftArtifact,
+        actor.wallet
+      );
+      return toNumberStrict(
+        simResult(await tokenContract.methods.balance_of_public(userAddress).simulate({ from: actorAddress })),
+        "ProtocolToken.balance_of_public"
+      );
+    })();
+
+    const [[configSim, userSim, eligibilitySim], balance, [portfolio, governance]] = await Promise.all([
+      rewardsReadsP,
+      balanceP,
+      Promise.all([
+        fetchJsonOrThrow(
+          `${origin}/api/portfolio?address=${encodeURIComponent(address)}&accountIndex=${accountIndex}`
+        ),
+        fetchJsonOrThrow(
+          `${origin}/api/governance/eligibility?address=${encodeURIComponent(address)}&accountIndex=${accountIndex}`
+        ),
+      ]),
     ]);
 
     const cfg = simResult<{
@@ -156,36 +192,11 @@ export async function GET(request: NextRequest) {
     // V2: per-user attestation flag is gone; FSFT reward-bucket eligibility is
     // now derived on-chain from balance_of_public(user) > 0.
     const fsftRewardsAttested = Boolean(simResult(eligibilitySim));
-    let balance = 0;
-
-    if (protocolTokenAddr) {
-      const FtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
-      const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);
-      const tokenContract = await Contract.at(
-        AztecAddress.fromString(protocolTokenAddr),
-        ftArtifact,
-        actor.wallet
-      );
-      balance = toNumberStrict(
-        simResult(await tokenContract.methods.balance_of_public(userAddress).simulate({ from: actorAddress })),
-        "ProtocolToken.balance_of_public"
-      );
-    }
 
     const lastClaimedEpoch = totalUserClaimed > 0 ? rawLastClaimedEpoch : -1;
     const rewardStart = Date.parse(process.env.PROTOCOL_REWARDS_START ?? "2026-01-01T00:00:00.000Z");
     const epochMs = 30 * 24 * 60 * 60 * 1000;
     const nextEpochAt = rewardStart + (currentEpoch + 1) * epochMs;
-    const origin = new URL(request.url).origin;
-
-    const [portfolio, governance] = await Promise.all([
-      fetchJsonOrThrow(
-        `${origin}/api/portfolio?address=${encodeURIComponent(address)}&accountIndex=${accountIndex}`
-      ),
-      fetchJsonOrThrow(
-        `${origin}/api/governance/eligibility?address=${encodeURIComponent(address)}&accountIndex=${accountIndex}`
-      ),
-    ]);
 
     const depositBucketEligible = Number(portfolio?.depositedAmount ?? 0) > 0;
     const fsftBalance = Number(portfolio?.balance ?? 0);
