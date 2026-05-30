@@ -7,7 +7,7 @@ import {
   displayStatus,
   proposalLabel,
   votingWindowFor,
-} from "@/components/governance/governanceStatus";
+} from "@/lib/proposalLifecycle";
 
 /**
  * Compact preview of live funding requests for the Overview command center.

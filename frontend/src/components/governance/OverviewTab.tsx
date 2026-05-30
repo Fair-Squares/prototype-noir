@@ -3,7 +3,7 @@
 import { Alert, Button, KpiCard, KpiGrid, Section, StatusChip } from "@/components/ui";
 import { formatEUR, type Proposal } from "@/lib/contracts";
 import { VotePanel } from "./VotePanel";
-import { displayStatus, quorumFor, votingWindowFor } from "./governanceStatus";
+import { displayStatus, quorumFor, votingWindowFor } from "@/lib/proposalLifecycle";
 
 export interface OverviewTabProps {
   proposal: Proposal;

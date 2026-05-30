@@ -6,7 +6,7 @@ import { Suspense, use, useCallback, useEffect, useState } from "react";
 import { DeedTab } from "@/components/governance/DeedTab";
 import { DistributionTab } from "@/components/governance/DistributionTab";
 import { OverviewTab } from "@/components/governance/OverviewTab";
-import { displayStatus, proposalLabel, votingWindowFor } from "@/components/governance/governanceStatus";
+import { displayStatus, proposalLabel, votingWindowFor } from "@/lib/proposalLifecycle";
 import { VotesTab } from "@/components/governance/VotesTab";
 import {
   Alert,

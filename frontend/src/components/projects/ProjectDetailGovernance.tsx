@@ -4,7 +4,7 @@ import {
   displayStatus,
   quorumFor,
   votingWindowFor,
-} from "@/components/governance/governanceStatus";
+} from "@/lib/proposalLifecycle";
 import {
   type GovernanceEligibility,
   type Proposal,

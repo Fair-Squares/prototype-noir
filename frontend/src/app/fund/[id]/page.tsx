@@ -11,7 +11,7 @@ import {
   displayStatus,
   proposalLabel,
   votingWindowFor,
-} from "@/components/governance/governanceStatus";
+} from "@/lib/proposalLifecycle";
 import {
   Alert,
   LoadingSkeleton,

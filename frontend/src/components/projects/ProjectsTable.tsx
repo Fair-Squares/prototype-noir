@@ -1,6 +1,6 @@
 import { DataTable, EmptyState, type Column } from "@/components/ui";
 import { formatEUR } from "@/lib/contracts";
-import { votingWindowFor } from "@/components/governance/governanceStatus";
+import { votingWindowFor } from "@/lib/proposalLifecycle";
 import type { ProjectRow } from "./ProjectRow";
 import { ProjectStatusChip } from "./ProjectStatusChip";
 

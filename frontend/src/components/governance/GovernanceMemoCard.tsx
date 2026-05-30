@@ -6,7 +6,7 @@ import {
   proposalLabel,
   quorumFor,
   votingWindowFor,
-} from "./governanceStatus";
+} from "@/lib/proposalLifecycle";
 
 export interface GovernanceMemoCardProps {
   proposal: Proposal;

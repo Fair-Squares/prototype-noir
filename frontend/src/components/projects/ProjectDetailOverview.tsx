@@ -5,7 +5,7 @@ import {
   proposalLabel,
   quorumFor,
   votingWindowFor,
-} from "@/components/governance/governanceStatus";
+} from "@/lib/proposalLifecycle";
 import { formatEUR, type FundStats, type Proposal } from "@/lib/contracts";
 
 /**

@@ -1,5 +1,5 @@
 import { InfoDot } from "@/components/ui";
-import { quorumFor, votingWindowFor } from "@/components/governance/governanceStatus";
+import { quorumFor, votingWindowFor } from "@/lib/proposalLifecycle";
 import {
   formatEUR,
   type Proposal,

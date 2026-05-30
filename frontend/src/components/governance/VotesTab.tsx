@@ -1,6 +1,6 @@
 import { DataTable, Section, type Column } from "@/components/ui";
 import type { Proposal } from "@/lib/contracts";
-import { quorumFor } from "./governanceStatus";
+import { quorumFor } from "@/lib/proposalLifecycle";
 
 export interface VotesTabProps {
   proposal: Proposal;

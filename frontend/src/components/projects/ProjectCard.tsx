@@ -4,7 +4,7 @@ import {
   proposalLabel,
   quorumFor,
   votingWindowFor,
-} from "@/components/governance/governanceStatus";
+} from "@/lib/proposalLifecycle";
 import { formatEUR } from "@/lib/contracts";
 import { ProjectStatusChip } from "./ProjectStatusChip";
 import { distributionClaimedFraction, type ProjectRow } from "./ProjectRow";

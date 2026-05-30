@@ -1,5 +1,5 @@
 import { StatusChip, type StatusKind } from "@/components/ui";
-import { displayStatus } from "@/components/governance/governanceStatus";
+import { displayStatus } from "@/lib/proposalLifecycle";
 import type { ProjectRow } from "./ProjectRow";
 
 /**

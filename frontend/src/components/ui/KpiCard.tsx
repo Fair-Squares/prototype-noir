@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import InfoTooltip from "@/components/InfoTooltip";
+import { InfoDot } from "./Tooltip";
 
 export type KpiTone = "default" | "accent" | "success" | "warning" | "danger";
 
@@ -42,7 +42,7 @@ export function KpiCard({
     <div className={`surface-muted p-4 ${className ?? ""}`}>
       <div className="mb-2 flex items-center gap-1.5">
         <span className="text-label">{label}</span>
-        {hint ? <InfoTooltip text={hint} /> : null}
+        {hint ? <InfoDot label={label} content={hint} /> : null}
       </div>
       <p className={`text-kpi ${VALUE_TONE[tone]}`}>{value}</p>
       {sub ? <p className="text-caption mt-1.5 text-text-2">{sub}</p> : null}
