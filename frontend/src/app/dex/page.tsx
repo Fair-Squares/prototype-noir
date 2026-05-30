@@ -8,7 +8,6 @@ import {
   Button,
   DataTable,
   EmptyState,
-  FormField,
   KpiCard,
   KpiGrid,
   PageHeader,
@@ -24,11 +23,13 @@ import {
   claimDexProceeds,
   fetchChainParams,
   fetchDexOrderbook,
+  fetchMyDexOrders,
   fetchPortfolio,
   placeDexOrder,
   type ChainParams,
   type DexOrder,
   type DexOrderbook,
+  type MyDexOrder,
   type PortfolioData,
 } from "@/lib/contracts";
 
@@ -53,23 +54,27 @@ export default function DexPage() {
   const [orderbook, setOrderbook] = useState<DexOrderbook | null>(null);
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
   const [chainParams, setChainParams] = useState<ChainParams | null>(null);
+  const [myOrders, setMyOrders] = useState<MyDexOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  // Per-order in-flight action (keyed by seq) so each row's buttons spin alone.
+  const [busySeq, setBusySeq] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [manageSeq, setManageSeq] = useState("");
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [book, params, port] = await Promise.all([
+      const [book, params, port, mine] = await Promise.all([
         fetchDexOrderbook(address ?? undefined, accountIndex),
         fetchChainParams(),
         address ? fetchPortfolio(address, accountIndex) : Promise.resolve(null),
+        address ? fetchMyDexOrders(address, accountIndex) : Promise.resolve([]),
       ]);
       setOrderbook(book);
       setChainParams(params);
       setPortfolio(port);
+      setMyOrders(mine);
       setLoadError(null);
     } catch (error: unknown) {
       setLoadError(error instanceof Error ? error.message : "Could not load trade data.");
@@ -99,40 +104,41 @@ export default function DexPage() {
         notify("error", result.error ?? "Order could not be placed.");
         return;
       }
-      // The placement matches on-chain if it crosses; otherwise it rests.
-      const seq = (result as { seq?: number }).seq;
-      notify("success", `${result.message ?? "Order placed."}${seq !== undefined ? ` (your order seq: ${seq})` : ""}`);
+      // The placement matches on-chain if it crosses; otherwise it rests — it
+      // shows up under "Your orders" below, no number to remember.
+      notify("success", result.message ?? "Order placed.");
       await refresh();
     } finally {
       setBusy(false);
     }
   };
 
-  // cancel + claim share the same shape: guard on seq, run the action, surface
-  // the result, refresh on success. Only the call and the default copy differ.
-  const runManage = async (
+  // Per-order actions on a scanned order. The seq is carried from the order the
+  // user clicked — never typed. Each runs against the owner's own OrderOwnerNote.
+  const runOrderAction = async (
+    seq: number,
     action: (addr: string) => Promise<{ success: boolean; message?: string; error?: string }>,
     fallback: { ok: string; fail: string }
   ) => {
-    if (!address || !manageSeq.trim()) {
-      notify("error", "Enter your order's seq number.");
+    if (!address) {
+      notify("error", "Connect your wallet first.");
       return;
     }
-    setBusy(true);
+    setBusySeq(seq);
     try {
       const result = await action(address);
       notify(result.success ? "success" : "error", result.success ? (result.message ?? fallback.ok) : (result.error ?? fallback.fail));
       if (result.success) await refresh();
     } finally {
-      setBusy(false);
+      setBusySeq(null);
     }
   };
 
-  const cancelOrder = () =>
-    runManage((addr) => cancelDexOrder(addr, Number(manageSeq), accountIndex), { ok: "Cancelled.", fail: "Cancel failed." });
+  const cancelOrder = (seq: number) =>
+    runOrderAction(seq, (addr) => cancelDexOrder(addr, seq, accountIndex), { ok: "Order cancelled — unfilled escrow moved to your claimable balance.", fail: "Cancel failed." });
 
-  const claim = (token: "eur" | "fsft") =>
-    runManage((addr) => claimDexProceeds(addr, Number(manageSeq), token, accountIndex), { ok: "Claimed.", fail: "Nothing to claim." });
+  const claim = (seq: number, token: "eur" | "fsft") =>
+    runOrderAction(seq, (addr) => claimDexProceeds(addr, seq, token, accountIndex), { ok: "Claimed to your private balance.", fail: "Nothing to claim." });
 
   const canTrade = portfolio?.canTradeDex ?? false;
   const fundSymbol = portfolio?.fundTokenSymbol ?? "FSFT";
@@ -141,7 +147,6 @@ export default function DexPage() {
   const orderColumns: Column<DexOrder>[] = [
     { key: "priceEur", header: "Price", align: "right", render: (o) => <span className="text-mono">€{o.priceEur.toFixed(4)}</span> },
     { key: "remaining", header: `Open (${fundSymbol})`, align: "right", render: (o) => <span className="text-mono">{o.remaining.toLocaleString("en-EU")}</span> },
-    { key: "id", header: "Seq", align: "right", render: (o) => <span className="text-mono text-text-3">#{o.id}</span> },
     { key: "status", header: "Status", render: (o) => <StatusChip status={STATUS_KIND[o.status as keyof typeof STATUS_KIND] ?? "open"} label={o.status} /> },
   ];
 
@@ -191,7 +196,7 @@ export default function DexPage() {
         order that crosses a resting one at the same price, it settles in the same transaction (no bot, no
         waiting). Settlement is over <strong>private balances</strong> - to <strong>buy</strong> {fundSymbol} you
         must shield {eurSymbol} into your private balance first; to <strong>sell</strong> you need private {fundSymbol}.
-        Proceeds accrue to your order and you <strong>claim</strong> them with your order's seq number.
+        Proceeds accrue to your order and you <strong>claim</strong> them from <strong>Your orders</strong> below.
       </Alert>
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
@@ -232,29 +237,72 @@ export default function DexPage() {
         </Section>
       </div>
 
-      <Section title="Manage your order" description="The book is anonymous, so manage an order by the seq number you got when you placed it. Cancel reclaims unfilled escrow; claim withdraws matched proceeds to your private balance.">
-        {canTrade ? (
-          <div className="space-y-3">
-            <FormField label="Your order seq" htmlFor="manage-seq" hint="The number returned when you placed the order.">
-              <input
-                id="manage-seq"
-                type="number"
-                inputMode="numeric"
-                min={0}
-                value={manageSeq}
-                onChange={(e) => setManageSeq(e.target.value)}
-                placeholder="e.g. 3"
-                className="w-40 rounded-md border border-border bg-card px-3 py-2 text-mono text-caption focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
-              />
-            </FormField>
-            <ActionBar align="start">
-              <Button variant="secondary" size="sm" loading={busy} disabled={busy} onClick={() => claim("eur")}>Claim {eurSymbol}</Button>
-              <Button variant="secondary" size="sm" loading={busy} disabled={busy} onClick={() => claim("fsft")}>Claim {fundSymbol}</Button>
-              <Button variant="danger" size="sm" loading={busy} disabled={busy} onClick={cancelOrder}>Cancel order</Button>
-            </ActionBar>
-          </div>
-        ) : (
+      <Section
+        title="Your orders"
+        description="Your own orders, found automatically — cancel one to reclaim unfilled escrow, or claim proceeds a match left for you. Only you can see these."
+      >
+        {!address ? (
+          <EmptyState title="Connect a wallet" description="Connect a verified investor account to see your orders." />
+        ) : !canTrade ? (
           <EmptyState title="Verified investors only" description="Trading requires a verified investor account." />
+        ) : loading && myOrders.length === 0 ? (
+          <p className="text-caption text-text-3">Scanning your orders…</p>
+        ) : myOrders.length === 0 ? (
+          <EmptyState title="No orders yet" description="Orders you place show up here automatically — no reference number to keep." />
+        ) : (
+          <div className="space-y-3">
+            {myOrders.map((o) => {
+              const rowBusy = busySeq === o.seq;
+              const hasEur = o.claimableEur > 0;
+              const hasFsft = o.claimableFsft > 0;
+              return (
+                <div key={o.seq} className="rounded-md border border-border bg-card p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                      <span className="text-body font-semibold text-text-1">
+                        {o.side === "buy" ? "Buy" : "Sell"} {o.amount.toLocaleString("en-EU")} {fundSymbol}
+                      </span>
+                      <span className="text-caption text-text-2">at €{o.priceEur.toFixed(4)}</span>
+                      <StatusChip status={STATUS_KIND[o.status] ?? "open"} label={o.status} />
+                    </div>
+                    <span className="text-caption text-text-3">
+                      {o.remaining.toLocaleString("en-EU")} {fundSymbol} unfilled
+                    </span>
+                  </div>
+
+                  {(hasEur || hasFsft) ? (
+                    <p className="text-caption mt-2 text-text-2">
+                      Claimable:{" "}
+                      {hasEur ? <span className="text-mono">€{o.claimableEur.toLocaleString("en-EU")}</span> : null}
+                      {hasEur && hasFsft ? " · " : null}
+                      {hasFsft ? <span className="text-mono">{o.claimableFsft.toLocaleString("en-EU")} {fundSymbol}</span> : null}
+                    </p>
+                  ) : null}
+
+                  <ActionBar align="start" className="mt-3">
+                    {hasEur ? (
+                      <Button variant="secondary" size="sm" loading={rowBusy} disabled={rowBusy} onClick={() => claim(o.seq, "eur")}>
+                        Claim €{o.claimableEur.toLocaleString("en-EU")}
+                      </Button>
+                    ) : null}
+                    {hasFsft ? (
+                      <Button variant="secondary" size="sm" loading={rowBusy} disabled={rowBusy} onClick={() => claim(o.seq, "fsft")}>
+                        Claim {o.claimableFsft.toLocaleString("en-EU")} {fundSymbol}
+                      </Button>
+                    ) : null}
+                    {o.cancellable ? (
+                      <Button variant="danger" size="sm" loading={rowBusy} disabled={rowBusy} onClick={() => cancelOrder(o.seq)}>
+                        Cancel order
+                      </Button>
+                    ) : null}
+                    {!hasEur && !hasFsft && !o.cancellable ? (
+                      <span className="text-caption text-text-3">Nothing to do — fully settled.</span>
+                    ) : null}
+                  </ActionBar>
+                </div>
+              );
+            })}
+          </div>
         )}
       </Section>
 

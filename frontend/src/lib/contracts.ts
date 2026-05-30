@@ -503,6 +503,40 @@ export async function fetchDexOrderbook(address?: string, accountIndex?: number)
   return res.json();
 }
 
+/**
+ * One of the caller's OWN DEX orders, scanned from their PXE and enriched with
+ * its live state + claimable proceeds. `seq` is internal plumbing (the UI never
+ * shows it); it's only used to reference the order when claiming/cancelling.
+ */
+export interface MyDexOrder {
+  seq: number;
+  side: "buy" | "sell";
+  amount: number;
+  remaining: number;
+  priceEur: number;
+  status: "open" | "partial" | "filled" | "cancelled" | "expired";
+  expiryBlock: number;
+  claimableEur: number;
+  claimableFsft: number;
+  cancellable: boolean;
+}
+
+/**
+ * Scan the caller's own DEX orders (from their PXE) with per-order status and
+ * claimable EUR/FSFT — so the UI can list them with Claim/Cancel buttons instead
+ * of asking the user to remember a sequence number.
+ */
+export async function fetchMyDexOrders(
+  address: string,
+  accountIndex = 0
+): Promise<MyDexOrder[]> {
+  const query = new URLSearchParams({ address, accountIndex: String(accountIndex) });
+  const res = await fetch(`/api/dex/my-orders?${query.toString()}`);
+  if (!res.ok) throw await readApiError(res, "Failed to fetch your DEX orders");
+  const data = (await res.json()) as { orders?: MyDexOrder[] };
+  return data.orders ?? [];
+}
+
 export async function placeDexOrder(
   address: string,
   side: "buy" | "sell",
