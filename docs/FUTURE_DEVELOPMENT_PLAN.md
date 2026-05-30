@@ -38,6 +38,52 @@ aligned participants.
 
 ---
 
+## 0.5 The single most important finding: respect the documented strategic pivot
+
+Reading the outreach material end-to-end (`docs/outreach/*` + `pilot-one-page-thesis.md`
++ `production-path.md` + `cpb-housing-affordability-financing-brief.md`) surfaces a
+**deliberate pivot the team has already made** — and which the original protocol
+prototype predates. This plan must build *with* it, not against it:
+
+| Old framing (the prototype) | Current documented framing (the pivot) |
+|---|---|
+| "We tokenize real estate." FSFT shares, a DEX, rewards farming. | **"Van maatschappelijk wenselijk naar financierbaar."** A *capped-return viability-gap* capital layer + a shared, transparent **project dossier**. |
+| Lead with crypto/privacy. | **Do NOT lead with tokenization.** Lead with affordable-housing *finance readiness*. Crypto is "digitale infrastructuur voor transparantie, governance en rapportage," mentioned last. |
+| Uncapped NAV upside, secondary trading. | **Capped 3–4% net return**, 15–25 yr affordability covenant, clawbacks, anti-speculation. Excess upside → affordability reserve / tenant / public partner. |
+| Investors are the customer. | The *first* customers are **municipalities, woningcorporaties, and wooncooperaties** with a documented `onrendabele top` (unprofitable top slice). Investors come *after* a credible project exists. |
+
+**The wedge the docs identify (this is the feature to build):** a
+**privacy-aware project-finance dossier / "deal room"** that makes one affordable
+project's *financing gap* legible to all parties at once — budget, financing mix,
+public subsidy, member capital, loans, guarantees, affordability covenant,
+milestones, use-of-funds reporting, and impact metrics — with privacy-preserving
+*eligibility* checks (e.g. key-worker status for De Walvis) where they matter.
+This is the highest-leverage near-term feature for *this* project because it is
+what every partner in `netherlands-pilot-partner-targets.md` actually asked for,
+and it is exactly what the protocol's Aztec primitives (public aggregates +
+private/attested detail, KYC credentials, governance) are uniquely good at.
+
+**What this means for the rest of this plan:**
+- Promote the **project dossier (§2.0)** to the *first* near-term build — ahead
+  of the token-economic layer.
+- Reframe the protocol's existing money-plumbing (HousingFund/FSFT/DEX/Rewards)
+  as the **capped-return capital layer** that plugs *into* a dossier once a real
+  project and legal wrapper exist — not as the headline.
+- Keep the §4 token mechanisms (the user explicitly asked for a tokenomics
+  review) but **stage-gate them behind legal structure + a live project**, per
+  the docs' "technology posture: tokenisation should wait."
+
+The Dutch facts the docs let us cite safely (use these, not invented numbers):
+~**396k**-home shortage (ABF/Primos 2025); **900k** new-homes target through 2030
+(⅔ affordable); **€19.4bn** corporation funding shortfall on a €115bn task to
+2034; SVH/Haaglanden **€3.5bn** regional gap (40% of investment infeasible);
+SVn **Fonds Coöperatief Wonen** €60.6m; Zuid-Holland's first direct corporation
+subsidy (Woonbron, Dirck Hoffblok). CPB caveat: **broad subsidies leak into land
+prices** when land/permits are the real bottleneck → fund *documented project
+gaps*, not vague ambition.
+
+---
+
 ## 1. Where we are today (verified against the code)
 
 A short, honest inventory so the plan builds on reality, not the README.
@@ -171,6 +217,37 @@ ease. Each item lists the concrete contract/frontend touchpoints.
    - Code: new `redeem_request` / `process_redemptions` on `HousingFund`,
      reserve accounting, frontend `/portfolio` redeem flow.
 
+### Phase 2.0 — The project-finance dossier (the actual near-term wedge) — *build this first*
+
+> This is the feature the outreach docs say Fair Squares will benefit from most.
+> It is product-led, partner-validated, and does **not** require the token layer.
+
+0. **Privacy-aware project dossier / "deal room."**
+   - One page per affordable-housing project that renders a shared, single source
+     of truth for every stakeholder: capital stack (public subsidy, bank debt,
+     member/co-op capital, guarantees, Fair Squares capped-return layer),
+     documented financing gap (`onrendabele top`), affordability covenant (rent
+     band, target group, lock-up years, clawback), milestones, use-of-funds
+     reporting, and impact metrics (homes enabled / €1m, rent discount,
+     affordability-years).
+   - **Privacy-aware by role:** public aggregates (gap closed, % affordable,
+     covenant locked) visible to all; sensitive detail (individual member capital,
+     eligibility documents) gated to authorized parties via the existing KYC
+     credential + Aztec public/private split. Reuses `KYCVerifier` credentials and
+     the `proofs/recursive` attestation pattern.
+   - **Eligibility proofs where they matter:** e.g. De Walvis key-worker housing —
+     prove a tenant qualifies (healthcare worker, income band) without exposing
+     documents. This is a concrete, partner-named use of the ZK layer that is
+     *not* speculative.
+   - Frontend: a new `/projects/[id]` dossier view (the redesign already has a
+     Projects tier); most of this is presentation + role-gated reads over data the
+     contracts/aggregates can already express. Ship a read-only dossier first;
+     wire capital flows later.
+   - **Why first:** every Tier-1/Tier-2 partner in
+     `netherlands-pilot-partner-targets.md` asked for exactly this, and it carries
+     no regulatory/token risk. It is the credible thing to demo on a 25-minute
+     call.
+
 ### Phase 2 — Bring tenants into the loop (the equity differentiator) — *the moral and marketing core*
 
 4. **Rent-to-equity ("your rent builds your equity").**
@@ -219,7 +296,20 @@ curated set, each with *why it fits an equitable housing protocol* and a
 recommendation. **Principle: every mechanism must serve affordability and
 alignment first — no extractive design.**
 
-### 4.1 FSFT value accrual — recommended: **NAV + yield, not inflation**
+### 4.0 Capped-return accounting — the mechanism the docs actually commit to
+
+Before any of the crypto-native mechanisms below, the protocol's economic
+**default** must match the published `pilot-term-sheet.md`: a **capped return
+(~3–4% net)**, a **15–25 year affordability covenant**, **clawbacks** if
+affordability is removed, and **excess upside redirected** to an affordability
+reserve / tenant benefit / public partner / reinvestment pool rather than to
+investors. On-chain this is a capped-distribution rule in `HousingFund` (cap the
+per-investor payout; route the remainder to a reserve note/pool) plus
+covenant-state tracked in the project dossier (§2.0). This is the *anti-speculation*
+core of the brand — implement it before staking/fees, because every other
+mechanism must respect the cap.
+
+### 4.1 FSFT value accrual — recommended: **NAV + yield, not inflation (and capped, per §4.0)**
 
 FSFT should be a *real-asset claim*, not a speculative emission. Its value =
 (property NAV + accrued rent + reserve) ÷ supply. Keep minting strictly tied to
