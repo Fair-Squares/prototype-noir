@@ -137,6 +137,18 @@ Pattern lives in `noir-projects/noir-contracts/contracts/test/public_immutable_c
 
 ## Frontend design system & app shell
 
+### Run mode: production by default, `FRONTEND_DEV=1` to edit
+
+The docker `frontend` service runs a **production build** (`next build` +
+`next start`) by default — routes are pre-compiled, so first-visit page latency
+is ~3 ms instead of the 0.4–0.6 s per-route on-demand compile `next dev` pays
+(that compile penalty, not the chain, was the old "feels slow"). When EDITING
+the frontend and you want hot reload, set `FRONTEND_DEV=1` (e.g.
+`FRONTEND_DEV=1 docker compose --profile aztec up -d frontend`). After a code
+change in production mode, recreate the container to rebuild:
+`docker compose --profile aztec up -d frontend --no-deps --force-recreate`
+(one-time ~60 s build at start; healthcheck `start_period` covers it).
+
 The frontend is a **user-facing app, not an admin console**. The north-star
 direction lives in [`docs/frontend-redesign-design-doc.md`](./docs/frontend-redesign-design-doc.md)
 — read it before any frontend work. Core principle: *affordable-housing finance
