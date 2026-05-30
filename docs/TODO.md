@@ -37,21 +37,15 @@ Done in 5ce6a76: deleted orphan libs (simulation/demoData/aztec), KpiCard ->
 accessible InfoDot (+ deleted InfoTooltip), promoted governanceStatus ->
 lib/proposalLifecycle. Remaining:
 
+- [x] `KYCFlow.tsx` rebuilt on Section/Button/Alert + tokens (fdb9432).
+- [x] `explain/page.tsx` migrated to PageHeader/Section, housing-first copy,
+      `#privacy` anchor; `SimplePage.tsx` deleted (fdb9432).
+- [x] Reference "DeFi Vault" contract row removed (fdb9432).
+- [x] DeFiVault backend fully removed + `totalYield` dropped across types/
+      routes/consumers (21326ee). NAV is now `max(0, totalDeposits)`. Vault
+      artifacts are gitignored codegen output, left on disk.
 - [ ] a11y: `HeaderWalletButton.tsx` menu items (role="menuitem" buttons) have
       no `focus-visible` ring — add one (keyboard users can't see focus).
-- [ ] `KYCFlow.tsx` is pre-redesign chrome: raw `<button>`s, `rounded-lg`,
-      hardcoded `red-*`/`fs-mint` palette. Rebuild on Section/Button/Alert/
-      StatusChip + tokens.
-- [ ] `explain/page.tsx` is the last page on the deprecated `SimplePage`
-      primitives and its copy is token-first ("Prototype mechanics", glossary
-      leads with FSFT/DEX). Migrate to PageHeader/Section, reorder copy housing
-      -> financing -> position -> proof -> token, then DELETE `SimplePage.tsx`.
-- [ ] Stale DeFiVault references after the vault was dropped (b8f4997): live
-      reads of `NEXT_PUBLIC_DEFI_VAULT_ADDRESS` remain in `aztecLive.ts`,
-      `api/fund/stats`, `api/portfolio`, `reference/page.tsx`, `serverWallet.ts`
-      (+ ~900 KB orphan artifacts `artifacts/DeFiVault.ts` / `defi_vault-*.json`).
-      Remove the vault surfaces (touches behaviour — confirm the vault is gone
-      for good first).
 - [ ] API-route boilerplate (~19-21 routes repeat dynamic-import + getTestAccount
       + address-match guard + 503 live-mode block + Contract.at). Extract
       `lib/aztecRoute.ts` (resolveActor + connectContract + requireLiveMode) and
