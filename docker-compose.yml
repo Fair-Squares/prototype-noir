@@ -53,6 +53,11 @@ services:
       # so this is a DISPLAY value only -- it does not gate wall-clock speed.
       - AZTEC_SLOT_DURATION=${AZTEC_SLOT_DURATION:-36}
       - ETHEREUM_SLOT_DURATION=${ETHEREUM_SLOT_DURATION:-12}
+      # Run mode. DEFAULT is PRODUCTION (next build + next start): routes are
+      # pre-compiled, so first-visit latency is ~instant instead of the 3-4 s
+      # per-route on-demand compile that `next dev` pays. Set FRONTEND_DEV=1 only
+      # when you are EDITING the frontend and want hot reload (slower to use).
+      - FRONTEND_DEV=${FRONTEND_DEV:-}
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -66,13 +71,19 @@ services:
           echo "[frontend] Loading contract addresses from bootstrap..."
           cp /env/.env.contracts /app/.env.local
         fi
-        exec npm run dev
+        if [ "$${FRONTEND_DEV:-}" = "1" ]; then
+          echo "[frontend] DEV mode — hot reload; routes compile on first visit"
+          exec npm run dev
+        fi
+        echo "[frontend] PRODUCTION mode — building (one-time ~60s), then serving pre-compiled routes"
+        npm run build
+        exec npm run start
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
-      retries: 12
-      start_period: 20s
+      retries: 30
+      start_period: 150s
 
   # -- Seed tradable FSFT into all three accounts (real distribution flow) ------
   # Runs once the frontend is healthy and drives the live API routes:
