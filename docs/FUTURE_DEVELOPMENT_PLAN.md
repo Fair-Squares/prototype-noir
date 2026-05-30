@@ -14,9 +14,10 @@
 > partner-target list, and contact persons), (b) the strategy docs already in
 > `docs/` (`pilot-one-page-thesis.md`, `pilot-term-sheet.md`,
 > `cpb-housing-affordability-financing-brief.md`, `production-path.md`,
-> `PHASE3_TOKEN_STANDARDIZATION.md`, `frontend-redesign-design-doc.md`), and
+> `PHASE3_TOKEN_STANDARDIZATION.md`, `frontend-redesign-design-doc.md`),
 > (c) a direct reading of the on-chain contracts in `contracts/` and the
-> frontend in `frontend/`.
+> frontend in `frontend/`, and (d) the peer-reviewed housing-finance literature
+> (see §0.6) on *what an equitable protocol should optimize for*.
 
 ---
 
@@ -81,6 +82,52 @@ SVn **Fonds Coöperatief Wonen** €60.6m; Zuid-Holland's first direct corporati
 subsidy (Woonbron, Dirck Hoffblok). CPB caveat: **broad subsidies leak into land
 prices** when land/permits are the real bottleneck → fund *documented project
 gaps*, not vague ambition.
+
+---
+
+## 0.6 The academic evidence base — what the research says we should improve on
+
+Beyond the Dutch-specific CPB/ABF material, an external literature review
+("Research for me how to fix housing on a financial level", indexed at
+[sci-bot.ru/research-for-me-how-to-19f4](https://sci-bot.ru/research-for-me-how-to-19f4))
+surfaced the peer-reviewed finance literature on housing affordability. It is a
+**secondary aggregator**, so the DOIs below are the citation of record (verify
+before quoting externally), and the in-repo CPB/ABF sources remain primary for
+any Dutch claim. But the consensus it reflects sharpens *what an equitable
+housing protocol should actually optimize for* — and, usefully, almost every
+finding maps onto a concrete Fair Squares design decision.
+
+| # | Source (DOI) | Core finding | What it means Fair Squares should improve on |
+|---|---|---|---|
+| 1 | Ryan-Collins 2019, *Breaking the housing–finance cycle* (10.1177/0308518x19862811) | Affordability + wealth-inequality crises are driven by a **feedback cycle between finance and landed property** — cheap credit capitalizes into land/house prices. | Fair Squares must **not** be one more credit channel that inflates prices. The capped-return + anti-speculation covenant (§4.0) is precisely the mechanism that breaks, rather than feeds, this cycle. Make "we do not bid up land" a measurable, on-chain covenant. |
+| 7 | 2020, *Effect of housing supply regulation on affordability* (10.1016/j.regsciurbeco.2018.03.007) | **Supply regulation raises average house prices and rents.** | Reinforces the docs' tilt to **transformations / splits / rooftop additions** (adding homes with the least land/permit friction). Prioritize dossier templates and capital products for *net-new-supply* projects; track "homes enabled" as the headline KPI. |
+| 8 | 2020, *How effective is macroprudential policy? EU lending restrictions* (10.1016/j.jhe.2020.101694) | **LTV / DSTI caps** measurably restrain house-price/credit spirals. | Confirms "help households borrow more" is the wrong lever. Fair Squares is **supply-side capped capital**, not consumer leverage — and could *expose* effective LTV/coverage of each project in the dossier so funders see prudence, not gearing. |
+| 9 | 2023, *How well placed are households for interest-rate increases* (10.1016/j.eap.2022.11.004) | Household balance sheets are **rate-fragile**; affordable rents lower project income exactly when rates rise. | Validates the §1 gap analysis: **real, rate-resilient cash flow** (rent ingestion + a conservative yield source, §3.1) and a **redemption reserve** (§3.3) are what make capped-return capital actually survivable across a cycle. |
+| 5 | 2019, *Neighborhood Affordability and Housing Market Resilience* (10.1080/01944363.2019.1647793) | Affordability is tied to **foreclosure/financial resilience** at the neighborhood level. | Argues for the **affordability-covenant + impact dashboard** (§4 item 11) to track resilience, not just price — and for the small-depositor floor / rent-to-equity that keep residents financially anchored. |
+| 2,3,4 | 2018–2020 affordability syntheses (10.1080/12265934.2020.1713864; 10.1080/19491247.2019.1662639; 10.2139/ssrn.3298993) | The field's open problem is **distributional**: *who* gets the affordability, and measuring it. | Fair Squares' edge is exactly here: the **FIFO + small-depositor floor** and **rent-to-equity** are distributional-equity mechanisms, and the privacy layer lets us prove *who benefited* in aggregate without doxxing individuals. Build the impact metrics to report distribution, not just totals. |
+| — | Land value taxation thread (recurring in the review) | **LVT** captures land-value uplift to the public rather than to speculators. | New idea not in the repo: a Fair Squares-native analogue is **routing excess-over-cap upside to an affordability reserve / public partner** (already in §4.0) — frame it explicitly as on-chain "value capture for affordability," philosophically aligned with VrijCoop's de-speculation model. |
+| 6 | 2004, *Is Housing Unaffordable?* (10.1257/089533004773563494) | Contrarian: over a long horizon, little evidence owner-occupied housing became *less* affordable. | Keeps us honest: **don't over-claim a permanent crisis.** Match the docs' discipline — fund *documented, specific* project gaps, not a generalized "housing is broken" narrative. |
+
+### 0.6.1 Three principles this evidence locks in for "the equitable protocol"
+
+1. **Break the finance–land feedback loop, don't feed it.** Every capital
+   product must be capped, covenant-bound, and barred from bidding up land
+   (sources 1, LVT). This is the *defining* difference between Fair Squares and a
+   yield-chasing RWA fund — and it should be enforced in code (§4.0), not just in
+   marketing.
+2. **Optimize for net-new affordable supply and its distribution.** Because
+   supply regulation raises prices (7) and the open research problem is
+   distributional (2,3,4), the protocol's headline metrics are **homes enabled**
+   and **who got the affordability** — surfaced via the dossier (§2.0) + impact
+   dashboard, with privacy-preserving aggregates.
+3. **Engineer rate-resilience explicitly.** Because households and affordable
+   projects are rate-fragile (9) and resilience predicts outcomes (5), the
+   real-yield (§3.1) and redemption-reserve (§3.3) work is not optional polish —
+   it is what makes the capped-return promise credible through a downturn.
+
+These principles are added to the §6 "definition of done" checks: a feature is
+on-strategy only if it **(a)** does not inflate prices, **(b)** improves or
+measures distributional equity, and **(c)** is rate-resilient.
 
 ---
 
@@ -409,6 +456,15 @@ make those conversations land:
 | 6 | Trust-minimized rewards (§3.7) | `rewards_weights` proof replaces admin weight-setting. |
 | 7 | AIP-20 finish + audit (§3.8/§4 item 9) | Clean standard interfaces; external audit booked. |
 | 8 | Legal wrapper + impact dashboard (§4 items 10–11) | FSFT maps to a legal SPV claim; impact metrics live. |
+| 0 | **Project-finance dossier (§2.0)** | One real project's gap, capital stack & covenant render for all parties; role-gated detail. *Build before the token layer.* |
+
+**Equity gate (from §0.6.1) — apply to every item above.** A feature ships only
+if it: **(a) does not inflate land/house prices** (it is capped & covenant-bound,
+not a new credit channel — esp. items 0, 5, 8); **(b) improves or measures
+distributional equity** (who got the affordability — esp. the small-floor,
+rent-to-equity, and impact-dashboard items 4, 8); and **(c) is rate-resilient**
+(backed by real cash flow + reserve, not simulated yield — esp. items 1, 3).
+Items that fail a gate get redesigned, not shipped.
 
 ---
 
