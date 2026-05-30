@@ -214,6 +214,23 @@ export async function POST(request: NextRequest) {
     const escrowAmount = sideCode === 1 ? amountU128 : (amountU128 * BigInt(priceBps)) / 10000n;
     const escrowNonce = Fr.random();
     const token = await Contract.at(escrowTokenAddr, tokenArtifact, actor.wallet);
+
+    // A BUY escrows the buyer's PRIVATE EUR (the transfer_private_to_public
+    // below). If their private balance is short, shield the shortfall from their
+    // public balance first — a self public->private transfer that doesn't leak
+    // the order — so buying "just works" from any EUR balance. (A SELL escrows
+    // private FSFT, which the seller already holds, so no shielding is needed.)
+    if (sideCode === 0) {
+      const privateEur = BigInt(
+        toNum(simResult(await token.methods.balance_of_private(from).simulate({ from })))
+      );
+      if (privateEur < escrowAmount) {
+        await token.methods
+          .transfer_public_to_private(from, from, escrowAmount - privateEur, 0)
+          .send({ from });
+      }
+    }
+
     const escrowCall = await token.methods
       .transfer_private_to_public(from, dexAddress, escrowAmount, escrowNonce)
       .getFunctionCall();
