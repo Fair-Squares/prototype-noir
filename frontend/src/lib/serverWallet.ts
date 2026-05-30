@@ -171,11 +171,6 @@ async function initWallet(): Promise<WalletSingleton> {
         async () => loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json")
       ),
       registerIfPresent(
-        "defi_vault",
-        process.env.NEXT_PUBLIC_DEFI_VAULT_ADDRESS ?? "",
-        async () => loadGeneratedArtifactJson("defi_vault-DeFiVault.json")
-      ),
-      registerIfPresent(
         "fsft_dex",
         process.env.NEXT_PUBLIC_FSFT_DEX_ADDRESS ?? "",
         async () => loadGeneratedArtifactJson("fsft_dex-FSFTDex.json")

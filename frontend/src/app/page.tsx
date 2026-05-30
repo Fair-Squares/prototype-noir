@@ -240,10 +240,6 @@ export default function OverviewPage() {
             {stats ? (
               <>
                 <RawRow label="Total deposits" value={formatEUR(stats.totalDeposits)} />
-                <RawRow
-                  label="Lifetime yield"
-                  value={formatEUR(stats.totalYield)}
-                />
                 {stats.parkedAllocationBps != null ? (
                   <RawRow
                     label="Parked allocation"

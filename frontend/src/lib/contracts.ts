@@ -29,7 +29,6 @@ export interface FundStats {
   totalInDefi: number;
   totalAllocated: number;
   available: number;
-  totalYield: number;
   isPaused: boolean;
   investorCount: number;
   totalSupply: number;
@@ -339,7 +338,6 @@ export interface PortfolioData {
   fsftMarketValue?: number;
   lastAssetSalePrice?: number;
   lastFsftMinted?: number;
-  totalYield?: number;
   fundTokenSymbol?: string;
   eurTokenSymbol?: string;
   protocolTokenBalance?: number;

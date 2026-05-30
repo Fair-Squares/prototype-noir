@@ -61,9 +61,9 @@ export function ProtocolFormulas() {
 
       <Formula
         title="Net asset value (NAV)"
-        expr={"navEur       = max(0, totalFundDeposits + totalYield)\nnavPerFsftEur = totalSupply > 0 ? navEur ÷ totalSupply : 0"}
+        expr={"navEur       = max(0, totalFundDeposits)\nnavPerFsftEur = totalSupply > 0 ? navEur ÷ totalSupply : 0"}
       >
-        NAV is total deposits plus accrued yield; NAV per FSFT divides that by the FSFT total
+        NAV is the pooled fund capital; NAV per FSFT divides that by the FSFT total
         supply (rounded to 4 decimals). From <span className="text-mono">api/portfolio/route.ts</span>.
       </Formula>
 

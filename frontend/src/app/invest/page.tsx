@@ -124,7 +124,7 @@ function InvestPageInner() {
     if (portfolio?.navPerFsftEur != null) return portfolio.navPerFsftEur;
     if (stats?.navPerFsftEur != null) return stats.navPerFsftEur;
     if (stats && stats.totalSupply > 0) {
-      const fundValue = stats.navEur ?? Math.max(0, stats.totalDeposits + stats.totalYield);
+      const fundValue = stats.navEur ?? Math.max(0, stats.totalDeposits);
       return fundValue / stats.totalSupply;
     }
     return 0;

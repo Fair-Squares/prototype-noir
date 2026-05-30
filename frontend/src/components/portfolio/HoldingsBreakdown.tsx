@@ -180,14 +180,6 @@ export function HoldingsBreakdown({
               {portfolio.totalSupply.toLocaleString()} {fundShareSymbol}
             </dd>
           </div>
-          {portfolio.totalYield !== undefined ? (
-            <div className="flex flex-col gap-0.5">
-              <dt className="text-label">Fund yield to date</dt>
-              <dd className="text-body text-mono text-text-1">
-                {formatEUR(portfolio.totalYield)}
-              </dd>
-            </div>
-          ) : null}
           {portfolio.totalFundDeposits !== undefined ? (
             <div className="flex flex-col gap-0.5">
               <dt className="text-label">Total fund deposits</dt>

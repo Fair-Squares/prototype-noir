@@ -45,7 +45,6 @@ export async function GET(request: NextRequest) {
     const fundTokenAddr = process.env.NEXT_PUBLIC_FUND_TOKEN_ADDRESS ?? "";
     const housingFundAddr = process.env.NEXT_PUBLIC_HOUSING_FUND_ADDRESS ?? "";
     const kycAddr = process.env.NEXT_PUBLIC_KYC_VERIFIER_ADDRESS ?? "";
-    const defiVaultAddr = process.env.NEXT_PUBLIC_DEFI_VAULT_ADDRESS ?? "";
     const protocolTokenAddr = process.env.NEXT_PUBLIC_PROTOCOL_TOKEN_ADDRESS ?? "";
     const protocolRewardsAddr = process.env.NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS ?? "";
 
@@ -85,7 +84,6 @@ export async function GET(request: NextRequest) {
     let lastAssetSalePrice = 0;
     let lastFsftMinted = 0;
     let tokenPriceBps = 0;
-    let totalYield = 0;
     let protocolTokenBalance = 0;
     let rewardsClaimable = 0;
     let investorRole = false;
@@ -196,18 +194,6 @@ export async function GET(request: NextRequest) {
       return { stats, depositNotesResult, valuation };
     })();
 
-    const dvRead = defiVaultAddr
-      ? (async () => {
-          const DvJson = await loadGeneratedArtifactJson("defi_vault-DeFiVault.json");
-          const dvArtifact = loadContractArtifact(DvJson as Parameters<typeof loadContractArtifact>[0]);
-          const dvContract = await Contract.at(AztecAddress.fromString(defiVaultAddr), dvArtifact, wallet);
-          return toNumberStrict(
-            simResult(await dvContract.methods.get_accrued_yield().simulate({ from: selectedAddr })),
-            "DeFiVault.get_accrued_yield"
-          );
-        })()
-      : Promise.resolve(0);
-
     const ptRead = protocolTokenAddr
       ? (async () => {
           const PtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
@@ -243,8 +229,8 @@ export async function GET(request: NextRequest) {
         })()
       : Promise.resolve(0);
 
-    const [investorRoleResult, eurResult, ftResult, hfResult, dvResult, ptResult, rewardsResult] =
-      await Promise.all([kycRead, eurRead, ftRead, hfRead, dvRead, ptRead, rewardsRead]);
+    const [investorRoleResult, eurResult, ftResult, hfResult, ptResult, rewardsResult] =
+      await Promise.all([kycRead, eurRead, ftRead, hfRead, ptRead, rewardsRead]);
 
     investorRole = investorRoleResult;
 
@@ -273,13 +259,13 @@ export async function GET(request: NextRequest) {
     lastFsftMinted = toNumberStrict(valuation.last_fsft_minted, "HousingFund.get_valuation.last_fsft_minted");
     tokenPriceBps = toNumberStrict(valuation.last_token_price_bps, "HousingFund.get_valuation.last_token_price_bps");
 
-    totalYield = dvResult;
     protocolTokenBalance = ptResult;
     rewardsClaimable = rewardsResult;
 
     const sharePercent = totalSupply > 0 ? Math.round((fsftBalance / totalSupply) * 10000) / 100 : 0;
     const tokenPriceEur = tokenPriceBps > 0 ? tokenPriceBps / 10000 : 0;
-    const navEur = Math.max(0, totalFundDeposits + totalYield);
+    // No on-chain yield source (the AIP-4626 vault was dropped) — NAV is pooled capital.
+    const navEur = Math.max(0, totalFundDeposits);
     const navPerFsftEur = totalSupply > 0 ? Math.round((navEur / totalSupply) * 10000) / 10000 : 0;
     const fsftMarketValue = Math.round(fsftBalance * navPerFsftEur * 100) / 100;
     const hasDepositTicket = depositTicket > 0;
@@ -310,7 +296,6 @@ export async function GET(request: NextRequest) {
       fsftMarketValue,
       lastAssetSalePrice,
       lastFsftMinted,
-      totalYield,
       protocolTokenBalance,
       protocolTokenSymbol: "FSP",
       rewardsClaimable,

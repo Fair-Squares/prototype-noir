@@ -43,7 +43,6 @@ const HOUSING_FUND   = () => addr("NEXT_PUBLIC_HOUSING_FUND_ADDRESS");
 const FUND_TOKEN     = () => addr("NEXT_PUBLIC_FUND_TOKEN_ADDRESS");
 const KYC_VERIFIER   = () => addr("NEXT_PUBLIC_KYC_VERIFIER_ADDRESS");
 const GOVERNANCE     = () => addr("NEXT_PUBLIC_GOVERNANCE_ADDRESS");
-const DEFI_VAULT     = () => addr("NEXT_PUBLIC_DEFI_VAULT_ADDRESS");
 
 // ── Low-level storage helpers ─────────────────────────────────────────────────
 
@@ -108,7 +107,6 @@ export interface LiveFundStats {
   totalSupply:   number;  // FSFT Token.total_supply      (slot 8, AIP-20)
   investorCount: number;  // KYCVerifier.verified_count  (slot 4)
   available:     number;  // totalDeposits - totalInDefi - totalAllocated
-  totalYield:    number;  // DeFiVault.accrued_yield     (slot 5)
   source: "live";
 }
 
@@ -116,7 +114,7 @@ export async function getLiveFundStats(): Promise<LiveFundStats> {
   const bh = await getLatestBlockHash();
 
   // Parallel reads across 3 contracts
-  const [hf, ft, kyc, vault] = await Promise.all([
+  const [hf, ft, kyc] = await Promise.all([
     // HousingFund post Phase-3 layout: total_deposits(7), total_in_defi(8),
     // total_allocated(9), is_paused(37) -- FIFO/allocation fields shifted is_paused.
     readSlots(HOUSING_FUND(), [7n, 8n, 9n, 37n], bh), // HousingFund
@@ -126,7 +124,6 @@ export async function getLiveFundStats(): Promise<LiveFundStats> {
     // is at slot 8 (NOT slot 2; that was the bespoke FundToken layout).
     readSlots(FUND_TOKEN(), [8n], bh), // FSFT Token total_supply
     readSlots(KYC_VERIFIER(), [4n], bh), // KYCVerifier
-    readSlots(DEFI_VAULT(), [5n], bh), // DeFiVault
   ]);
 
   const totalDeposits  = fieldToEur(hf[0]);
@@ -135,7 +132,6 @@ export async function getLiveFundStats(): Promise<LiveFundStats> {
   const isPaused       = hf[3] !== 0n;
   const totalSupply    = fieldToEur(ft[0]);
   const investorCount  = Number(kyc[0]);
-  const totalYield     = fieldToEur(vault[0]);
   const available      = Math.max(0, totalDeposits - totalInDefi - totalAllocated);
 
   return {
@@ -146,7 +142,6 @@ export async function getLiveFundStats(): Promise<LiveFundStats> {
     totalSupply,
     investorCount,
     available,
-    totalYield,
     source: "live",
   };
 }
