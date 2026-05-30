@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { registerKYC } from "@/lib/contracts";
+import { ActionBar, Alert, Button } from "@/components/ui";
 
 const DEV_MODE =
   process.env.NEXT_PUBLIC_DEV_MODE === "true" ||
@@ -110,66 +111,57 @@ export default function KYCFlow({ userAddress, isVerified, isInvestor, onVerifie
 
   if (isVerified) {
     return (
-      <div className="rounded-md border border-fs-teal/20 bg-fs-mint/60 p-6 text-center">
-        <h2 className="text-lg font-semibold text-fs-teal-dark">You are verified</h2>
-        <p className="mt-1 text-sm text-fs-teal-dark/80">Status: {isInvestor ? "Investor" : "Verified"}</p>
-        <Link
-          href="/invest"
-          className="mt-4 inline-flex rounded-lg bg-fs-teal px-4 py-2 text-sm font-semibold text-white hover:bg-fs-teal-dark"
-        >
-          Go to Invest
-        </Link>
-      </div>
+      <Alert tone="success" title="You are verified">
+        <div className="space-y-3">
+          <p>Status: {isInvestor ? "Investor" : "Verified"}</p>
+          <Link href="/invest" className="btn btn-primary btn-sm">
+            Go to Invest
+          </Link>
+        </div>
+      </Alert>
     );
   }
 
   return (
-    <div className="surface p-5 space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold text-text-1">Verify once, then invest</h2>
-        <p className="text-sm text-text-2">This takes just a few steps.</p>
-      </div>
-
-      <ol className="space-y-2 text-sm text-text-2">
+    <div className="space-y-4">
+      <ol className="space-y-2 text-body text-text-2">
         <li>1. Start the request.</li>
         <li>2. Approve in zkPassport.</li>
         <li>3. Return here and continue to Invest.</li>
       </ol>
 
       {qrUrl && (
-        <div className="rounded-lg border border-border bg-bg p-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-text-3">Request Link</p>
-          <p className="mt-1 break-all text-xs font-mono text-text-2">{qrUrl}</p>
+        <div className="surface-muted p-3">
+          <p className="text-label text-text-3">Request link</p>
+          <p className="text-mono mt-1 break-all text-text-2">{qrUrl}</p>
         </div>
       )}
 
-      <div className="grid gap-2 sm:grid-cols-2">
-        <button
-          onClick={startVerification}
-          disabled={loading}
-          className="rounded-lg bg-fs-teal px-4 py-2 text-sm font-semibold text-white hover:bg-fs-teal-dark disabled:opacity-50"
-        >
-          {loading ? "Working..." : "Start Verification"}
-        </button>
+      <ActionBar align="start">
+        <Button onClick={startVerification} loading={loading} disabled={loading}>
+          Start verification
+        </Button>
 
         {DEV_MODE ? (
-          <button
-            onClick={handleDevSkip}
-            disabled={loading}
-            className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text-2 hover:bg-bg disabled:opacity-50"
-          >
-            Dev Skip
-          </button>
+          <Button variant="secondary" onClick={handleDevSkip} disabled={loading}>
+            Dev skip
+          </Button>
         ) : (
-          <span className="rounded-lg border border-border px-4 py-2 text-center text-sm text-text-3">
-            Phase: {phase}
-          </span>
+          <span className="text-caption text-text-3">Phase: {phase}</span>
         )}
-      </div>
+      </ActionBar>
 
-      {DEV_MODE && <p className="text-xs text-text-3">Phase: {phase}</p>}
+      {DEV_MODE && (
+        <p className="text-caption text-text-3" aria-live="polite">
+          Phase: {phase}
+        </p>
+      )}
 
-      {error && <div className="rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {error && (
+        <Alert tone="danger" title="Verification could not continue">
+          {error}
+        </Alert>
+      )}
     </div>
   );
 }

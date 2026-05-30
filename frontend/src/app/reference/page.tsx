@@ -76,12 +76,6 @@ const CONTRACT_ROWS: ContractRow[] = [
     role: "Real-estate deed NFTs (AIP-721)",
   },
   {
-    name: "DeFi Vault",
-    envKey: "NEXT_PUBLIC_DEFI_VAULT_ADDRESS",
-    address: process.env.NEXT_PUBLIC_DEFI_VAULT_ADDRESS ?? "",
-    role: "Idle-capital allocation",
-  },
-  {
     name: "FSFT DEX",
     envKey: "NEXT_PUBLIC_FSFT_DEX_ADDRESS",
     address: process.env.NEXT_PUBLIC_FSFT_DEX_ADDRESS ?? "",
@@ -101,6 +95,10 @@ const CONTRACT_ROWS: ContractRow[] = [
   },
 ];
 
+// How many components actually resolved to an address in this build's env.
+// Derived from CONTRACT_ROWS so it can never drift from the rendered table.
+const resolvedContractCount = CONTRACT_ROWS.filter((r) => r.address !== "").length;
+
 const TABS: TabItem[] = [
   { value: "chain", label: "Chain & limits" },
   { value: "contracts", label: "Contracts" },
@@ -119,7 +117,11 @@ function timingRows(p: ChainParams): ParamRow[] {
       value: `${t.epochDurationSlots} slots`,
       note: `${formatDuration(t.epochDurationSec)} nominal at ${t.aztecSlotDurationSec}s/slot`,
     },
-    { param: "Block production", value: t.blockProductionMode, note: "Blocks advance with activity (automine), a few seconds each" },
+    {
+      param: "Block production",
+      value: t.blockProductionMode === "on-demand" ? "On-demand (automine)" : "Steady",
+      note: "Blocks advance with activity (automine), a few seconds each",
+    },
     {
       param: "Single-tx inclusion",
       value: `~3-4s`,
@@ -264,8 +266,8 @@ function ReferencePageInner() {
     () => (
       <div className="flex flex-wrap items-center gap-2">
         {mode === "live" ? (
-          <span className="chip chip-neutral" aria-label="Data source: live local network">
-            Live · local network
+          <span className="chip chip-success">
+            <span className="sr-only">Data source: </span>Live · local network
           </span>
         ) : isSimulation ? (
           <StatusChip status="simulation" />
@@ -346,8 +348,11 @@ function ReferencePageInner() {
         {activeTab === "contracts" ? (
           <Section
             title="Deployed contracts"
-            description="On-chain instance for each protocol component in this environment."
+            description="On-chain instance for each protocol component in this environment. Addresses are read from the build-time NEXT_PUBLIC_*_ADDRESS values; a component with no value set shows “Not deployed” rather than a placeholder address."
           >
+            <p className="text-caption text-text-3 mb-3">
+              {resolvedContractCount} of {CONTRACT_ROWS.length} components resolved to an address in this environment.
+            </p>
             <ContractAddressTable rows={CONTRACT_ROWS} />
           </Section>
         ) : null}
