@@ -715,8 +715,22 @@ export interface ChainParams {
   rewards: { claimMin: number };
 }
 
+// Chain params are pure protocol/env config (the route does no on-chain reads) —
+// identical for the whole session and fetched on 4 surfaces (Overview, DEX,
+// Reference, ProofSignals). Memoize the in-flight promise so the app makes ONE
+// request instead of one per mount.
+let chainParamsCache: Promise<ChainParams> | null = null;
 export async function fetchChainParams(): Promise<ChainParams> {
-  const res = await fetch("/api/chain/params", { cache: "no-store" });
-  if (!res.ok) throw new Error(`Failed to load chain params (${res.status})`);
-  return res.json();
+  if (!chainParamsCache) {
+    chainParamsCache = fetch("/api/chain/params", { cache: "no-store" })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Failed to load chain params (${res.status})`);
+        return res.json() as Promise<ChainParams>;
+      })
+      .catch((err) => {
+        chainParamsCache = null; // allow retry on failure
+        throw err;
+      });
+  }
+  return chainParamsCache;
 }
