@@ -13,6 +13,9 @@ export interface OverviewTabProps {
   isVoting: boolean;
   eligibilityReason?: string;
   onVote: (voteYes: boolean) => void;
+  /** Finalise the tally once voting has ended (status ACTIVE, window closed). */
+  onFinalize: () => void;
+  isFinalizing: boolean;
   /** Execute the passed proposal + open its distribution. Closed-window only. */
   onExecute: () => void;
   isExecuting: boolean;
@@ -31,6 +34,8 @@ export function OverviewTab({
   isVoting,
   eligibilityReason,
   onVote,
+  onFinalize,
+  isFinalizing,
   onExecute,
   isExecuting,
 }: OverviewTabProps) {
@@ -148,6 +153,21 @@ export function OverviewTab({
           onVote={onVote}
         />
       </Section>
+
+      {votingEnded ? (
+        <Section
+          title="Finalise the vote"
+          description={
+            wouldPass
+              ? "Voting has closed with quorum met and the majority in favour. Finalise to record the result on-chain (approved) — then you can execute it to open the distribution and depositors can claim."
+              : "Voting has closed, but quorum or majority was not reached. Finalising will record this request as not passed."
+          }
+        >
+          <Button onClick={onFinalize} loading={isFinalizing}>
+            {isFinalizing ? "Finalising…" : wouldPass ? "Finalise — approve request" : "Finalise — close voting"}
+          </Button>
+        </Section>
+      ) : null}
 
       {canExecute ? (
         <Section

@@ -22,6 +22,7 @@ import {
   castVote,
   claimProposalDistribution,
   executeProposal,
+  finalizeProposal,
   fetchGovernanceEligibility,
   fetchProposals,
   fetchProperties,
@@ -64,6 +65,7 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
   const [deed, setDeed] = useState<PropertyDeed | null>(null);
   const [isVoting, setIsVoting] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
   const [voted, setVoted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -132,6 +134,25 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
       await reloadProposal();
     } finally {
       setIsVoting(false);
+    }
+  };
+
+  const handleFinalize = async () => {
+    setIsFinalizing(true);
+    setNotice(null);
+    try {
+      const result = await finalizeProposal(proposalId, accountIndex);
+      if (!result.success) {
+        setNotice({ tone: "danger", text: result.error ?? "Finalisation failed." });
+        return;
+      }
+      setNotice({
+        tone: "success",
+        text: "Voting finalised. If approved, execute it next to open the distribution.",
+      });
+      await reloadProposal();
+    } finally {
+      setIsFinalizing(false);
     }
   };
 
@@ -258,6 +279,8 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
             isVoting={isVoting}
             eligibilityReason={eligibility?.reason}
             onVote={handleVote}
+            onFinalize={handleFinalize}
+            isFinalizing={isFinalizing}
             onExecute={handleExecute}
             isExecuting={isExecuting}
           />
