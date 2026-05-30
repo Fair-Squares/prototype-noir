@@ -174,11 +174,18 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
             </Button>
           ) : null}
           <Link
-            href={`/governance/${row.id}`}
+            href={`/fund/${row.id}`}
             className="btn btn-secondary btn-sm"
-            aria-label={`Open the memo for ${proposalLabel(row.proposal)}`}
+            aria-label={`Open the investment memo for ${proposalLabel(row.proposal)}`}
           >
-            {votingOpen ? "Review & vote" : "View memo"}
+            View memo
+          </Link>
+          <Link
+            href={`/governance/${row.id}`}
+            className="btn btn-ghost btn-sm"
+            aria-label={`Open the governance memo for ${proposalLabel(row.proposal)}`}
+          >
+            {votingOpen ? "Review & vote" : "Governance memo"}
           </Link>
         </div>
       </div>

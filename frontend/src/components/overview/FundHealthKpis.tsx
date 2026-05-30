@@ -31,8 +31,8 @@ export function FundHealthKpis({ stats }: { stats: FundStats }) {
       <KpiCard
         label="Available capital"
         value={formatEUR(stats.available)}
-        sub="Ready to deploy"
-        hint="Capital in the fund not yet parked in yield or committed to a home — what new acquisitions can draw on."
+        sub={stats.available > 0 ? "Ready to deploy" : "Fully committed"}
+        hint="Capital in the fund not yet parked in yield or committed to a home — what new acquisitions can draw on. €0 means every euro is already parked in yield or committed to a funded home."
       />
       <KpiCard
         label="Parked in DeFi"

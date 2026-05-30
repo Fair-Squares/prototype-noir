@@ -1,0 +1,248 @@
+"use client";
+
+import Link from "next/link";
+import { notFound, usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, use, useCallback, useEffect, useState } from "react";
+import { ProjectDetailDistribution } from "@/components/projects/ProjectDetailDistribution";
+import { ProjectDetailGovernance } from "@/components/projects/ProjectDetailGovernance";
+import { ProjectDetailOverview } from "@/components/projects/ProjectDetailOverview";
+import { ProjectDetailProofs } from "@/components/projects/ProjectDetailProofs";
+import {
+  displayStatus,
+  proposalLabel,
+  votingWindowFor,
+} from "@/components/governance/governanceStatus";
+import {
+  Alert,
+  LoadingSkeleton,
+  PageHeader,
+  Section,
+  StatusChip,
+  Tabs,
+  type TabItem,
+} from "@/components/ui";
+import { useWallet } from "@/contexts/WalletContext";
+import {
+  fetchFundStats,
+  fetchGovernanceEligibility,
+  fetchProperties,
+  fetchProposals,
+  formatEUR,
+  type FundStats,
+  type GovernanceEligibility,
+  type Proposal,
+  type PropertyDeed,
+} from "@/lib/contracts";
+
+const TAB_VALUES = ["overview", "distribution", "governance", "proofs"] as const;
+type TabValue = (typeof TAB_VALUES)[number];
+
+function isTabValue(value: string | null): value is TabValue {
+  return value !== null && (TAB_VALUES as readonly string[]).includes(value);
+}
+
+/**
+ * Investment memo for a single housing project. The "project" data IS a
+ * governance proposal — this view reframes it as a deal memo and pulls in the
+ * matching on-chain property deed, fund capital context, and (when a wallet is
+ * connected) the reader's own standing. Read-only: voting/claiming still happen
+ * in the governance memo, which every tab links to. Real data only — fields with
+ * no on-chain source are omitted, never invented.
+ */
+function ProjectDetail({ projectId }: { projectId: number }) {
+  const { activeAccount } = useWallet();
+  const address = activeAccount?.address ?? null;
+  const accountIndex = activeAccount?.index ?? 0;
+
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const activeTab: TabValue = isTabValue(tabParam) ? tabParam : "overview";
+
+  const setTab = useCallback(
+    (value: string) => {
+      const next = new URLSearchParams(searchParams.toString());
+      next.set("tab", value);
+      router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+    },
+    [router, pathname, searchParams]
+  );
+
+  const [proposal, setProposal] = useState<Proposal | null>(null);
+  const [notFoundFlag, setNotFoundFlag] = useState(false);
+  const [deed, setDeed] = useState<PropertyDeed | null>(null);
+  const [fundStats, setFundStats] = useState<FundStats | null>(null);
+  const [eligibility, setEligibility] = useState<GovernanceEligibility | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const reloadProposal = useCallback(async () => {
+    const proposals = await fetchProposals(address ?? undefined, accountIndex);
+    const match = proposals.find((item) => item.id === projectId) ?? null;
+    setProposal(match);
+    // A well-formed id that maps to no proposal is a genuine 404, not a
+    // perpetual skeleton.
+    if (!match) setNotFoundFlag(true);
+  }, [address, accountIndex, projectId]);
+
+  useEffect(() => {
+    reloadProposal().catch((loadError: unknown) => {
+      setError(loadError instanceof Error ? loadError.message : "Could not load project.");
+    });
+  }, [reloadProposal]);
+
+  useEffect(() => {
+    fetchProperties()
+      .then((deeds) => setDeed(deeds.find((d) => d.proposalId === projectId) ?? null))
+      .catch(() => setDeed(null));
+  }, [projectId]);
+
+  useEffect(() => {
+    fetchFundStats()
+      .then(setFundStats)
+      .catch(() => setFundStats(null));
+  }, []);
+
+  useEffect(() => {
+    if (!address) {
+      setEligibility(null);
+      return;
+    }
+    fetchGovernanceEligibility(address, accountIndex)
+      .then(setEligibility)
+      .catch(() => setEligibility(null));
+  }, [address, accountIndex]);
+
+  // Real 404 for a syntactically valid id that has no matching proposal.
+  useEffect(() => {
+    if (notFoundFlag) notFound();
+  }, [notFoundFlag]);
+
+  const tabs: TabItem[] = [
+    { value: "overview", label: "Overview" },
+    { value: "distribution", label: "Distribution & capital" },
+    { value: "governance", label: "Governance" },
+    { value: "proofs", label: "Proofs & on-chain" },
+  ];
+
+  if (!proposal) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow="Investment memo"
+          title={`Housing project #${projectId}`}
+          description="Loading the project memo…"
+          actions={
+            <Link href="/fund" className="btn btn-ghost btn-sm">
+              ← All projects
+            </Link>
+          }
+        />
+        {error ? (
+          <Alert tone="danger" title="Something went wrong">
+            {error}
+          </Alert>
+        ) : (
+          <Section>
+            <LoadingSkeleton lines={4} />
+          </Section>
+        )}
+      </div>
+    );
+  }
+
+  const window = votingWindowFor(proposal);
+  const status = displayStatus(proposal);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Investment memo"
+        title={proposalLabel(proposal)}
+        description={
+          <>
+            {formatEUR(proposal.amount)} requested to acquire one affordable home
+            {proposal.status === 0 ? (
+              <>
+                {" "}·{" "}
+                <span className="text-mono">block {window.deadlineBlock.toLocaleString()}</span>{" "}
+                voting deadline
+              </>
+            ) : null}
+          </>
+        }
+        actions={
+          <div className="flex items-center gap-2">
+            <StatusChip status={status.kind} label={status.label} />
+            <Link href="/fund" className="btn btn-ghost btn-sm">
+              ← All projects
+            </Link>
+          </div>
+        }
+      />
+
+      {error ? (
+        <Alert tone="danger" title="Something went wrong">
+          {error}
+        </Alert>
+      ) : null}
+
+      {deed ? (
+        <Alert tone="success" title="Home acquired">
+          Deed NFT #{deed.tokenId} (AIP-721) is held by the fund
+          {deed.valuationEur > 0 ? <> · valued at {formatEUR(deed.valuationEur)}</> : null}. See
+          the Distribution &amp; capital tab for details.
+        </Alert>
+      ) : null}
+
+      <Tabs tabs={tabs} value={activeTab} onValueChange={setTab} aria-label="Project memo">
+        {activeTab === "overview" ? (
+          <ProjectDetailOverview proposal={proposal} fundStats={fundStats} />
+        ) : null}
+        {activeTab === "distribution" ? (
+          <ProjectDetailDistribution proposal={proposal} deed={deed} />
+        ) : null}
+        {activeTab === "governance" ? (
+          <ProjectDetailGovernance
+            proposal={proposal}
+            eligibility={eligibility}
+            isConnected={Boolean(address)}
+          />
+        ) : null}
+        {activeTab === "proofs" ? (
+          <ProjectDetailProofs proposal={proposal} deed={deed} />
+        ) : null}
+      </Tabs>
+
+      <p className="text-caption">
+        Voting and claiming happen in the full governance memo.{" "}
+        <Link href={`/governance/${proposal.id}`} className="text-fs-teal hover:underline">
+          Open the governance memo
+        </Link>
+        .
+      </p>
+    </div>
+  );
+}
+
+export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const projectId = Number.parseInt(id, 10);
+
+  // A non-numeric id (e.g. /fund/abc) is a 404, not a perpetual skeleton.
+  if (Number.isNaN(projectId) || projectId < 0) {
+    notFound();
+  }
+
+  return (
+    <Suspense
+      fallback={
+        <Section>
+          <LoadingSkeleton lines={4} />
+        </Section>
+      }
+    >
+      <ProjectDetail projectId={projectId} />
+    </Suspense>
+  );
+}

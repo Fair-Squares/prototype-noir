@@ -7,10 +7,12 @@ import { FaucetPanel } from "@/components/invest/FaucetPanel";
 import { InvestQuote } from "@/components/invest/InvestQuote";
 import {
   ActionBar,
+  AdvancedDetails,
   Alert,
   Button,
   EmptyState,
   FormField,
+  InfoDot,
   KpiCard,
   KpiGrid,
   PageHeader,
@@ -227,7 +229,7 @@ function InvestPageInner() {
       <PageHeader
         eyebrow="Invest"
         title="Deposit into the housing fund"
-        description="Add cash to the fund to receive a private position in affordable-housing assets. The flow below confirms you are connected and verified, then settles your deposit on-chain."
+        description="Add cash to the fund to help finance affordable homes and receive a private position. The steps below confirm you are connected and verified, then settle your deposit on-chain."
       />
 
       {loadError ? <Alert tone="danger" title="Could not load data">{loadError}</Alert> : null}
@@ -261,7 +263,7 @@ function InvestPageInner() {
               label="NAV per share"
               value={navPerFsftEur > 0 ? `€${navPerFsftEur.toFixed(4)}` : "—"}
               tone="accent"
-              sub={navPerFsftEur > 0 ? "Net asset value per FSFT" : "Not yet established"}
+              sub={navPerFsftEur > 0 ? "Net asset value per FSFT" : "Set at distribution"}
             />
             <KpiCard
               label="Verification"
@@ -323,7 +325,7 @@ function InvestPageInner() {
             title="No cash available to deposit"
             description="Your wallet holds no EUR yet. Use the test faucet to add funds, then continue."
           />
-          <div className="mt-4 rounded-md border border-dashed border-[rgba(196,22,103,0.35)] p-4">
+          <div className="mt-4">
             <FaucetPanel
               address={address}
               accountIndex={accountIndex}
@@ -450,10 +452,17 @@ function InvestPageInner() {
             </div>
           ) : null}
 
-          <p className="text-caption mt-4 text-text-3">
-            After depositing, secondary liquidity is available on Trade, subject
-            to a net-asset-value price band.
-          </p>
+          <div className="text-caption mt-4 flex items-center gap-1.5 text-text-3">
+            <span>
+              Trade is optional. After depositing, FSFT shares can be sold on the
+              secondary market within a NAV-banded price range.
+            </span>
+            <InfoDot
+              label="About secondary liquidity"
+              content="Selling is never required — holding your position funds homes for the long term. When you do sell, the price is constrained to a band around the fund's net asset value."
+              align="right"
+            />
+          </div>
         </Section>
       ) : null}
 
@@ -474,36 +483,48 @@ function InvestPageInner() {
               }
             >
               Your cash has been transferred and your private position recorded.
+              FSFT shares are issued when the fund distributes.
             </Alert>
 
-            <dl className="divide-y divide-border rounded-md border border-border">
-              {result.eurTransferTxHash ? (
-                <div className="flex min-w-0 items-baseline justify-between gap-3 px-4 py-3">
+            <KpiGrid cols={2}>
+              <KpiCard
+                label="Deposited"
+                value={formatEURDecimals(amountEur > 0 ? amountEur : portfolio?.depositedAmount ?? 0)}
+                tone="accent"
+                sub="Added this transaction"
+              />
+              <KpiCard
+                label="Your position"
+                value={formatEURDecimals(portfolio?.depositedAmount ?? 0)}
+                sub="Total deposited in the fund"
+              />
+            </KpiGrid>
+
+            <AdvancedDetails summary="Transaction details">
+              <dl className="divide-y divide-border">
+                {result.eurTransferTxHash ? (
+                  <div className="flex min-w-0 items-baseline justify-between gap-3 py-3">
+                    <dt className="text-caption text-text-2">
+                      EUR transfer
+                      {result.eurTransferBlockNumber != null
+                        ? ` · block ${result.eurTransferBlockNumber}`
+                        : ""}
+                    </dt>
+                    <dd className="text-mono min-w-0 truncate text-right text-text-1">
+                      {shortHash(result.eurTransferTxHash)}
+                    </dd>
+                  </div>
+                ) : null}
+                <div className="flex min-w-0 items-baseline justify-between gap-3 py-3">
                   <dt className="text-caption text-text-2">
-                    EUR transfer
-                    {result.eurTransferBlockNumber != null
-                      ? ` · block ${result.eurTransferBlockNumber}`
-                      : ""}
+                    Private deposit{result.status ? ` · ${result.status}` : ""}
                   </dt>
                   <dd className="text-mono min-w-0 truncate text-right text-text-1">
-                    {shortHash(result.eurTransferTxHash)}
+                    {shortHash(result.txHash)}
                   </dd>
                 </div>
-              ) : null}
-              <div className="flex min-w-0 items-baseline justify-between gap-3 px-4 py-3">
-                <dt className="text-caption text-text-2">
-                  Private deposit{result.status ? ` · ${result.status}` : ""}
-                </dt>
-                <dd className="text-mono min-w-0 truncate text-right text-text-1">
-                  {shortHash(result.txHash)}
-                </dd>
-              </div>
-            </dl>
-
-            <p className="text-caption text-text-3">
-              Secondary liquidity is available on Trade, subject to a
-              net-asset-value price band.
-            </p>
+              </dl>
+            </AdvancedDetails>
 
             <ActionBar align="between">
               <Link href="/portfolio" className="btn btn-secondary">
@@ -526,7 +547,7 @@ function InvestPageFallback() {
       <PageHeader
         eyebrow="Invest"
         title="Deposit into the housing fund"
-        description="Add cash to the fund to receive a private position in affordable-housing assets."
+        description="Add cash to the fund to help finance affordable homes and receive a private position."
       />
       <KpiGrid cols={4}>
         <SkeletonKpi />

@@ -49,35 +49,35 @@ export function FaucetPanel({ address, accountIndex, amount, onFunded }: FaucetP
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-label">Test EUR faucet</span>
-          <StatusChip status="simulation" label="Test only" />
+    <div className="rounded-md border border-dashed border-fs-magenta/40 p-4">
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-label">Test EUR faucet</span>
+            <StatusChip status="simulation" label="Test only — not real money" />
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleFaucet}
+            disabled={!address}
+            loading={busy}
+          >
+            {busy ? "Adding…" : `Add ${formatEUR(amount)}`}
+          </Button>
         </div>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={handleFaucet}
-          disabled={!address}
-          loading={busy}
-        >
-          {busy ? "Adding…" : `Add ${formatEUR(amount)}`}
-        </Button>
-      </div>
-      <p className="text-caption text-text-2">
-        Mints test EUR to your account through the on-chain Dripper. This is a
-        development tool, not a real deposit of funds.
-      </p>
-      {!address ? (
-        <p className="text-caption text-text-3">
-          Connect your account to use the faucet.
+        <p className="text-caption text-text-2">
+          Mints simulated EUR to your account through the on-chain Dripper. This
+          is a development tool for trying the flow, not a real deposit of funds.
         </p>
-      ) : null}
-      <div aria-live="polite">
-        {msg ? (
-          <Alert tone={msg.tone}>{msg.text}</Alert>
+        {!address ? (
+          <p className="text-caption text-text-3">
+            Connect your account to use the faucet.
+          </p>
         ) : null}
+        <div aria-live="polite">
+          {msg ? <Alert tone={msg.tone}>{msg.text}</Alert> : null}
+        </div>
       </div>
     </div>
   );
