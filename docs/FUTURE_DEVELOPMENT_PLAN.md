@@ -1,0 +1,360 @@
+# Fair Squares — Future Development & Growth Plan
+
+> **Status:** Strategy draft · **Date:** 2026-05-30 · **Branch:** `claude/housing-protocol-plan-nUhcP`
+>
+> **Purpose.** This document answers three questions the project must get right
+> to matter: (1) what should we build next that meaningfully advances an
+> *equitable* housing protocol, (2) will this attract and retain real
+> users — tenants, small savers, and larger investors — by offering them
+> something they cannot get elsewhere, and (3) what token and crypto-economic
+> mechanisms turn that user base into a durable, self-reinforcing flywheel.
+>
+> It is grounded in (a) the existing outreach material in
+> [`docs/outreach/`](./outreach/) (the Netherlands housing-problem anthem,
+> partner-target list, and contact persons), (b) the strategy docs already in
+> `docs/` (`pilot-one-page-thesis.md`, `pilot-term-sheet.md`,
+> `cpb-housing-affordability-financing-brief.md`, `production-path.md`,
+> `PHASE3_TOKEN_STANDARDIZATION.md`, `frontend-redesign-design-doc.md`), and
+> (c) a direct reading of the on-chain contracts in `contracts/` and the
+> frontend in `frontend/`.
+
+---
+
+## 0. TL;DR — the one-paragraph thesis
+
+Fair Squares already has the *hard* part working: a privacy-preserving,
+governance-driven housing fund on Aztec where KYC'd savers deposit EUR, receive
+property-backed **FSFT** shares minted by a fair FIFO + small-depositor-floor
+formula, vote privately on acquisitions, earn epoch-based protocol rewards, and
+trade on an anonymous lit order book. What it does **not** yet have is the
+economic *backing loop* that makes those tokens worth holding for a tenant or a
+pension fund: a real (not simulated) yield source, a credible Net Asset Value
+oracle so the FSFT price means something, a tenant-facing benefit that turns
+renters into stakeholders, and the legal/redemption rails that let institutional
+euros enter and exit with confidence. The plan below sequences those four
+missing pieces, then layers on the token mechanisms (staking, fee capture,
+redemption floor, rent-to-own) that convert one-time depositors into recurring,
+aligned participants.
+
+---
+
+## 1. Where we are today (verified against the code)
+
+A short, honest inventory so the plan builds on reality, not the README.
+
+### 1.1 Contracts (`contracts/`)
+
+| Contract | What it does today | Token / value mechanic |
+|---|---|---|
+| **HousingFund** (`housing_fund`) | Pools EUR deposits (public + private paths), KYC-gated; mints FSFT pro-rata via **FIFO + 30% small-depositor floor**; routes idle capital to DeFiVault; opens permissionless distributions after a governance proposal executes. | FSFT minted = proposal amount; share = `fifo_share(cum_before, amount, cap)` + `small_share(...)`. HousingFund is the **immutable sole minter** of FSFT. |
+| **FSFTDex** (`fsft_dex`) | Anonymous **lit order book**, FSFT↔EUR, KYC-gated. Identity hidden via `owner_tag = poseidon2([secret_owner_key, seq])`; settlement to claimable balances with **no addresses in public state**. Exact-price matching, ≤4 fills/tx, price band anchored to fund valuation. | Price in basis points; EUR = `FSFT * price_bps / 10000` (floored → solvent by construction). |
+| **ProtocolRewards** (`protocol_rewards`) | 120-epoch (10-year) emission of an 8M pool; per-epoch split **40% deposit-weight / 40% FSFT-holding / 20% governance**; private claim via nullified `RewardClaimNote`. | Emission declines from ~13% → ~8% of annual pool. Admin-driven weight allocation. |
+| **Governance** (`governance`) | Proposals (property + amount, deadline, quorum). **Private secret-ballot voting** (prove KYC + a DepositNote, single-use nullifier → 1 vote/proposal). Execution is permissionless and triggers HousingFund distribution. | No token mechanic; gates capital deployment. |
+| **KYCVerifier** (`kyc_verifier`) | Dual path: legacy public flags + V2 **private credential notes** (`KycCredentialNote`) with a revocation map. | Gating layer for every other contract. |
+| **DeFiVault** (`defi_vault`) | **Yield stub.** Tracks principal + accrued yield; `accrue_yield()` simulates ~3% APY. **No real DeFi integration.** | This is the single biggest economic gap (see §3.1). |
+
+Plus vendored `aztec-standards` (AIP-20 token, NFT, escrow, dripper) and three
+recursive-proof circuits in `proofs/recursive/` (housing valuation, FSFT holder,
+rewards weights) — infrastructure for future on-chain NAV / eligibility proofs.
+
+### 1.2 Frontend (`frontend/src/app/`)
+
+User-facing Next.js app (not an admin console): Overview, Projects/Fund, Invest,
+Portfolio, Governance, Trade (demoted), Rewards, Verification (KYC/zkPassport),
+Reference, Explain. Design system is token-based (`globals.css` `@theme`, `ui/`
+primitives, Plus Jakarta Sans). Production path reaches a **testnet deploy**
+(CLAUDE.md "Stage 6.5") with `testnet-deploy-*.ts` scripts.
+
+### 1.3 The honest gaps
+
+1. **Yield is simulated.** FSFT is "backed by property value," but the only
+   income stream in code is a fake 3% APY. There is no rent, no real DeFi, no
+   cash flow to holders.
+2. **No live NAV oracle.** FSFT price relies on governance calling
+   `record_asset_sale()`. Between sales the price is stale; the DEX band floats
+   on a snapshot. A holder cannot trust the mark.
+3. **No redemption / exit guarantee.** You can sell FSFT on the DEX *if there is
+   a buyer*. There is no protocol-level redemption floor or queue. Illiquidity
+   kills retail trust.
+4. **Tenants are absent from the token loop.** The protocol is investor-centric.
+   The outreach anthem is about the *housing crisis* — i.e., tenants — yet a
+   tenant gets no on-chain benefit, no path to ownership, no reason to show up.
+5. **Admin-heavy reward weighting.** `set_user_epoch_weights` is admin-driven;
+   not yet trust-minimized via the recursive `rewards_weights` circuit.
+6. **Token standardization unfinished.** `PHASE3_TOKEN_STANDARDIZATION.md`
+   tracks moving fully onto AIP-20 semantics; until done, integrations and audits
+   are harder.
+
+---
+
+## 2. Will it attract users? The demand thesis
+
+The Netherlands outreach material frames a real, acute problem (housing
+shortage, unaffordable purchase prices, long social-housing waits, capital that
+wants housing exposure but lacks a clean retail vehicle). Fair Squares can win
+**only if each persona gets something they cannot get elsewhere.** Map every
+build item to a persona benefit or cut it.
+
+### 2.1 The three personas and their "unfair advantage"
+
+| Persona | Pain today | What Fair Squares uniquely offers | Hook that drives signup |
+|---|---|---|---|
+| **Small saver / would-be first-time buyer** (priced out of the market) | Can't afford a deposit; savings earn ~nothing; locked out of housing upside. | Buy **€50–€500** of property exposure (fractional FSFT), with a **small-depositor floor** that *over*-allocates to the little guy — explicitly equitable. Privacy by default. | "Own a brick. Earn the rent. Vote on what we buy." |
+| **Tenant in a fund-owned property** | Rent leaves, builds zero equity; no voice. | **Rent-to-equity**: a slice of rent paid converts to FSFT (see §4.4). Tenant becomes part-owner of the building they live in and votes on it. | "Your rent finally builds *your* equity." |
+| **Institutional / impact investor** (pension funds, housing-corporation treasuries, family offices in the partner-target list) | Wants residential exposure + measurable social impact, but needs compliance, auditability, and exit. | KYC-gated, privacy-preserving, **auditable on-chain NAV + impact metrics**; clean ESG story (affordable units, tenant ownership); programmatic redemption. | "Verifiable affordable-housing yield with a paper-trail your auditor accepts." |
+
+### 2.2 Why crypto/ZK is not gratuitous here
+
+The privacy layer is a *feature for this market*, not a gimmick:
+balance/financial-position privacy is a genuine requirement for retail housing
+investors and for tenants (you should not broadcast your net worth to vote on
+your own building). Aztec gives us **private balances + public auditability of
+aggregates** — exactly the "confidential but compliant" posture institutions
+ask for. That is the defensible wedge over a plain RWA-on-a-public-L2 competitor.
+
+### 2.3 The growth flywheel
+
+```
+            ┌─────────────────────────────────────────────┐
+            │  More savers deposit  →  more capital        │
+            │       ↑                        ↓             │
+   rewards + rent yield            governance buys more    │
+   make holding attractive          (better) properties    │
+            ↑                              ↓               │
+   real NAV + redemption floor   →  rent + appreciation    │
+   make FSFT trustworthy             accrue to FSFT NAV     │
+            └──────────────← tenants become holders ←──────┘
+```
+
+Each plan phase below is chosen to close one broken arrow in this loop.
+
+---
+
+## 3. Phased development plan
+
+Phases are ordered by **"what unblocks trust and therefore deposits"**, not by
+ease. Each item lists the concrete contract/frontend touchpoints.
+
+### Phase 1 — Make the backing real (the trust foundation) — *next 1–2 milestones*
+
+> Without this, every token mechanism in §4 is built on sand.
+
+1. **Real yield source to replace the DeFiVault stub.**
+   - Short term: integrate a conservative, audited on-chain yield (e.g. a
+     tokenized-T-bill / money-market position bridged in as the EUR-side asset)
+     so idle deposit capital earns *actual* return while waiting to be deployed
+     into property. Keep `DeFiVault`'s interface; swap the implementation.
+   - Medium term: **rent ingestion** — an oracle/keeper posts collected rent per
+     property; `HousingFund` distributes it as FSFT NAV growth and/or a
+     claimable EUR yield. *This is the cash flow that justifies "earn the rent."*
+   - Code: `contracts/defi_vault/`, new `record_rent(property_id, amount)` on
+     `HousingFund`, keeper script under `scripts/`.
+
+2. **Live NAV oracle + on-chain valuation proof.**
+   - Wire the existing `proofs/recursive/housing_valuation` circuit into a
+     governance-gated valuation update: a quorum of valuers (or a signed
+     appraiser feed) posts property marks; the recursive proof attests the
+     aggregate without revealing per-property detail.
+   - Result: `get_valuation_public()` reflects a *fresh, attested* NAV, so the
+     DEX price band and any redemption price are trustworthy.
+   - Code: `proofs/recursive/housing_valuation`, `HousingFund` valuation setter,
+     `FSFTDex` band anchor.
+
+3. **Redemption floor / exit queue.**
+   - Add a protocol redemption path: holders can redeem FSFT for EUR at
+     `min(NAV, available_liquidity)` via a **queue** funded by a reserve buffer
+     (a configurable % of deposits + accrued yield held back). Hard exits go to
+     the DEX; the floor handles the base case so retail isn't trapped.
+   - This is the single biggest retail-trust unlock. Document the floor's limits
+     honestly (it is best-effort, capped by reserve — never promise instant full
+     liquidity).
+   - Code: new `redeem_request` / `process_redemptions` on `HousingFund`,
+     reserve accounting, frontend `/portfolio` redeem flow.
+
+### Phase 2 — Bring tenants into the loop (the equity differentiator) — *the moral and marketing core*
+
+4. **Rent-to-equity ("your rent builds your equity").**
+   - A tenant in a fund-owned unit gets a KYC credential scoped to that property;
+     a configurable share of each rent payment mints FSFT to the tenant (subject
+     to the small-depositor-friendly formula).
+   - Over a lease, the tenant accrues ownership of the building they live in and
+     gains governance voice over it. This is the headline equitable feature and
+     the strongest PR/outreach story for the Netherlands partners.
+   - Code: tenant credential type in `kyc_verifier`, rent→mint path in
+     `HousingFund`, tenant view in frontend.
+
+5. **Property-scoped governance.**
+   - Let tenants + holders of a specific property vote on property-specific
+     decisions (maintenance, improvements, rent policy within legal bounds),
+     separate from fund-wide acquisition votes. Reuse the private-ballot
+     machinery; add a `property_id` scope to proposals.
+   - Code: `governance` proposal scoping.
+
+### Phase 3 — Token economics that retain capital (the flywheel) — *covered in detail in §4*
+
+6. **FSFT staking + fee capture** (align long-term holders, give the token a
+   yield beyond NAV).
+7. **Trust-minimized rewards** (replace admin weight-setting with the
+   `rewards_weights` recursive proof).
+8. **Finish AIP-20 standardization** per `PHASE3_TOKEN_STANDARDIZATION.md`
+   (clean interfaces → audits, wallet support, composability).
+
+### Phase 4 — Compliance, scale & ecosystem — *required for institutional euros*
+
+9. **Audit + formal review** of HousingFund/DEX/Rewards before any mainnet value.
+10. **Legal wrapper & redemption SPV** aligned with `pilot-term-sheet.md` (the
+    on-chain FSFT must map to a real legal claim on the property SPV; this is
+    what makes pension-fund capital possible).
+11. **Impact-metrics dashboard** (affordable units created, tenants converted to
+    owners, average ticket size) — the ESG artifact institutions need.
+12. **Multi-jurisdiction KYC** and a partner onboarding kit (the contact-persons
+    doc is the seed of a real BD pipeline).
+
+---
+
+## 4. Token & crypto-economic mechanisms (the menu, with recommendations)
+
+The brief explicitly asks to weigh tokenomics/crypto mechanisms. Here is a
+curated set, each with *why it fits an equitable housing protocol* and a
+recommendation. **Principle: every mechanism must serve affordability and
+alignment first — no extractive design.**
+
+### 4.1 FSFT value accrual — recommended: **NAV + yield, not inflation**
+
+FSFT should be a *real-asset claim*, not a speculative emission. Its value =
+(property NAV + accrued rent + reserve) ÷ supply. Keep minting strictly tied to
+deposits/rent so supply can never be diluted away from backing. **Do not** turn
+FSFT into a high-emission farm token — that would betray the thesis and attract
+mercenary capital that flees.
+
+### 4.2 Reward token vs. FSFT — keep them separate (recommended)
+
+Today `ProtocolRewards` emits a *protocol token* distinct from FSFT. Keep this
+two-token split:
+- **FSFT** = asset-backed ownership (stable, NAV-driven, the thing you hold).
+- **Protocol/governance token** = incentive + protocol-wide governance + fee
+  rights (the thing that bootstraps participation).
+This avoids the classic RWA mistake of inflating the asset token. The protocol
+token can later capture protocol fees (4.5) and govern parameters.
+
+### 4.3 Staking with real fee capture — recommended
+
+Let holders stake the protocol token (and/or lock FSFT) to:
+- earn a share of **protocol fees** (DEX trading fee, a small management/perf
+  fee on yield) — *real revenue, not emissions*;
+- boost reward-epoch weight (a `ve`-style time-lock multiplier — longer lock,
+  higher weight) to reward long-term aligned capital over flippers.
+This converts one-time depositors into recurring participants and gives the
+token a cash-flow-backed reason to exist.
+
+### 4.4 Rent-to-equity — recommended (the differentiator, see §3 item 4)
+
+The most defensible, mission-aligned mechanism. It is also a *retention* engine:
+tenants who are accruing equity don't churn, and they evangelize.
+
+### 4.5 Protocol fee design — recommended (kept gentle)
+
+- **DEX fee:** tiny bps fee on fills → fee pool (to stakers + reserve).
+- **Yield performance fee:** small % of rent/DeFi yield → sustains the protocol
+  + funds the redemption reserve.
+- **No deposit fee, no exit penalty for small depositors** — equity first.
+Fees fund the redemption floor and staker rewards, closing the flywheel with
+*organic* revenue instead of token printing.
+
+### 4.6 Redemption floor / liquidity backstop — recommended (see §3 item 3)
+
+A reserve-funded floor is itself a token mechanism: it gives FSFT a credible
+soft peg to NAV and is the difference between "interesting demo" and "thing
+retail will actually put money in."
+
+### 4.7 Quadratic / capped governance weight — recommended for equity
+
+Acquisition voting currently is one-vote-per-proposal per KYC'd depositor (good,
+anti-plutocratic). Preserve this egalitarian default; if vote weight ever scales
+with stake, **cap it** (or use quadratic weighting) so a whale can't dominate
+which properties get bought. This is on-brand for "fair" squares.
+
+### 4.8 Mechanisms to **avoid** (explicitly)
+
+- High-APR emission farming (mercenary TVL, betrays mission).
+- Rebasing / algorithmic-peg gimmicks on FSFT (NAV peg must be asset-real).
+- Leveraged/derivative products on FSFT before the base layer is audited.
+- Any design that lets large holders crowd small depositors out of distributions
+  — the FIFO + small-floor formula is a core equity feature; protect it.
+
+---
+
+## 5. Go-to-market: turning the Netherlands pilot into users
+
+The outreach docs already identify the wedge (Dutch housing crisis), a partner
+target list, and named contacts. The product plan above should be sequenced to
+make those conversations land:
+
+1. **Lead with the tenant story.** Rent-to-equity (§3.4) is the headline that
+   gets press, municipalities, and housing-corporation partners on a call. Build
+   a demoable version early even if limited.
+2. **Give institutions the audit artifact.** NAV oracle (§3.2) + impact
+   dashboard (§4 item 11) + legal wrapper (§4 item 10) are the three things a
+   pension fund's investment committee asks for. Prioritize them for the
+   institutional track.
+3. **Give retail a frictionless on-ramp.** Small-ticket deposits, zkPassport KYC
+   already in the frontend, mobile-first flows, and the redemption floor so they
+   know they can get out. The €50 "own a brick" hook is the acquisition funnel.
+4. **Run a contained pilot** matching `pilot-one-page-thesis.md` /
+   `pilot-term-sheet.md`: one building, a real (or shadow) NAV, a cohort of
+   tenants offered rent-to-equity, and a small group of impact investors —
+   measure conversion, then template it.
+
+---
+
+## 6. Suggested sequencing & "definition of done"
+
+| Order | Item | DoD (trust unlocked) |
+|---|---|---|
+| 1 | Real yield + rent ingestion (§3.1) | FSFT NAV grows from actual cash flow in a test deploy. |
+| 2 | NAV oracle + valuation proof (§3.2) | `get_valuation_public()` is fresh & attested; DEX band tracks it. |
+| 3 | Redemption floor (§3.3) | A holder can redeem at NAV-capped-by-reserve on testnet. |
+| 4 | Rent-to-equity MVP (§3.4) | A tenant credential converts rent → FSFT end-to-end. |
+| 5 | Staking + fee capture (§4.3/4.5) | Stakers earn real DEX/yield fees; ve-lock boosts weight. |
+| 6 | Trust-minimized rewards (§3.7) | `rewards_weights` proof replaces admin weight-setting. |
+| 7 | AIP-20 finish + audit (§3.8/§4 item 9) | Clean standard interfaces; external audit booked. |
+| 8 | Legal wrapper + impact dashboard (§4 items 10–11) | FSFT maps to a legal SPV claim; impact metrics live. |
+
+---
+
+## 7. Risks & honest caveats
+
+- **Yield realism.** If the only yield is still simulated at pilot time, say so
+  to partners — never present simulated APY as real. The plan's #1 priority is
+  exactly to fix this.
+- **Liquidity is hard.** The redemption floor is *best-effort*, bounded by
+  reserve. Communicate limits; don't promise instant full exit.
+- **Regulatory.** FSFT is very likely a security in most jurisdictions; the
+  legal wrapper (§4 item 10) is a gating dependency for real money, not an
+  afterthought. Sequence compliance with engineering, not after it.
+- **Oracle trust.** A NAV oracle is a centralization/manipulation surface;
+  prefer multi-party attestation + the recursive proof over a single feed.
+- **Don't over-tokenize.** The temptation to juice growth with emissions is the
+  fastest way to lose the mission and the long-term holders. Resist it.
+
+---
+
+## 8. Immediate next actions (small, concrete)
+
+1. Replace `DeFiVault`'s simulated `accrue_yield` with a pluggable yield-source
+   interface + add `record_rent` to `HousingFund` (Phase 1.1).
+2. Spec the NAV oracle update path and connect the existing
+   `proofs/recursive/housing_valuation` circuit (Phase 1.2).
+3. Spec the redemption-floor reserve accounting and queue (Phase 1.3).
+4. Draft the rent-to-equity tenant-credential design note (Phase 2.4).
+5. Finish the AIP-20 migration tracked in `PHASE3_TOKEN_STANDARDIZATION.md`.
+
+Each becomes its own design note under `docs/` and its own branch, tested with
+`./scripts/aztec-test.sh` per `CLAUDE.md`.
+
+---
+
+*This plan is intentionally opinionated about what NOT to build (extractive
+tokenomics) as much as what to build. The protocol's moat is being genuinely
+equitable and genuinely private — every roadmap decision should be checked
+against "does this help the small saver and the tenant, or only the whale?"*
