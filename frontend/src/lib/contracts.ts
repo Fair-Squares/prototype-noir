@@ -37,6 +37,8 @@ export interface FundStats {
   tokenPriceBps?: number;
   navEur?: number;
   navPerFsftEur?: number;
+  /** Cumulative on-chain rent income recorded via HousingFund.record_rent. REAL. */
+  totalRentIncome?: number;
   parkedAllocationBps?: number;
   parkedMinBps?: number;
   parkedMaxBps?: number;
@@ -330,11 +332,13 @@ export interface PortfolioData {
   available?: number;
   totalSupply: number;
   sharePercent: number;
+  /** Holder's pro-rata slice of REAL on-chain rent income (record_rent), not an APY. */
   estimatedYield: number;
   tokenPriceBps?: number;
   tokenPriceEur?: number;
   navEur?: number;
   navPerFsftEur?: number;
+  totalRentIncome?: number;
   fsftMarketValue?: number;
   lastAssetSalePrice?: number;
   lastFsftMinted?: number;

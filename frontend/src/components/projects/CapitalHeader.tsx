@@ -73,6 +73,13 @@ export function CapitalHeader({ stats, loading }: CapitalHeaderProps) {
               per Fund Share
             </>
           ) : null}
+          {stats.totalRentIncome && stats.totalRentIncome > 0 ? (
+            <>
+              {" · incl. "}
+              <span className="text-mono text-text-1">{formatEUR(stats.totalRentIncome)}</span>{" "}
+              rent income
+            </>
+          ) : null}
         </p>
       ) : null}
     </div>

@@ -73,24 +73,30 @@ suite `./scripts/aztec-test.sh` → **5 passed, 0 failed**.
 - Like `deposit`, `record_rent` is **counter accounting**: it records the rent
   collected. Moving the actual EUR token is orchestrated off-contract (the API
   layer / keeper), exactly as deposits already work in this prototype.
-- Rent income is **transparent** (public aggregate) and is intended to **back
-  NAV**. This slice exposes the number; it does **not** yet fold it into the
-  NAV-per-FSFT shown in the UI, nor distribute it to holders. Those are the next
-  steps below — called out so nothing is silently faked.
+- Rent income is **transparent** (public aggregate) and **backs NAV**. As of the
+  follow-up below, `NAV = total_deposits + total_rent_income` is computed in both
+  `/api/fund/stats` and `/api/portfolio` (live) and the simulation store, so
+  NAV-per-FSFT, the holder's market value, and the DEX reference price all move
+  with real rent. What it does **not** yet do is distribute rent to holders as a
+  *separate claimable EUR yield* — the rent benefit currently reaches holders
+  only via NAV-per-FSFT. That is the next step (below).
 
 ## What is intentionally NOT done yet (the next step)
 
 In strict trust-priority order (each turns a *modelled* demo number into a *real*
 enforced one):
 
-1. **Wire rent into NAV (next step — smallest, highest-value).** Surface
-   `get_total_rent_income()` in `FundStats`/`/api/fund/stats` and compute
-   `NAV = total_deposits + total_rent_income` (and NAV-per-FSFT from it), with a
-   `record_rent` keeper script under `scripts/`. This makes the demo's modelled
-   "earn the rent" line a **real on-chain figure** end-to-end.
-2. **Rent → claimable distribution.** Let FSFT holders claim accrued rent as EUR
-   yield (reuse the FIFO + small-floor share machinery, or a simpler pro-rata
-   on a rent epoch), so rent reaches holders, not just NAV.
+1. ~~**Wire rent into NAV.**~~ **DONE** (follow-up commit). `get_total_rent_income()`
+   is read in `/api/fund/stats` + `/api/portfolio` and folded into
+   `NAV = total_deposits + total_rent_income` (live + sim); `totalRentIncome` is
+   surfaced on the Overview/`/fund`/Portfolio; the fake 3% "Accrued yield" row is
+   replaced by the holder's **real** pro-rata rent share; and `scripts/record-rent.sh`
+   posts rent via `POST /api/fund/rent` → `HousingFund.record_rent`. The "earn the
+   rent" line is now a real on-chain figure end-to-end.
+2. **Rent → claimable distribution (next step).** Let FSFT holders *claim* accrued
+   rent as EUR yield (reuse the FIFO + small-floor share machinery, or a simpler
+   pro-rata on a rent epoch), so rent reaches holders as a withdrawable amount,
+   not only via NAV-per-FSFT.
 3. **Capped-return in-circuit (§4.0).** Turn the demo's D2 *display* overlay into
    enforcement: cap the per-investor payout and route the surplus to an on-chain
    affordability reserve note/pool. *Do this before staking/fees — every other

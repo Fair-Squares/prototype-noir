@@ -75,11 +75,17 @@ export function HoldingsBreakdown({
       value: formatEUR(portfolio.depositedAmount),
     },
     {
-      key: "yield",
+      key: "rent",
       asset: (
         <div className="min-w-0">
-          <p className="text-body text-text-1">Accrued yield</p>
-          <p className="text-caption text-text-3">On your deposited capital</p>
+          <p className="text-body inline-flex items-center gap-1 text-text-1">
+            Rent income share
+            <InfoDot
+              label="What is rent income share"
+              content="Your pro-rata slice of the rent the fund has collected on-chain (record_rent). It already backs your fund-share value via NAV-per-share — shown here for transparency, not as a separate balance to add on top."
+            />
+          </p>
+          <p className="text-caption text-text-3">On-chain · already in fund-share value</p>
         </div>
       ),
       amount: formatEUR(portfolio.estimatedYield),

@@ -250,7 +250,7 @@ export interface LivePortfolio {
   balance:       number;  // FSFT balance (private — needs PXE)
   eurBalance:    number;  // EURs balance (private — needs PXE)
   sharePercent:  number;  // derived: balance / totalSupply * 100
-  estimatedYield:number;  // derived: balance * 0.03
+  estimatedYield:number;  // holder's real on-chain rent share (computed in /api/portfolio); this stub returns 0
   source: "live";
 }
 

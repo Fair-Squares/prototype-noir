@@ -74,7 +74,9 @@ interface SimFundState {
   tokenPriceBps: number;
   isPaused: boolean;
   investorCount: number;
-  totalYield: number;
+  // Phase 1.1: cumulative on-chain rent income (mirrors HousingFund.record_rent).
+  rentIncome: number;
+  rentByProperty: Record<number, number>;
   parkedAllocationBps: number;
   parkedMinBps: number;
   parkedMaxBps: number;
@@ -228,7 +230,7 @@ function rewardEpochStartMs(epoch: number): number {
 }
 
 function getReferenceFsftPriceEur(state: SimState): number {
-  const navEur = Math.max(0, state.fund.totalDeposits + state.fund.totalYield);
+  const navEur = Math.max(0, state.fund.totalDeposits + state.fund.rentIncome);
   if (state.fund.fsftTotalSupply > 0) {
     return roundTo4(navEur / state.fund.fsftTotalSupply);
   }
@@ -352,7 +354,8 @@ function createInitialState(): SimState {
       tokenPriceBps: 10_000,
       isPaused: false,
       investorCount: 3,
-      totalYield: 15_000,
+      rentIncome: 0,
+      rentByProperty: {},
       parkedAllocationBps: 3000,
       parkedMinBps: 2000,
       parkedMaxBps: 5000,
@@ -577,7 +580,7 @@ export function simAttestFsftForRewards(address: string): { success: boolean; er
 
 export function simGetFundStats() {
   const { fund } = getState();
-  const navEur = Math.max(0, fund.totalDeposits + fund.totalYield);
+  const navEur = Math.max(0, fund.totalDeposits + fund.rentIncome);
   const navPerFsftEur = fund.fsftTotalSupply > 0 ? roundTo4(navEur / fund.fsftTotalSupply) : 0;
   const available = Math.max(0, fund.totalDeposits - fund.totalInDefi - fund.totalAllocated);
 
@@ -593,7 +596,7 @@ export function simGetFundStats() {
     tokenPriceBps: fund.tokenPriceBps,
     isPaused: fund.isPaused,
     investorCount: fund.investorCount,
-    totalYield: fund.totalYield,
+    totalRentIncome: fund.rentIncome,
     navEur,
     navPerFsftEur,
     parkedAllocationBps: fund.parkedAllocationBps,
@@ -603,6 +606,25 @@ export function simGetFundStats() {
   };
 }
 
+/**
+ * Phase 1.1: record collected rent for a property -- mirrors
+ * HousingFund.record_rent. Accrues to the lifetime + per-property rent income
+ * that backs NAV. No simulated yield: rent is posted, never fabricated.
+ */
+export function simRecordRent(
+  propertyId: number,
+  amount: number,
+): { success: boolean; error?: string } {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { success: false, error: "rent amount must be positive" };
+  }
+  const s = getState();
+  if (s.fund.isPaused) return { success: false, error: "fund is paused" };
+  s.fund.rentIncome += amount;
+  s.fund.rentByProperty[propertyId] = (s.fund.rentByProperty[propertyId] ?? 0) + amount;
+  return { success: true };
+}
+
 // ── Portfolio ─────────────────────────────────────────────────────────────────
 
 export function simGetPortfolio(address: string) {
@@ -610,8 +632,13 @@ export function simGetPortfolio(address: string) {
   const { fund } = getState();
   const eligibility = simGetVotingEligibility(address);
   const sharePercent = fund.fsftTotalSupply > 0 ? (acct.fsftBalance / fund.fsftTotalSupply) * 100 : 0;
-  const navEur = Math.max(0, fund.totalDeposits + fund.totalYield);
+  const navEur = Math.max(0, fund.totalDeposits + fund.rentIncome);
   const navPerFsftEur = fund.fsftTotalSupply > 0 ? roundTo4(navEur / fund.fsftTotalSupply) : 0;
+  // The holder's pro-rata slice of REAL on-chain rent income (no fake APY).
+  const rentShare =
+    fund.fsftTotalSupply > 0
+      ? Math.round((fund.rentIncome * acct.fsftBalance) / fund.fsftTotalSupply)
+      : 0;
   const tokenPriceEur = fund.tokenPriceBps / 10_000;
   const rewards = simGetRewardsStatus(address);
 
@@ -625,11 +652,12 @@ export function simGetPortfolio(address: string) {
     available: Math.max(0, fund.totalDeposits - fund.totalInDefi - fund.totalAllocated),
     totalSupply: fund.fsftTotalSupply,
     sharePercent: Math.round(sharePercent * 100) / 100,
-    estimatedYield: Math.round(acct.depositedAmount * 0.03),
+    estimatedYield: rentShare,
     tokenPriceBps: fund.tokenPriceBps,
     tokenPriceEur,
     navPerFsftEur,
     navEur,
+    totalRentIncome: fund.rentIncome,
     fsftMarketValue: Math.round(acct.fsftBalance * navPerFsftEur * 100) / 100,
     lastAssetSalePrice: fund.lastAssetSalePrice,
     lastFsftMinted: fund.lastFsftMinted,

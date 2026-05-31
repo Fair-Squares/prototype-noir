@@ -92,6 +92,7 @@ export async function GET() {
       investorCount,
       isPaused,
       totalSupply,
+      totalRentIncome,
     ] = await Promise.all([
       hfContract.methods.get_fund_stats().simulate({ from }).then((r) =>
         simResult<{
@@ -123,15 +124,19 @@ export async function GET() {
       ftContract.methods.total_supply().simulate({ from }).then((r) =>
         toNumberStrict(simResult(r), "FundToken.total_supply")
       ),
+      hfContract.methods.get_total_rent_income().simulate({ from }).then((r) =>
+        toNumberStrict(simResult(r), "HousingFund.get_total_rent_income")
+      ),
     ]);
 
     const totalDeposits = toNumberStrict(stats.total_deposits, "HousingFund.get_fund_stats.total_deposits");
     const totalInDefi = toNumberStrict(stats.total_in_defi, "HousingFund.get_fund_stats.total_in_defi");
     const totalAllocated = toNumberStrict(stats.total_allocated, "HousingFund.get_fund_stats.total_allocated");
     const available = toNumberStrict(stats.available, "HousingFund.get_fund_stats.available");
-    // No on-chain yield source (the AIP-4626 vault was dropped), so NAV is just
-    // the pooled capital.
-    const navEur = Math.max(0, totalDeposits);
+    // NAV = pooled capital + real rent income recorded on-chain via record_rent
+    // (Phase 1.1). There is still no real DeFi yield source, so nothing else is
+    // added — see docs/PHASE1_YIELD_AND_RENT.md.
+    const navEur = Math.max(0, totalDeposits + totalRentIncome);
     const navPerFsftEur = totalSupply > 0 ? Math.round((navEur / totalSupply) * 10000) / 10000 : 0;
 
     return NextResponse.json({
@@ -148,6 +153,7 @@ export async function GET() {
       valuationBlock: toNumberStrict(valuation.last_valuation_block, "HousingFund.get_valuation.last_valuation_block"),
       navEur,
       navPerFsftEur,
+      totalRentIncome,
       parkedAllocationBps: toNumberStrict(parkedPolicy.target_bps, "HousingFund.get_parked_capital_policy.target_bps"),
       parkedMinBps: toNumberStrict(parkedPolicy.min_bps, "HousingFund.get_parked_capital_policy.min_bps"),
       parkedMaxBps: toNumberStrict(parkedPolicy.max_bps, "HousingFund.get_parked_capital_policy.max_bps"),
