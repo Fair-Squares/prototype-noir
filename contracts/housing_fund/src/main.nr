@@ -190,6 +190,17 @@ pub contract HousingFund {
         d_claim_nullifiers: Map<Field, Owned<SingleUseClaim<Context>, Context>, Context>,
         // V2 nullifiers per (note_hash, owner) for withdraw_private.
         w_withdraw_nullifiers: Map<Field, Owned<SingleUseClaim<Context>, Context>, Context>,
+        // -- Phase 1.1: rent ingestion (the real cash-flow primitive) ---------
+        // Appended at the END of the struct so existing storage slots (read by
+        // the slot-based frontend reader) are not shifted.
+        // Cumulative rent income recorded across all properties (lifetime, gross
+        // EUR units). Transparent like the other aggregates; part of fund NAV.
+        total_rent_income: PublicMutable<u64, Context>,
+        // Per-property cumulative rent, keyed by property_id (as Field).
+        rent_income_by_property: Map<Field, PublicMutable<u64, Context>, Context>,
+        // Optional keeper allowed to post rent (in addition to admin). An oracle
+        // /keeper that reports collected rent per property. Zero = admin-only.
+        rent_keeper: PublicMutable<AztecAddress, Context>,
     }
 
     // ====================================================================
@@ -256,6 +267,8 @@ pub contract HousingFund {
         self.storage.parked_min_bps.write(2000);
         self.storage.parked_max_bps.write(5000);
         self.storage.is_paused.write(false);
+        self.storage.total_rent_income.write(0);
+        // rent_keeper intentionally left unset (zero) -- admin-only until set.
     }
 
     // -- Contract wiring (called after all contracts are deployed) ---------
@@ -288,6 +301,14 @@ pub contract HousingFund {
     fn set_small_threshold(threshold: u128) {
         assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
         self.storage.small_threshold.write(threshold);
+    }
+
+    // Admin: designate a keeper allowed to post collected rent (an oracle/keeper
+    // that reports rent per property). Zero address = admin-only.
+    #[external("public")]
+    fn set_rent_keeper(keeper: AztecAddress) {
+        assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
+        self.storage.rent_keeper.write(keeper);
     }
 
     // -- Core operations --------------------------------------------------
@@ -554,6 +575,34 @@ pub contract HousingFund {
         self.storage.last_fsft_minted.write(minted_fsft);
         self.storage.last_token_price_bps.write(token_price_bps);
         self.storage.last_valuation_block.write(self.context.block_number());
+    }
+
+    // -- Phase 1.1: rent ingestion ----------------------------------------
+    // Record rent collected for a funded property -- the real cash-flow primitive
+    // behind "earn the rent". An authorized keeper (or admin) posts the rent
+    // collected per property; it accrues to the fund's transparent rent-income
+    // aggregate, which backs NAV. There is NO simulated yield: rent only enters
+    // here, posted by an authorized party against a real collection, never
+    // fabricated. Distributing rent to FSFT holders (as claimable EUR yield or
+    // NAV-per-share growth) is layered on top -- see docs/PHASE1_YIELD_AND_RENT.md.
+    #[external("public")]
+    fn record_rent(property_id: u32, amount: u64) {
+        assert(!self.storage.is_paused.read(), "fund is paused");
+        let caller = self.msg_sender();
+        let admin = self.storage.admin.read();
+        let keeper = self.storage.rent_keeper.read();
+        assert(
+            admin.eq(caller) | (!keeper.is_zero() & keeper.eq(caller)),
+            "not authorized to record rent",
+        );
+        assert(amount > 0, "rent amount must be positive");
+
+        let pkey = property_id as Field;
+        let prev = self.storage.rent_income_by_property.at(pkey).read();
+        self.storage.rent_income_by_property.at(pkey).write(prev + amount);
+
+        let total = self.storage.total_rent_income.read();
+        self.storage.total_rent_income.write(total + amount);
     }
 
     // -- V2: private deposit ---------------------------------------------------
@@ -833,6 +882,23 @@ pub contract HousingFund {
             total_allocated: allocated,
             available,
         }
+    }
+
+    // -- Phase 1.1: rent income getters -----------------------------------
+
+    #[external("utility")]
+    unconstrained fn get_total_rent_income() -> pub u64 {
+        self.storage.total_rent_income.read()
+    }
+
+    #[external("utility")]
+    unconstrained fn get_property_rent(property_id: u32) -> pub u64 {
+        self.storage.rent_income_by_property.at(property_id as Field).read()
+    }
+
+    #[external("utility")]
+    unconstrained fn get_rent_keeper() -> pub AztecAddress {
+        self.storage.rent_keeper.read()
     }
 
     #[external("utility")]
