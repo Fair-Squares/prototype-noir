@@ -504,3 +504,129 @@ Each becomes its own design note under `docs/` and its own branch, tested with
 tokenomics) as much as what to build. The protocol's moat is being genuinely
 equitable and genuinely private — every roadmap decision should be checked
 against "does this help the small saver and the tenant, or only the whale?"*
+
+---
+
+## 9. The demo plan — what to build *next* and *show*, realistically
+
+This is the operational answer to "what is the plan from here?" The goal is a
+**believable, end-to-end demo** that makes a partner (a Rotterdam housing
+corporation, a wooncoöperatie, an impact investor) say *"I understand what this
+does and I'd pilot it"* — without ever presenting simulated numbers as real.
+
+### 9.0 Demo principles (read first)
+
+1. **Demo what's true; label what's modelled.** Everything already verified in
+   `PHASE3_TOKEN_STANDARDIZATION.md` (deposit → governance vote → execute →
+   FIFO+floor distribution → claim, all on a local Aztec network) is *real* and
+   is the spine of the demo. Anything not yet real (rent income, NAV oracle,
+   redemption) is shown behind a visible **"Modelled for demo"** chip — never as
+   live APY. This honesty is itself a selling point to this audience.
+2. **One concrete project, not an abstract fund.** Pick a single, real-feeling
+   project (e.g. a Rotterdam transformation of ~20 affordable units with a
+   documented `onrendabele top`). Every screen tells *that* project's story. This
+   is the §2.0 dossier made tangible.
+3. **Lead housing, not crypto.** The first screen a partner sees is the project
+   dossier and "homes enabled / gap closed", not a token balance or a DEX.
+4. **Scope to a laptop.** The whole thing must run via
+   `docker compose --profile aztec up` (local network) — no testnet dependency,
+   no real money, deterministic seed data.
+
+### 9.1 What already works (the demo spine — build nothing, just script it)
+
+Verified-live today (local network): `/invest` deposit (private, KYC-gated,
+FIFO+floor), `/governance` create→vote (private ballot)→finalize→execute,
+HousingFund `open_distribution`→`/portfolio` claim, `/fund` + `/portfolio`
+live reads (NAV-per-FSFT), `/kyc` (zkPassport flow + dev skip), `/rewards`
+claim, `/dex` place/cancel/match. API routes for all of the above exist
+(`api/fund/*`, `api/governance/*`, `api/portfolio`, `api/rewards/*`, `api/dex/*`,
+`api/kyc/*`). **The headline flow — KYC → deposit → vote → execute → claim your
+fair (small-floor-weighted) share — is the demo, and it is real.**
+
+### 9.2 The four demo-grade features to build next (small, high-impact, touch the problem)
+
+These are deliberately the *thin, demoable slices* of §2.0–§3, chosen because
+each directly dramatizes the affordability problem and is achievable without the
+heavy legal/audit lift:
+
+- **D1 — Project dossier page (`/projects/[id]`).** *(§2.0)* The single most
+  important new screen. Renders the chosen project's capital stack (senior bank
+  debt · public subsidy · member capital · **Fair Squares capped-return gap
+  layer**), the documented financing gap, the affordability covenant (rent band,
+  target group, 15–25 yr lock, clawback), milestones, and the **"homes enabled /
+  gap closed"** KPIs. Public aggregates for everyone; sensitive rows role-gated.
+  *Mostly presentation over data the contracts + a small project-metadata JSON
+  can express.* This is what a partner actually wants to see on the call.
+- **D2 — Capped-return + covenant accounting (visible).** *(§4.0)* Wire the
+  distribution/claim path to display the **capped return** and route modelled
+  excess-over-cap to an "affordability reserve" line. Even if the cap math is a
+  thin overlay for the demo, *showing* "investor return is capped at ~3–4%;
+  surplus protects affordability" is the core anti-speculation story and
+  differentiator. Tag clearly as modelled where not enforced in-circuit yet.
+- **D3 — Rent-to-equity teaser (tenant scenario).** *(§3.4)* A minimal tenant
+  flow: a tenant credential scoped to the project, and a "rent payment → mints a
+  small FSFT slice to the tenant" action (modelled rent for the demo). Even a
+  single end-to-end tenant→equity transaction is the strongest emotional beat:
+  *"your rent finally builds your equity, privately."* Don't over-build; one
+  convincing path beats a half-built system.
+- **D4 — Impact + trust strip.** *(§4 item 11 + existing ProofRail/TrustChip)*
+  A compact, always-visible summary: homes enabled, affordability-years locked,
+  % allocated to small depositors, and the privacy/KYC proof state. Reuses the
+  existing `shell/TrustChip` + `ui/ProofRail`. Proves the equity + privacy claims
+  at a glance.
+
+> **Cut line for the demo:** real DeFi yield, live NAV oracle, redemption queue,
+> staking/fees, audit, legal wrapper — all explicitly **out of demo scope** (they
+> are real-money/production concerns from §3–§4). The demo *names* them on a
+> "what's next for production" slide; it does not fake them.
+
+### 9.3 User scenarios to script (the demo walkthrough)
+
+Three personas, one project, ~8–10 minutes total. Pre-seed the local network so
+each starts instantly.
+
+1. **Sofie — small saver / would-be first-time buyer.** Connects wallet →
+   passes KYC (zkPassport dev path) → deposits **€200** into the project on
+   `/invest`. The demo shows her deposit is **private** (only she sees the
+   amount) but the fund total updates publicly. *Beat:* "€200 buys real
+   affordable-housing exposure, and the small-depositor floor means she's
+   *over*-allocated vs. a whale — equity by design."
+2. **Pieter — impact investor.** Opens the **project dossier (D1)**: sees the gap,
+   the capital stack, the **capped 3–4% return (D2)**, the 20-year affordability
+   covenant, and "this closes a documented `onrendabele top` for 20 homes."
+   Deposits a larger ticket; creates/▶votes a governance proposal to deploy
+   capital into the project. *Beat:* "auditable, capped, covenant-locked,
+   privacy-preserving — the ESG paper-trail his committee needs."
+3. **Governance + claim (the real spine).** Quorum reached → **execute** →
+   `open_distribution` → both Sofie and Pieter **claim** their FIFO+small-floor
+   shares on `/portfolio`; the numbers reconcile exactly (the verified
+   887/112-style split). *Beat:* "fair, deterministic, on-chain distribution —
+   no admin discretion."
+4. **Lana — tenant (rent-to-equity, D3).** A rent payment converts to a small
+   FSFT slice in her private balance; the **impact strip (D4)** ticks up "tenant
+   equity" and "homes enabled". *Beat:* the moral core — the person living there
+   becomes a part-owner, privately.
+
+### 9.4 Build order for the demo (2–3 focused iterations)
+
+| Step | Work | Done when |
+|---|---|---|
+| 1 | **Seed a believable project + cohort.** Extend `scripts/seed-*`/bootstrap to plant one project (metadata + a proposal sized *below* total deposits so "ready to deploy" is non-zero — closes the open `docs/TODO.md` demo-headroom item) and 3–4 pre-funded personas. | `docker compose --profile aztec up` yields a demo-ready state with no manual clicks. |
+| 2 | **D1 project dossier page.** | `/projects/[id]` renders the chosen project's gap, capital stack, covenant, milestones, KPIs from live reads + project JSON; sensitive rows role-gated. |
+| 3 | **D2 capped-return + reserve display** on the distribution/claim + dossier. | Claim screens show capped return and surplus→affordability-reserve, labelled real vs modelled. |
+| 4 | **D4 impact + trust strip.** | Homes enabled / affordability-years / small-depositor % / proof-state visible app-wide via TrustChip+ProofRail. |
+| 5 | **D3 rent-to-equity teaser.** | One tenant credential → one rent→FSFT mint → private tenant balance, end-to-end. |
+| 6 | **Demo script + "Modelled for demo" chips + mobile pass.** | A written 8–10 min runbook; every modelled number is chip-labelled; the redesigned pages survive a phone viewport (the open `docs/TODO.md` mobile audit). |
+
+### 9.5 Demo definition of done
+
+- Runs end-to-end on a laptop from one command; no testnet, no real funds.
+- A non-crypto partner can narrate "what is being funded, what gap is closed,
+  what affordability is protected, what I own, what was privately verified" from
+  the screens alone (the §`frontend-redesign` 30-second test).
+- Every number on screen is either **verifiably real** (deposit/vote/claim/NAV
+  reads) or **chip-labelled "Modelled for demo"** (rent, reserve surplus). No
+  exceptions — this credibility *is* the pitch for this audience.
+- Passes the §0.6.1 equity gate: the demo visibly (a) caps returns / protects
+  against speculation, (b) shows distribution to small savers + a tenant, and
+  (c) is honest that durable yield/redemption are production work, not faked.
