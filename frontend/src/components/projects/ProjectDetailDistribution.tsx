@@ -6,6 +6,7 @@ import {
   type PropertyDeed,
 } from "@/lib/contracts";
 import { ProjectDetailMeter } from "./ProjectDetailMeter";
+import { ReturnsCapPanel } from "./ReturnsCapPanel";
 
 /**
  * Distribution / Capital tab. Two honest states:
@@ -33,6 +34,8 @@ export function ProjectDetailDistribution({
 
   return (
     <div className="space-y-5">
+      <ReturnsCapPanel variant="compact" />
+
       {opened ? (
         <section className="surface p-5">
           <div className="flex items-baseline justify-between gap-3">

@@ -195,3 +195,51 @@ Reuse these; do **not** build per-page chrome or invent type sizes:
 `SimplePage.tsx` is legacy (only `explain` still uses it) — migrate off it, do
 not extend it. Any client page reading `useSearchParams()` must be wrapped in a
 `<Suspense>` boundary or the Vercel static build fails.
+
+### Project dossier & the demo layer (FUTURE_DEVELOPMENT_PLAN §9 / D1–D4)
+
+The §9 demo build ("housing first, mechanics second") adds a **modelled
+project-finance layer** overlaid on the real on-chain proposal/deed. Read
+[`docs/FUTURE_DEVELOPMENT_PLAN.md` §9](./docs/FUTURE_DEVELOPMENT_PLAN.md) and
+[`docs/DEMO_RUNBOOK.md`](./docs/DEMO_RUNBOOK.md) before touching it.
+
+- **The honesty rule (non-negotiable).** Every on-screen number is either
+  **verifiably real** (on-chain reads) or **chip-labelled "Modelled for demo"**.
+  Never present a modelled number as live — that honesty *is* the pitch to
+  housing partners. Use `ui/ModelledChip` (built on `.chip-sim`, the dashed
+  low-key variant) next to any modelled figure / section.
+- **`frontend/src/lib/projectDossier.ts`** — the modelled metadata (capital
+  stack, documented financing gap / `onrendabele top`, affordability covenant,
+  milestones, impact, role-gated sensitive rows). It is a **typed sidecar, not
+  on-chain** (HousingFund has no covenant/reserve fields). Resolve it with
+  `getProjectDossier(proposal)` (keys by proposal id **or** title-slug; returns
+  `null` when none is authored — never invent one). `aggregateImpact(proposals)`
+  feeds the impact strip; `modelledReturnSplit(pool)` the capped-return display.
+  `SMALL_DEPOSITOR_FLOOR_BPS` (3000) mirrors the **real** on-chain `SMALL_POOL_BPS`
+  and is surfaced *without* a modelled tag; `CAPPED_RETURN_PCT` (3.5) is the
+  modelled pilot-term-sheet policy, **not** enforced in-circuit.
+- **Where it renders.** D1 dossier = a **"Dossier" tab** on `/fund/[id]`
+  (`components/projects/ProjectDetailDossier.tsx`), which becomes the **default
+  tab** when a dossier exists (lead with housing); sensitive rows are gated on
+  `eligibility.investorRole`. D2 capped-return = `ProjectDetailDossier` +
+  `components/projects/ReturnsCapPanel.tsx` (a compact banner also sits on the
+  Distribution tab). D4 impact = `components/overview/ImpactStrip.tsx` at the top
+  of the Overview. `components/projects/CapitalStack.tsx` is the stacked-bar
+  visual. The dossier draws the **modelled↔on-chain bridge** explicitly — the
+  proposal amount *represents* the Fair Squares tranche; the two are never merged
+  into one euro figure.
+- **Seed / demo headroom.** `scripts/seed-fsft.sh` funds a proposal **below**
+  total deposits (`PROPOSAL_AMOUNT=20000` of 30000) so the fund shows non-zero
+  "Available to deploy", and titles it `Maashaven Wonen — Rotterdam` so the
+  dossier resolves. The dossier content is **illustrative** (a representative
+  Rotterdam wooncoöperatie), not a real partner's finances.
+
+### Verifying a frontend change without clobbering the running container
+
+The docker `frontend` service serves a **root-owned `.next/`**; never `rm`/build
+over it. To typecheck + build safely: `npm run typecheck` (skip `next typegen`
+and call `tsc` directly if `.next` is root-owned — it fails to write route
+types), and for a full build use the env-gated `distDir`:
+`NEXT_DIST_DIR=.next-verify npx next build` then `rm -rf .next-verify`. (Building
+with `NEXT_DIST_DIR` set rewrites `next-env.d.ts`/`tsconfig.json` to point at the
+verify dir — `git checkout` those two afterward.)

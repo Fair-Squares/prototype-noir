@@ -24,9 +24,17 @@ set -euo pipefail
 # account is "small" and is guaranteed a pro-rata share of the 30% small pool
 # (on top of its FIFO share) — no depositor can claim zero. PROPOSAL_AMOUNT is
 # the FSFT pool and must be <= total deposits (3 x DEPOSIT_EACH).
+#
+# Demo headroom (docs/TODO.md + FUTURE_DEVELOPMENT_PLAN.md §9.4 step 1): the
+# funded proposal is deliberately SMALLER than total deposits (20000 of 30000),
+# so after seeding the fund still shows ~10000 "Available to deploy" / "Ready to
+# deploy" instead of a flat €0 — which lets the Overview demonstrate the
+# available → committed flow. PROPOSAL_TITLE matches a project dossier (see
+# frontend/src/lib/projectDossier.ts) so the /fund/[id] Dossier tab resolves.
 FRONTEND_URL="${FRONTEND_URL:-http://localhost:3000}"
 DEPOSIT_EACH="${DEPOSIT_EACH:-10000}"
-PROPOSAL_AMOUNT="${PROPOSAL_AMOUNT:-30000}"
+PROPOSAL_AMOUNT="${PROPOSAL_AMOUNT:-20000}"
+PROPOSAL_TITLE="${PROPOSAL_TITLE:-Maashaven Wonen — Rotterdam}"
 MAX_ADVANCE="${MAX_ADVANCE:-12}"
 
 log() { printf '\n[seed-fsft] %s\n' "$1" >&2; }
@@ -76,9 +84,9 @@ for i in 0 1 2; do
 done
 
 # -- 2. Admin (test0) creates a funding proposal -------------------------------
-log "Create proposal (amount ${PROPOSAL_AMOUNT})"
+log "Create proposal '${PROPOSAL_TITLE}' (amount ${PROPOSAL_AMOUNT})"
 post /api/governance/proposals \
-  "{\"action\":\"create\",\"title\":\"Seed asset\",\"amount\":${PROPOSAL_AMOUNT},\"accountIndex\":0,\"address\":\"${ADDR0}\"}" >/dev/null
+  "{\"action\":\"create\",\"title\":\"${PROPOSAL_TITLE}\",\"amount\":${PROPOSAL_AMOUNT},\"accountIndex\":0,\"address\":\"${ADDR0}\"}" >/dev/null
 
 # Newest proposal id = count - 1.
 PROPOSALS=$(get "/api/governance/proposals?address=${ADDR0}&accountIndex=0")

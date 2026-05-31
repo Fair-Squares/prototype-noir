@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { notFound, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, use, useCallback, useEffect, useState } from "react";
+import { Suspense, use, useCallback, useEffect, useMemo, useState } from "react";
 import { ProjectDetailDistribution } from "@/components/projects/ProjectDetailDistribution";
+import { ProjectDetailDossier } from "@/components/projects/ProjectDetailDossier";
 import { ProjectDetailGovernance } from "@/components/projects/ProjectDetailGovernance";
 import { ProjectDetailOverview } from "@/components/projects/ProjectDetailOverview";
 import { ProjectDetailProofs } from "@/components/projects/ProjectDetailProofs";
+import { getProjectDossier } from "@/lib/projectDossier";
 import {
   displayStatus,
   proposalLabel,
@@ -34,7 +36,7 @@ import {
   type PropertyDeed,
 } from "@/lib/contracts";
 
-const TAB_VALUES = ["overview", "distribution", "governance", "proofs"] as const;
+const TAB_VALUES = ["dossier", "overview", "distribution", "governance", "proofs"] as const;
 type TabValue = (typeof TAB_VALUES)[number];
 
 function isTabValue(value: string | null): value is TabValue {
@@ -58,7 +60,6 @@ function ProjectDetail({ projectId }: { projectId: number }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
-  const activeTab: TabValue = isTabValue(tabParam) ? tabParam : "overview";
 
   const setTab = useCallback(
     (value: string) => {
@@ -118,7 +119,18 @@ function ProjectDetail({ projectId }: { projectId: number }) {
     if (notFoundFlag) notFound();
   }, [notFoundFlag]);
 
+  // A project's dossier (modelled project-finance detail) overlays the real
+  // proposal. When one is on file we lead with it — housing first, mechanics
+  // second — and gate sensitive rows to verified investors.
+  const dossier = useMemo(() => (proposal ? getProjectDossier(proposal) : null), [proposal]);
+  const defaultTab: TabValue = dossier ? "dossier" : "overview";
+  const requestedTab = isTabValue(tabParam) ? tabParam : null;
+  const activeTab: TabValue =
+    requestedTab && (requestedTab !== "dossier" || dossier) ? requestedTab : defaultTab;
+  const canViewSensitive = Boolean(address) && Boolean(eligibility?.investorRole);
+
   const tabs: TabItem[] = [
+    ...(dossier ? [{ value: "dossier", label: "Dossier" }] : []),
     { value: "overview", label: "Overview" },
     { value: "distribution", label: "Distribution & capital" },
     { value: "governance", label: "Governance" },
@@ -196,6 +208,15 @@ function ProjectDetail({ projectId }: { projectId: number }) {
       ) : null}
 
       <Tabs tabs={tabs} value={activeTab} onValueChange={setTab} aria-label="Project memo">
+        {activeTab === "dossier" && dossier ? (
+          <ProjectDetailDossier
+            proposal={proposal}
+            deed={deed}
+            fundStats={fundStats}
+            dossier={dossier}
+            canViewSensitive={canViewSensitive}
+          />
+        ) : null}
         {activeTab === "overview" ? (
           <ProjectDetailOverview proposal={proposal} fundStats={fundStats} />
         ) : null}
