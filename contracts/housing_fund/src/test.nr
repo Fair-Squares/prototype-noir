@@ -76,3 +76,54 @@ unconstrained fn test_designated_keeper_can_record_rent() {
     let stored_keeper = env.execute_utility(HousingFund::at(addr).get_rent_keeper());
     assert_eq(stored_keeper, keeper);
 }
+
+// -- Phase 1.1 step 2: rent distribution guards -------------------------------
+
+#[test]
+unconstrained fn test_rent_accounting_starts_zero() {
+    let (env, addr, _admin) = setup();
+    assert_eq(env.execute_utility(HousingFund::at(addr).get_undistributed_rent()), 0);
+    assert_eq(env.execute_utility(HousingFund::at(addr).get_total_rent_claimed()), 0);
+    assert_eq(env.execute_utility(HousingFund::at(addr).get_rent_in_fund()), 0);
+}
+
+#[test]
+unconstrained fn test_record_rent_tracks_undistributed_and_rent_in_fund() {
+    let (env, addr, admin) = setup();
+    env.call_public(admin, HousingFund::at(addr).record_rent(1, 500));
+    env.call_public(admin, HousingFund::at(addr).record_rent(1, 250));
+    // Nothing distributed yet, so undistributed == rent-in-fund == total collected.
+    assert_eq(env.execute_utility(HousingFund::at(addr).get_undistributed_rent()), 750);
+    assert_eq(env.execute_utility(HousingFund::at(addr).get_rent_in_fund()), 750);
+}
+
+#[test(should_fail_with = "not admin")]
+unconstrained fn test_set_eur_token_requires_admin() {
+    let (mut env, addr, _admin) = setup();
+    let stranger = env.create_light_account();
+    env.call_public(stranger, HousingFund::at(addr).set_eur_token(stranger));
+}
+
+#[test(should_fail_with = "not authorized to open rent distribution")]
+unconstrained fn test_open_rent_distribution_requires_admin_or_keeper() {
+    let (mut env, addr, admin) = setup();
+    env.call_public(admin, HousingFund::at(addr).record_rent(1, 500));
+    let stranger = env.create_light_account();
+    env.call_public(stranger, HousingFund::at(addr).open_rent_distribution(0, 500));
+}
+
+#[test(should_fail_with = "amount exceeds undistributed rent")]
+unconstrained fn test_open_rent_distribution_cannot_exceed_collected() {
+    let (env, addr, admin) = setup();
+    env.call_public(admin, HousingFund::at(addr).record_rent(1, 500));
+    env.call_public(admin, HousingFund::at(addr).open_rent_distribution(0, 600));
+}
+
+#[test(should_fail_with = "no deposits to distribute to")]
+unconstrained fn test_open_rent_distribution_requires_deposits() {
+    let (env, addr, admin) = setup();
+    env.call_public(admin, HousingFund::at(addr).record_rent(1, 500));
+    // Within undistributed (500 <= 500) but no deposits exist, so the snapshot
+    // guard fires -- proving the undistributed check passed first.
+    env.call_public(admin, HousingFund::at(addr).open_rent_distribution(0, 500));
+}

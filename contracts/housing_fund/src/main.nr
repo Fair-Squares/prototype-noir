@@ -201,6 +201,28 @@ pub contract HousingFund {
         // Optional keeper allowed to post rent (in addition to admin). An oracle
         // /keeper that reports collected rent per property. Zero = admin-only.
         rent_keeper: PublicMutable<AztecAddress, Context>,
+        // -- Phase 1.1 step 2: claimable rent distribution --------------------
+        // The EUR stablecoin the fund pays rent yield from (its own public
+        // balance). Set via set_eur_token; zero until wired.
+        eur_token: PublicMutable<AztecAddress, Context>,
+        // Rent recorded but not yet opened into a rent-distribution epoch.
+        undistributed_rent: PublicMutable<u64, Context>,
+        // Lifetime rent paid out to holders. NAV's rent backing is
+        // total_rent_income - total_rent_claimed (claimed rent has left the fund).
+        total_rent_claimed: PublicMutable<u64, Context>,
+        // Per-rent-epoch snapshots, mirroring the d_* proposal-distribution maps
+        // but paid in EUR (yield) instead of minting FSFT (ownership).
+        r_open: Map<Field, PublicMutable<bool, Context>, Context>,
+        r_amount: Map<Field, PublicMutable<u128, Context>, Context>,
+        r_snapshot_total: Map<Field, PublicMutable<u128, Context>, Context>,
+        r_small_total: Map<Field, PublicMutable<u128, Context>, Context>,
+        r_small_pool: Map<Field, PublicMutable<u128, Context>, Context>,
+        r_fifo_cap: Map<Field, PublicMutable<u128, Context>, Context>,
+        r_claimed_total: Map<Field, PublicMutable<u128, Context>, Context>,
+        // Public-path anti-double-claim, keyed poseidon2([owner, seq, rent_epoch_id]).
+        r_record_has_claimed: Map<Field, PublicMutable<bool, Context>, Context>,
+        // Private-path nullifiers, keyed poseidon2([note_hash, rent_epoch_id]).
+        r_claim_nullifiers: Map<Field, Owned<SingleUseClaim<Context>, Context>, Context>,
     }
 
     // ====================================================================
@@ -268,7 +290,9 @@ pub contract HousingFund {
         self.storage.parked_max_bps.write(5000);
         self.storage.is_paused.write(false);
         self.storage.total_rent_income.write(0);
-        // rent_keeper intentionally left unset (zero) -- admin-only until set.
+        self.storage.undistributed_rent.write(0);
+        self.storage.total_rent_claimed.write(0);
+        // rent_keeper / eur_token intentionally left unset (zero) until wired.
     }
 
     // -- Contract wiring (called after all contracts are deployed) ---------
@@ -559,6 +583,88 @@ pub contract HousingFund {
         self.storage.d_record_has_claimed.at(claim_key).write(true);
     }
 
+    // -- Phase 1.1 step 2: claimable rent distribution --------------------
+    // Rent is distributed in "epochs": a keeper opens an epoch for some of the
+    // collected-but-undistributed rent, snapshotting the SAME FIFO + 30%
+    // small-floor split used for proposal distributions. Each depositor then
+    // claims their share, paid in EUR (yield) from the fund's own balance.
+    // Reuses total_claim(), so small early savers are over-allocated rent too.
+    #[external("public")]
+    fn open_rent_distribution(rent_epoch_id: u32, amount: u64) {
+        let caller = self.msg_sender();
+        let admin = self.storage.admin.read();
+        let keeper = self.storage.rent_keeper.read();
+        assert(
+            admin.eq(caller) | (!keeper.is_zero() & keeper.eq(caller)),
+            "not authorized to open rent distribution",
+        );
+
+        let rid = rent_epoch_id as Field;
+        assert(!self.storage.r_open.at(rid).read(), "rent distribution already opened");
+        assert(amount > 0, "amount must be positive");
+
+        let undistributed = self.storage.undistributed_rent.read();
+        assert(amount <= undistributed, "amount exceeds undistributed rent");
+
+        let snapshot_total = self.storage.cum_deposits.read();
+        assert(snapshot_total > 0, "no deposits to distribute to");
+
+        let pool = amount as u128;
+        let small_total = self.storage.cum_small_deposits.read();
+        let small_pool = (pool * SMALL_POOL_BPS) / 10000;
+        let fifo_cap = pool - small_pool;
+
+        self.storage.r_open.at(rid).write(true);
+        self.storage.r_amount.at(rid).write(pool);
+        self.storage.r_snapshot_total.at(rid).write(snapshot_total);
+        self.storage.r_small_total.at(rid).write(small_total);
+        self.storage.r_small_pool.at(rid).write(small_pool);
+        self.storage.r_fifo_cap.at(rid).write(fifo_cap);
+        self.storage.r_claimed_total.at(rid).write(0);
+
+        self.storage.undistributed_rent.write(undistributed - amount);
+    }
+
+    // Public-path rent claim for a SPECIFIC deposit record (by global seq), paid
+    // in EUR. Mirrors claim_distribution but transfers EUR instead of minting FSFT.
+    #[external("public")]
+    fn claim_rent(rent_epoch_id: u32, seq: u64) {
+        let rid = rent_epoch_id as Field;
+        assert(self.storage.r_open.at(rid).read(), "rent distribution is not open");
+
+        let caller = self.msg_sender();
+        let rec_key = poseidon2_hash([caller.to_field(), seq as Field]);
+        let rec = self.storage.deposit_records.at(rec_key).read();
+        assert(rec.owner == caller, "no deposit record for caller/seq");
+        assert(rec.amount > 0, "empty deposit record");
+
+        let claim_key = poseidon2_hash([caller.to_field(), seq as Field, rid]);
+        assert(!self.storage.r_record_has_claimed.at(claim_key).read(), "already claimed");
+
+        let small_pool = self.storage.r_small_pool.at(rid).read();
+        let small_total = self.storage.r_small_total.at(rid).read();
+        let fifo_cap = self.storage.r_fifo_cap.at(rid).read();
+        let share = total_claim(rec.amount, rec.cum_before, rec.is_small, small_pool, small_total, fifo_cap);
+        assert(share > 0, "nothing to claim");
+
+        // Fail-closed ceiling -- mathematically guaranteed by interval tiling.
+        let claimed_total = self.storage.r_claimed_total.at(rid).read();
+        let pool = self.storage.r_amount.at(rid).read();
+        assert(claimed_total + share <= pool, "rent distribution exhausted");
+
+        // Pay EUR yield from the fund's own public balance to the claimant. The
+        // fund is msg_sender == from, so the transfer is self-authorized (nonce 0).
+        // Reverts if the fund holds insufficient EUR (fail-closed, never silent).
+        let eur = self.storage.eur_token.read();
+        assert(!eur.is_zero(), "eur token not set");
+        self.call(Token::at(eur).transfer_public_to_public(self.context.this_address(), caller, share, 0));
+
+        self.storage.r_claimed_total.at(rid).write(claimed_total + share);
+        self.storage.r_record_has_claimed.at(claim_key).write(true);
+        let claimed = self.storage.total_rent_claimed.read();
+        self.storage.total_rent_claimed.write(claimed + (share as u64));
+    }
+
     // -- Governance/accounting: valuation snapshot ------------------------
     // Called after an executed proposal and FSFT distribution.
     #[external("public")]
@@ -603,6 +709,19 @@ pub contract HousingFund {
 
         let total = self.storage.total_rent_income.read();
         self.storage.total_rent_income.write(total + amount);
+
+        // Track the not-yet-distributed portion so a rent epoch can only hand out
+        // rent that was actually collected.
+        let undistributed = self.storage.undistributed_rent.read();
+        self.storage.undistributed_rent.write(undistributed + amount);
+    }
+
+    // Admin: wire the EUR stablecoin the fund pays rent yield from (its own
+    // public balance). Required before any rent can be claimed.
+    #[external("public")]
+    fn set_eur_token(eur_token: AztecAddress) {
+        assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
+        self.storage.eur_token.write(eur_token);
     }
 
     // -- V2: private deposit ---------------------------------------------------
@@ -834,6 +953,99 @@ pub contract HousingFund {
         self.storage.d_claimed_total.at(pid).write(claimed_total + share);
     }
 
+    // -- Phase 1.1 step 2: private rent claim ---------------------------------
+    // Mirror of claim_distribution_private, but pays EUR yield instead of minting
+    // FSFT: the share is computed from the KERNEL-VERIFIED DepositNote with the
+    // caller-supplied snapshots (re-checked in the public tail), and the EUR is
+    // moved from the fund's PUBLIC balance to the caller's PRIVATE balance via
+    // transfer_public_to_private (so the recipient's balance is never exposed).
+    #[external("private")]
+    fn claim_rent_private(
+        rent_epoch_id: u32,
+        hinted_deposit: HintedNote<DepositNote>,
+        eur_token_addr: AztecAddress,
+        supplied_small_pool: u128,
+        supplied_small_total: u128,
+        supplied_fifo_cap: u128,
+    ) {
+        let header = self.context.get_anchor_block_header();
+        let confirmed = assert_note_existed_by(header, hinted_deposit);
+
+        let caller = self.msg_sender();
+        assert(confirmed.owner == caller, "deposit note not owned by caller");
+        assert(confirmed.note.owner == caller, "deposit note owner mismatch");
+        assert(
+            confirmed.contract_address == self.context.this_address(),
+            "deposit note from wrong contract",
+        );
+
+        // Per-(note_hash, rent_epoch_id, owner) nullifier: a note claims each rent
+        // epoch at most once, but can claim across different epochs.
+        let note_hash = compute_confirmed_note_hash_for_nullification(confirmed);
+        let rid = rent_epoch_id as Field;
+        let claim_key = poseidon2_hash([note_hash, rid]);
+        self.storage.r_claim_nullifiers.at(claim_key).at(caller).claim();
+
+        let note = confirmed.note;
+        let share = total_claim(
+            note.amount,
+            note.cum_before,
+            note.is_small,
+            supplied_small_pool,
+            supplied_small_total,
+            supplied_fifo_cap,
+        );
+        assert(share > 0, "share is zero");
+
+        // Private EUR payout: fund's public EUR -> caller's private EUR notes.
+        // from == fund == msg_sender, so self-authorized (nonce 0). Reverts if the
+        // fund holds insufficient EUR.
+        self.call(
+            Token::at(eur_token_addr).transfer_public_to_private(
+                self.context.this_address(),
+                caller,
+                share,
+                0,
+            ),
+        );
+
+        // Public tail: verify the caller-supplied snapshots + eur token, enforce
+        // the fail-closed ceiling, and bump the claimed counters.
+        self.enqueue_self._record_rent_claim(
+            rent_epoch_id,
+            share,
+            eur_token_addr,
+            supplied_small_pool,
+            supplied_small_total,
+            supplied_fifo_cap,
+        );
+    }
+
+    #[external("public")]
+    #[only_self]
+    fn _record_rent_claim(
+        rent_epoch_id: u32,
+        share: u128,
+        supplied_eur_token: AztecAddress,
+        supplied_small_pool: u128,
+        supplied_small_total: u128,
+        supplied_fifo_cap: u128,
+    ) {
+        let rid = rent_epoch_id as Field;
+        assert(self.storage.r_open.at(rid).read(), "rent distribution not open");
+        assert(supplied_eur_token == self.storage.eur_token.read(), "eur token mismatch");
+        assert(supplied_small_pool == self.storage.r_small_pool.at(rid).read(), "small pool mismatch");
+        assert(supplied_small_total == self.storage.r_small_total.at(rid).read(), "small total mismatch");
+        assert(supplied_fifo_cap == self.storage.r_fifo_cap.at(rid).read(), "fifo cap mismatch");
+
+        let claimed_total = self.storage.r_claimed_total.at(rid).read();
+        let pool = self.storage.r_amount.at(rid).read();
+        assert(claimed_total + share <= pool, "rent distribution exhausted");
+        self.storage.r_claimed_total.at(rid).write(claimed_total + share);
+        let claimed = self.storage.total_rent_claimed.read();
+        self.storage.total_rent_claimed.write(claimed + (share as u64));
+    }
+
     // -- Emergency controls -----------------------------------------------
 
     #[external("public")]
@@ -899,6 +1111,77 @@ pub contract HousingFund {
     #[external("utility")]
     unconstrained fn get_rent_keeper() -> pub AztecAddress {
         self.storage.rent_keeper.read()
+    }
+
+    #[external("utility")]
+    unconstrained fn get_eur_token() -> pub AztecAddress {
+        self.storage.eur_token.read()
+    }
+
+    // Rent recorded but not yet opened into a distribution epoch.
+    #[external("utility")]
+    unconstrained fn get_undistributed_rent() -> pub u64 {
+        self.storage.undistributed_rent.read()
+    }
+
+    #[external("utility")]
+    unconstrained fn get_total_rent_claimed() -> pub u64 {
+        self.storage.total_rent_claimed.read()
+    }
+
+    // Rent still held by the fund (backs NAV): collected minus paid out. The
+    // frontend NAV uses this, not the lifetime total, so claimed rent that has
+    // left the fund is not double counted.
+    #[external("utility")]
+    unconstrained fn get_rent_in_fund() -> pub u64 {
+        let income = self.storage.total_rent_income.read();
+        let claimed = self.storage.total_rent_claimed.read();
+        if claimed >= income {
+            0
+        } else {
+            income - claimed
+        }
+    }
+
+    // Per-rent-epoch snapshot (reuses the DistributionStatus shape).
+    #[external("utility")]
+    unconstrained fn get_rent_distribution_status(rent_epoch_id: u32) -> pub DistributionStatus {
+        let rid = rent_epoch_id as Field;
+        DistributionStatus {
+            open: self.storage.r_open.at(rid).read(),
+            amount: self.storage.r_amount.at(rid).read(),
+            snapshot_total: self.storage.r_snapshot_total.at(rid).read(),
+            small_total: self.storage.r_small_total.at(rid).read(),
+            small_pool: self.storage.r_small_pool.at(rid).read(),
+            fifo_cap: self.storage.r_fifo_cap.at(rid).read(),
+            claimed_total: self.storage.r_claimed_total.at(rid).read(),
+        }
+    }
+
+    // Public-path claimable-rent preview for a deposit record (by global seq).
+    #[external("utility")]
+    unconstrained fn get_claimable_rent(rent_epoch_id: u32, user: AztecAddress, seq: u64) -> pub u128 {
+        let rid = rent_epoch_id as Field;
+        let is_open = self.storage.r_open.at(rid).read();
+        let claim_key = poseidon2_hash([user.to_field(), seq as Field, rid]);
+        let has_claimed = self.storage.r_record_has_claimed.at(claim_key).read();
+        let rec = self.storage.deposit_records.at(poseidon2_hash([user.to_field(), seq as Field])).read();
+
+        if !is_open | has_claimed | (rec.owner != user) | (rec.amount == 0) {
+            0
+        } else {
+            let small_pool = self.storage.r_small_pool.at(rid).read();
+            let small_total = self.storage.r_small_total.at(rid).read();
+            let fifo_cap = self.storage.r_fifo_cap.at(rid).read();
+            total_claim(rec.amount, rec.cum_before, rec.is_small, small_pool, small_total, fifo_cap)
+        }
+    }
+
+    #[external("utility")]
+    unconstrained fn has_claimed_rent(rent_epoch_id: u32, user: AztecAddress, seq: u64) -> pub bool {
+        let rid = rent_epoch_id as Field;
+        let claim_key = poseidon2_hash([user.to_field(), seq as Field, rid]);
+        self.storage.r_record_has_claimed.at(claim_key).read()
     }
 
     #[external("utility")]
