@@ -69,18 +69,33 @@ ROR is on-chain + surfaced in the dossier + seeded. Done:
 
 Remaining:
 
-- [ ] **Codegen refresh for live deploy.** `frontend/src/artifacts/housing_fund-HousingFund.json`
-      + `HousingFund.ts` are stale w.r.t. the new methods (root-owned, container-managed
-      — re-run `aztec codegen` in the build). Local-live auto-uses the fresh
-      `contracts/.../target` JSON.
-- [ ] **Render expected monthly rent from chain** (`get_expected_monthly_rent`) in the
-      dossier — the worked example currently uses a *modelled* acquisition value.
-- [ ] **Multi-note claims** — `claim_distribution_private`, `claim_rent_private`, and
-      `reinvest_rent_private` all act on the caller's FIRST deposit note only.
-      Enumerate + act on all notes (reinvest also needs per-note cursor re-reads).
-- [ ] **Full claim/reinvest E2E test** (deposit → record_rent → open → claim/reinvest,
-      asserting EUR received / new deposit / ledger). Needs the KYC+deposit test
-      harness — the repo's deferred "Task 22".
+- [x] **Codegen for live deploy.** `frontend/src/artifacts/` is gitignored /
+      build-generated (codegen output, tracked via `codegenCache.json`) — no
+      committed artifact to refresh; the deploy/bootstrap build regenerates it
+      from the contracts. Local copy refreshed; local-live auto-uses the fresh
+      `contracts/.../target` JSON. (Was mis-described as a "stale committed
+      artifact" — corrected.)
+- [~] **Multi-note claims.** `claim_rent` (withdraw) now loops over ALL the
+      caller's deposit notes, skipping already-claimed / zero-share ones. Still
+      first-note-only: `claim_distribution_private` (governance/claim) and the
+      reinvest routes — reinvest also needs per-note cursor re-reads. Live-only
+      (sim has no notes) and untestable here, so the loops are fail-safe by design.
+- [ ] **Render expected monthly rent from chain.** DEFERRED (cosmetic): the dossier
+      worked example uses a modelled acquisition (€500K → €1,250/mo); the seeded
+      on-chain acquisition is the same €500K, so the rendered figure is identical —
+      only the label would change. The ROR itself is already surfaced on-chain.
+      Worth doing only once a project carries a distinct on-chain acquisition value.
+- [x] **E2E test — reinvest (public, cross-contract).** `test_reinvest_rent_public_e2e`
+      deploys KYCVerifier + HousingFund, registers an investor, deposit → record_rent
+      → open → reinvest, asserting deposit grew / rent pool drained / ledger; plus a
+      post-reinvest withdraw guard. `scripts/aztec-test.sh` auto-stages the KYCVerifier
+      artifact into housing_fund's target (single-contract `aztec test` doesn't emit
+      dependency artifacts; the harness now compiles + copies it).
+- [ ] **E2E test — remaining.** A `claim_rent` EUR-payout E2E (needs the vendored
+      Token deployed + minted to the fund — its artifact lives in
+      `contracts/vendor/aztec-standards/target`, gitignored, so staging it on a fresh
+      clone needs an on-demand compile). Private-path E2E (`*_private`) needs hinted
+      notes in TestEnvironment.
 
 ## Backing loop (Phase 1, after rent — see FUTURE_DEVELOPMENT_PLAN.md §3)
 

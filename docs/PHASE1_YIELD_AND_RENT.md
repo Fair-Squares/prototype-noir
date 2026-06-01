@@ -120,10 +120,18 @@ separate from NAV; ROR is the whole story):
    → a new private DepositNote, NAV grows) + `rent_withdrawn_by` /
    `rent_reinvested_by` ledger; the `/portfolio` **Rent earnings** panel wires
    Withdraw + Reinvest (sim fully working; live Withdraw `claim_rent_private` +
-   Reinvest `reinvest_rent_private`, both single-note). *Remaining:* **deploy-time
-   codegen refresh** of the committed `src/artifacts` JSON, **multi-note** claims
-   (uniform across claim_distribution/claim_rent/reinvest), and the full
-   claim/reinvest **E2E test** (Task 22, needs the KYC+deposit test harness).
+   Reinvest `reinvest_rent_private`, both single-note). The frontend `src/artifacts`
+   are gitignored / build-generated (no committed artifact to refresh; the build
+   regenerates them). **E2E:** `reinvest_rent` is now verified end-to-end by a
+   **cross-contract test** (`test_reinvest_rent_public_e2e`) — deploys KYCVerifier
+   + HousingFund, registers an investor, deposits, records + opens rent, reinvests,
+   and asserts the deposit grew / rent pool drained / ledger updated, plus a
+   post-reinvest withdraw guard. `scripts/aztec-test.sh` auto-stages the KYCVerifier
+   artifact into housing_fund's target (the single-contract `aztec test` doesn't
+   emit dependency artifacts). *Remaining:* **multi-note** claims (claim_distribution
+   / claim_rent / reinvest act on the first note only); a `claim_rent` EUR-payout
+   E2E (needs the vendored Token deployed); and the **private-path** E2E
+   (`*_private`, needs hinted notes).
 5. **Real yield adapter.** Implement one `yield_source` adapter (tokenized
    T-bill / money-market) against the seam added here, and route idle capital
    through the vault (`deploy_to_defi` actually calling `DeFiVault.deposit`).

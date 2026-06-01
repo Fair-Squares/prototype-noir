@@ -210,11 +210,12 @@ on-chain, for privacy). `rentClaimable = earned − withdrawn − reinvested`.
   `reinvest_rent_private` (each needs a keeper-opened rent epoch). Both are
   **single-note** (claim against the caller's first deposit note — the repo's
   `claim_distribution` posture; multi-note is a uniform follow-up) and **untested
-  against a live stack** here (the demo runs in sim). The committed
-  `frontend/src/artifacts/housing_fund-HousingFund.json` is **stale** w.r.t. the
-  new methods (root-owned, container-managed) — a deploy must re-run `aztec codegen`
-  for live mode; local-live auto-uses the freshly compiled
-  `contracts/housing_fund/target/*.json`.
+  against a live stack** here (the demo runs in sim). Artifacts in
+  `frontend/src/artifacts/` are **gitignored / build-generated** (codegen output,
+  tracked via `codegenCache.json`) — there is no committed artifact to refresh; the
+  deploy/bootstrap build regenerates them from the contracts (the contract-hash
+  change triggers it). Local-live uses the freshly compiled
+  `contracts/housing_fund/target/*.json` (the loader prefers it).
 - **ROR is surfaced in the dossier from chain.** `get_ror_bps` flows into
   `FundStats.rorBps`; `ReturnsCapPanel` shows the **real** ROR (labelled "on-chain")
   when set, falling back to the modelled `CAPPED_RETURN_PCT` otherwise. The worked

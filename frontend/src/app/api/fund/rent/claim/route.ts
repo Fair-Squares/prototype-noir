@@ -75,11 +75,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // claim_rent_private needs a hinted DepositNote the caller owns + the epoch
-    // snapshots (re-verified in the public tail). NOTE: claims against the FIRST
-    // deposit note only; multiple notes would each need their own call (one
-    // nullifier per (note_hash, epoch)) — the repo's documented single-note
-    // posture, same as /api/governance/claim.
     const depositsResult = simResult<{ len: bigint; storage: unknown[] }>(
       await hfContract.methods.get_my_deposit_notes(actorAddress, 0).simulate({ from: actorAddress })
     );
@@ -89,26 +84,46 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
-    const hintedDepositNote = depositsResult.storage[0];
 
-    const receipt = await hfContract.methods
-      .claim_rent_private(
-        epoch,
-        hintedDepositNote,
-        AztecAddress.fromString(eurTokenAddr),
-        BigInt(status.small_pool),
-        BigInt(status.small_total),
-        BigInt(status.fifo_cap),
-      )
-      .send({ from: actorAddress });
+    // Multi-note: claim_rent_private acts per (note, epoch). Loop over ALL of the
+    // caller's deposit notes so a multi-deposit holder withdraws their full rent,
+    // not just the first note's share. Each call nullifies its own (note, epoch),
+    // so already-withdrawn notes revert with a duplicate nullifier and notes with
+    // no share revert "share is zero" — both are skipped; any other error surfaces.
+    const eur = AztecAddress.fromString(eurTokenAddr);
+    const smallPool = BigInt(status.small_pool);
+    const smallTotal = BigInt(status.small_total);
+    const fifoCap = BigInt(status.fifo_cap);
+    let claimedNotes = 0;
+    let lastTx: string | null = null;
+    for (let i = 0; i < Number(depositsResult.len); i++) {
+      try {
+        const receipt = await hfContract.methods
+          .claim_rent_private(epoch, depositsResult.storage[i], eur, smallPool, smallTotal, fifoCap)
+          .send({ from: actorAddress });
+        lastTx = requireAztecTxHash(receipt);
+        claimedNotes++;
+      } catch (err: unknown) {
+        const m = err instanceof Error ? err.message : String(err);
+        if (isDuplicateNullifierError(m) || m.includes("share is zero")) continue;
+        throw err;
+      }
+    }
+    if (claimedNotes === 0) {
+      return NextResponse.json(
+        { error: "Nothing to withdraw: rent for this epoch is already withdrawn, or your notes have no share." },
+        { status: 409 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
-      // The EUR amount is computed privately in-circuit and not returned by the
-      // tx; report null rather than a fabricated value.
+      // EUR amounts are computed privately in-circuit and not returned by the tx;
+      // report the number of notes withdrawn rather than a fabricated value.
       claimed: null,
-      txHash: requireAztecTxHash(receipt),
-      message: "Rent withdrawn privately",
+      notesClaimed: claimedNotes,
+      txHash: lastTx,
+      message: `Rent withdrawn privately (${claimedNotes} deposit note${claimedNotes === 1 ? "" : "s"})`,
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
