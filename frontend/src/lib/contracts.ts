@@ -39,6 +39,8 @@ export interface FundStats {
   navPerFsftEur?: number;
   /** Cumulative on-chain rent income recorded via HousingFund.record_rent. REAL. */
   totalRentIncome?: number;
+  /** Return on Rent in basis points (HousingFund.ror_bps). REAL — rent = ROR × acquisition. */
+  rorBps?: number;
   parkedAllocationBps?: number;
   parkedMinBps?: number;
   parkedMaxBps?: number;
@@ -332,8 +334,16 @@ export interface PortfolioData {
   available?: number;
   totalSupply: number;
   sharePercent: number;
-  /** Holder's pro-rata slice of REAL on-chain rent income (record_rent), not an APY. */
+  /** Holder's lifetime EARNED pro-rata rent (record_rent), not an APY. */
   estimatedYield: number;
+  /** Same as estimatedYield — lifetime earned rent (pro-rata of pooled rent). */
+  rentEarned?: number;
+  /** Unclaimed rent the holder can withdraw or reinvest = earned − withdrawn − reinvested. */
+  rentClaimable?: number;
+  /** Rent already taken as fiat (withdraw side of the ledger). */
+  rentWithdrawn?: number;
+  /** Rent already reinvested back into the fund (reinvest side of the ledger). */
+  rentReinvested?: number;
   tokenPriceBps?: number;
   tokenPriceEur?: number;
   navEur?: number;
@@ -352,6 +362,8 @@ export interface PortfolioData {
   governanceEligibility?: GovernanceEligibility;
   lockedEur?: number;
   lockedFsft?: number;
+  /** "live" | "simulation" — gates live-only affordances (e.g. reinvest). */
+  source?: string;
 }
 
 export async function fetchPortfolio(address: string, accountIndex?: number): Promise<PortfolioData> {
@@ -359,6 +371,32 @@ export async function fetchPortfolio(address: string, accountIndex?: number): Pr
   if (accountIndex !== undefined) qs.set("accountIndex", String(accountIndex));
   const res = await fetch(`/api/portfolio?${qs.toString()}`);
   if (!res.ok) throw await readApiError(res, "Failed to fetch portfolio");
+  return res.json();
+}
+
+/** Withdraw the holder's claimable rent as fiat (HousingFund.claim_rent). */
+export async function claimRent(
+  address: string,
+  accountIndex = 0
+): Promise<{ success: boolean; claimed?: number; error?: string; message?: string }> {
+  const res = await fetch("/api/fund/rent/claim", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address, accountIndex }),
+  });
+  return res.json();
+}
+
+/** Reinvest the holder's claimable rent back into the fund (HousingFund.reinvest_rent). */
+export async function reinvestRent(
+  address: string,
+  accountIndex = 0
+): Promise<{ success: boolean; reinvested?: number; error?: string; message?: string }> {
+  const res = await fetch("/api/fund/rent/reinvest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address, accountIndex }),
+  });
   return res.json();
 }
 

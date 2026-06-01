@@ -36,6 +36,7 @@ export function ProjectDetailDossier({
   proposal,
   dossier,
   canViewSensitive,
+  fundStats,
 }: {
   proposal: Proposal;
   /** Accepted for forward-compat (deed valuation), not yet rendered here. */
@@ -147,7 +148,10 @@ export function ProjectDetailDossier({
       <CovenantCard dossier={dossier} />
 
       {/* Capped return — cost-based ROR rent, fully to investors (D2). */}
-      <ReturnsCapPanel cappedReturnPct={covenant.cappedReturnPct} />
+      <ReturnsCapPanel
+        cappedReturnPct={covenant.cappedReturnPct}
+        rorOnChain={fundStats?.rorBps ? fundStats.rorBps / 100 : undefined}
+      />
 
       {/* Milestones. */}
       <section className="surface p-5">

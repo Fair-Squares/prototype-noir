@@ -36,6 +36,11 @@ DEPOSIT_EACH="${DEPOSIT_EACH:-10000}"
 PROPOSAL_AMOUNT="${PROPOSAL_AMOUNT:-20000}"
 PROPOSAL_TITLE="${PROPOSAL_TITLE:-Maashaven Wonen — Rotterdam}"
 MAX_ADVANCE="${MAX_ADVANCE:-12}"
+# Capped-return params: rent = ROR × acquisition value. 300 bps (3%) of a
+# 500,000 home → 15,000/yr → 1,250/mo (the canonical example), so the dossier
+# shows a REAL on-chain ROR and get_expected_monthly_rent matches the doc.
+ROR_BPS="${ROR_BPS:-300}"
+ACQUISITION_VALUE="${ACQUISITION_VALUE:-500000}"
 
 log() { printf '\n[seed-fsft] %s\n' "$1" >&2; }
 die() { printf '\n[seed-fsft] FATAL: %s\n' "$1" >&2; exit 1; }
@@ -92,6 +97,13 @@ post /api/governance/proposals \
 PROPOSALS=$(get "/api/governance/proposals?address=${ADDR0}&accountIndex=0")
 PID=$(printf '%s' "$PROPOSALS" | jget "['proposals'][-1]['id']")
 log "Proposal id = ${PID}"
+
+# -- 2b. Set the capped-return parameters (ROR + acquisition value) ------------
+# Admin-only (test0). Makes the dossier show a REAL on-chain ROR instead of the
+# modelled fallback, and sets the property's acquisition value for expected-rent.
+log "Set ROR ${ROR_BPS}bps + acquisition ${ACQUISITION_VALUE} (property ${PID})"
+post /api/fund/ror \
+  "{\"rorBps\":${ROR_BPS},\"propertyId\":${PID},\"acquisitionValue\":${ACQUISITION_VALUE},\"accountIndex\":0,\"address\":\"${ADDR0}\"}" >/dev/null
 
 # -- 3. Two accounts vote in favour (quorum = 2) -------------------------------
 for i in 0 1; do

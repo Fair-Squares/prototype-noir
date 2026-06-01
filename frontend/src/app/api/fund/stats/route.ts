@@ -93,6 +93,7 @@ export async function GET() {
       isPaused,
       totalSupply,
       totalRentIncome,
+      rorBps,
     ] = await Promise.all([
       hfContract.methods.get_fund_stats().simulate({ from }).then((r) =>
         simResult<{
@@ -127,6 +128,9 @@ export async function GET() {
       hfContract.methods.get_total_rent_income().simulate({ from }).then((r) =>
         toNumberStrict(simResult(r), "HousingFund.get_total_rent_income")
       ),
+      hfContract.methods.get_ror_bps().simulate({ from }).then((r) =>
+        toNumberStrict(simResult(r), "HousingFund.get_ror_bps")
+      ),
     ]);
 
     const totalDeposits = toNumberStrict(stats.total_deposits, "HousingFund.get_fund_stats.total_deposits");
@@ -156,6 +160,7 @@ export async function GET() {
       navEur,
       navPerFsftEur,
       totalRentIncome,
+      rorBps,
       parkedAllocationBps: toNumberStrict(parkedPolicy.target_bps, "HousingFund.get_parked_capital_policy.target_bps"),
       parkedMinBps: toNumberStrict(parkedPolicy.min_bps, "HousingFund.get_parked_capital_policy.min_bps"),
       parkedMaxBps: toNumberStrict(parkedPolicy.max_bps, "HousingFund.get_parked_capital_policy.max_bps"),

@@ -190,16 +190,38 @@ collected** rent (which may fall short of the ROR target when households underpa
 
 ### Withdraw or reinvest — and track which
 
-When rent is distributed, a holder chooses per claim:
+A holder chooses, via the **Rent earnings** panel on `/portfolio`:
 
-- **Withdraw as fiat** — booked as a realized earning (EUR out). This is today's
-  `claim_rent` / `claim_rent_private`.
-- **Reinvest** — the rent re-enters the fund via the **normal deposit route**
-  (→ mints more FSFT under the same FIFO+floor formula), compounding their stake.
+- **Withdraw as cash** — the claimable rent is paid out as EUR
+  (`HousingFund.claim_rent` public / `claim_rent_private` private).
+- **Reinvest** — the rent re-enters the fund via the **normal deposit route** as
+  fresh capital (`HousingFund.reinvest_rent`): NAV grows and the holder compounds
+  (a larger deposit → larger future FSFT + rent share).
 
-The protocol must **track per holder how much was withdrawn vs reinvested** — it
-is the holder's earnings ledger, and reinvested rent must actually mint FSFT, not
-just bump a counter.
+A per-holder ledger tracks **withdrawn vs reinvested** (`get_rent_withdrawn` /
+`get_rent_reinvested`, public path only — private claims are not attributed
+on-chain, for privacy). `rentClaimable = earned − withdrawn − reinvested`.
+
+**Status — what is / isn't wired (keep this honest):**
+- **Simulation (the default demo): fully working.** Withdraw + Reinvest act on the
+  in-memory store (`simClaimRent` / `simReinvestRent`); `/portfolio` shows the
+  earned/withdrawn/reinvested/claimable breakdown with both buttons.
+- **Live: Withdraw + Reinvest are both wired** — `claim_rent_private` and
+  `reinvest_rent_private` (each needs a keeper-opened rent epoch). Both are
+  **single-note** (claim against the caller's first deposit note — the repo's
+  `claim_distribution` posture; multi-note is a uniform follow-up) and **untested
+  against a live stack** here (the demo runs in sim). The committed
+  `frontend/src/artifacts/housing_fund-HousingFund.json` is **stale** w.r.t. the
+  new methods (root-owned, container-managed) — a deploy must re-run `aztec codegen`
+  for live mode; local-live auto-uses the freshly compiled
+  `contracts/housing_fund/target/*.json`.
+- **ROR is surfaced in the dossier from chain.** `get_ror_bps` flows into
+  `FundStats.rorBps`; `ReturnsCapPanel` shows the **real** ROR (labelled "on-chain")
+  when set, falling back to the modelled `CAPPED_RETURN_PCT` otherwise. The worked
+  euro example stays modelled. `scripts/seed-fsft.sh` seeds `set_ror_bps` (3%) +
+  `set_acquisition_value` (€500K → €1,250/mo) via `POST /api/fund/ror`; sim defaults
+  ROR to 300 bps so the demo shows it without seeding. (`get_expected_monthly_rent`
+  is on-chain but not yet rendered — the example uses a modelled acquisition.)
 
 ### Frontend rule for this model
 

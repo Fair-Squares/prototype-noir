@@ -88,8 +88,11 @@ export function HoldingsBreakdown({
           <p className="text-caption text-text-3">On-chain · separate from share value · withdraw or reinvest</p>
         </div>
       ),
-      amount: formatEUR(portfolio.estimatedYield),
-      value: formatEUR(portfolio.estimatedYield),
+      // Show the UNCLAIMED (claimable) rent here — the asset still held. Withdrawn
+      // rent moves to "Cash in wallet", reinvested rent to "Deposited capital", so
+      // this row never double-counts. Falls back to lifetime earned pre-ledger.
+      amount: formatEUR(portfolio.rentClaimable ?? portfolio.estimatedYield),
+      value: formatEUR(portfolio.rentClaimable ?? portfolio.estimatedYield),
     },
     {
       key: "rewards",

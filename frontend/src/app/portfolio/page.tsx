@@ -16,6 +16,7 @@ import {
   HoldingsBreakdown,
   PositionSummary,
   ReadinessSummary,
+  RentEarningsPanel,
   RewardsPanel,
   WithdrawPanel,
 } from "@/components/portfolio";
@@ -23,11 +24,13 @@ import { useWallet } from "@/contexts/WalletContext";
 import {
   attestFsftForRewards,
   claimProposalDistribution,
+  claimRent,
   claimRewards,
   fetchKYCProfile,
   fetchPortfolio,
   fetchProposals,
   fetchRewardsStats,
+  reinvestRent,
   withdrawFunds,
   type KYCProfile,
   type PortfolioData,
@@ -52,6 +55,8 @@ export default function PortfolioPage() {
   const [claimingRewards, setClaimingRewards] = useState(false);
   const [attesting, setAttesting] = useState(false);
   const [claimingProposalId, setClaimingProposalId] = useState<number | null>(null);
+  const [claimingRent, setClaimingRent] = useState(false);
+  const [reinvestingRent, setReinvestingRent] = useState(false);
 
   const loadAccountData = async (addr: string) => {
     setLoading(true);
@@ -162,6 +167,40 @@ export default function PortfolioPage() {
     return result;
   };
 
+  const handleWithdrawRent = async () => {
+    if (!address) return;
+    setNotice(null);
+    setClaimingRent(true);
+    try {
+      const result = await claimRent(address, accountIndex);
+      if (!result.success) {
+        setNotice({ tone: "danger", text: result.error ?? "Rent withdrawal failed." });
+        return;
+      }
+      setNotice({ tone: "success", text: result.message ?? "Rent withdrawn to your wallet." });
+      await loadAccountData(address);
+    } finally {
+      setClaimingRent(false);
+    }
+  };
+
+  const handleReinvestRent = async () => {
+    if (!address) return;
+    setNotice(null);
+    setReinvestingRent(true);
+    try {
+      const result = await reinvestRent(address, accountIndex);
+      if (!result.success) {
+        setNotice({ tone: "danger", text: result.error ?? "Reinvest failed." });
+        return;
+      }
+      setNotice({ tone: "success", text: result.message ?? "Rent reinvested into the fund." });
+      await loadAccountData(address);
+    } finally {
+      setReinvestingRent(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -231,6 +270,20 @@ export default function PortfolioPage() {
 
             <ReadinessSummary kyc={kyc} portfolio={portfolio} />
           </div>
+
+          {(portfolio.balance ?? 0) > 0 || (portfolio.rentEarned ?? 0) > 0 ? (
+            <RentEarningsPanel
+              earned={portfolio.rentEarned ?? portfolio.estimatedYield}
+              claimable={portfolio.rentClaimable ?? portfolio.estimatedYield}
+              withdrawn={portfolio.rentWithdrawn ?? 0}
+              reinvested={portfolio.rentReinvested ?? 0}
+              claiming={claimingRent}
+              reinvesting={reinvestingRent}
+              reinvestAvailable={true}
+              onWithdraw={handleWithdrawRent}
+              onReinvest={handleReinvestRent}
+            />
+          ) : null}
 
           <RewardsPanel
             rewardsSymbol={rewardsSymbol}

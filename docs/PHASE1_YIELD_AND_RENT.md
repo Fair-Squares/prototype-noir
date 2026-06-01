@@ -106,17 +106,24 @@ separate from NAV; ROR is the whole story):
 2. ~~**Rent → claimable distribution.**~~ **DONE** (`ff104d4`). `open_rent_distribution`
    + `claim_rent` / `claim_rent_private` pay rent as EUR from the pool, FIFO +
    30% small-floor, per rent epoch. This is the **withdraw-as-fiat** path.
-3. **ROR + acquisition value (NEW — the capped-return primitive).** Add
-   `acquisition_value` per property + a fund/property `ror_bps` to `HousingFund`;
-   derive **expected monthly rent = ROR × acquisition_value / 12** (the bill /
-   display). Keeper keeps posting **actual collected** rent (≤ expected when
-   households underpay — the pool absorbs it). This *is* "capped return": the
-   investor return is the ROR; rent is cost-based, fully to investors, **no
-   surplus reserve** (the old §4.0 skim is dropped).
-4. **Reinvest path + withdraw/reinvest ledger (NEW).** A first-class **reinvest**
-   action: claimed rent re-enters via the normal deposit route (→ mints FSFT under
-   FIFO+floor), and a **per-holder ledger tracks withdrawn-as-fiat vs reinvested**.
-   Today only withdraw (claim_rent) exists.
+3. ~~**ROR + acquisition value (the capped-return primitive).**~~ **DONE on-chain**
+   (`a46b771`): `ror_bps` + `acquisition_value_by_property`, `set_ror_bps` /
+   `set_acquisition_value`, and `get_expected_annual_rent` / `get_expected_monthly_rent`
+   (= ROR × acquisition_value, ÷12). Keeper still posts **actual collected** rent.
+   **Surfaced + seeded:** `get_ror_bps` → `FundStats.rorBps` → `ReturnsCapPanel`
+   shows the **real on-chain ROR** (modelled fallback); `scripts/seed-fsft.sh` seeds
+   ROR + acquisition via `POST /api/fund/ror`; sim defaults ROR to 300 bps.
+   *Remaining:* render `get_expected_monthly_rent` (the worked example still uses a
+   modelled acquisition).
+4. ~~**Reinvest path + withdraw/reinvest ledger.**~~ **DONE on-chain + UI.**
+   `reinvest_rent` (public) **and `reinvest_rent_private`** (private — claimed rent
+   → a new private DepositNote, NAV grows) + `rent_withdrawn_by` /
+   `rent_reinvested_by` ledger; the `/portfolio` **Rent earnings** panel wires
+   Withdraw + Reinvest (sim fully working; live Withdraw `claim_rent_private` +
+   Reinvest `reinvest_rent_private`, both single-note). *Remaining:* **deploy-time
+   codegen refresh** of the committed `src/artifacts` JSON, **multi-note** claims
+   (uniform across claim_distribution/claim_rent/reinvest), and the full
+   claim/reinvest **E2E test** (Task 22, needs the KYC+deposit test harness).
 5. **Real yield adapter.** Implement one `yield_source` adapter (tokenized
    T-bill / money-market) against the seam added here, and route idle capital
    through the vault (`deploy_to_defi` actually calling `DeFiVault.deposit`).
