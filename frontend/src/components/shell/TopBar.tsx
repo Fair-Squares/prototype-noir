@@ -12,7 +12,7 @@ import { useShell } from "./ShellProvider";
 
 function PrimaryTabs({ activeHref }: { activeHref?: string }) {
   return (
-    <nav aria-label="Primary" className="hidden items-center gap-1 lg:flex">
+    <nav aria-label="Primary" className="hidden items-center gap-1 md:flex">
       {PRIMARY_ITEMS.map((item) => {
         const isActive = activeHref === item.href;
         return (
@@ -37,7 +37,7 @@ function MobileTabStrip({ activeHref }: { activeHref?: string }) {
   return (
     <nav
       aria-label="Primary"
-      className="no-scrollbar flex gap-2 overflow-x-auto border-b border-border bg-card/60 px-4 py-2 backdrop-blur lg:hidden"
+      className="no-scrollbar flex gap-2 overflow-x-auto border-b border-border bg-card/60 px-4 py-2 backdrop-blur md:hidden"
     >
       {PRIMARY_ITEMS.map((item) => {
         const isActive = activeHref === item.href;
@@ -74,16 +74,16 @@ export default function TopBar() {
         className="sticky top-0 z-30 border-b border-border bg-card/85 backdrop-blur"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 lg:px-8">
+        <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-3 lg:gap-3 lg:px-8">
           {/* Mobile menu button */}
           <button
             type="button"
             aria-label="Open navigation"
             onClick={() => setDrawerOpen(true)}
-            className="btn btn-ghost btn-sm lg:hidden"
+            className="btn btn-ghost btn-sm min-h-11 min-w-11 md:hidden"
             style={{ touchAction: "manipulation" }}
           >
-            <span aria-hidden="true">☰</span>
+            <span aria-hidden="true" className="text-lg leading-none">☰</span>
           </button>
 
           <Brand />
@@ -96,7 +96,7 @@ export default function TopBar() {
           <span className="flex-1" />
 
           <TrustChip />
-          <div className="hidden lg:block">
+          <div className="hidden xl:block">
             <RuntimeModeChip withHint hintAlign="right" />
           </div>
           <HeaderWalletButton />

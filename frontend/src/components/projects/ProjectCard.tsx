@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Button, InfoDot } from "@/components/ui";
+import { Button, InfoDot, StatusChip } from "@/components/ui";
 import {
   proposalLabel,
   quorumFor,
@@ -26,7 +26,7 @@ function Meter({ fraction, tone }: { fraction: number; tone: "accent" | "success
   return (
     <div
       className="h-1.5 w-full overflow-hidden rounded-full bg-surface-muted"
-      role="presentation"
+      aria-hidden="true"
     >
       <div
         className="h-full rounded-full"
@@ -127,7 +127,7 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
           ) : null}
         </div>
       ) : (
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border pt-4">
+        <dl className="grid grid-cols-1 gap-x-4 gap-y-3 border-t border-border pt-4 sm:grid-cols-2">
           <div>
             <dt className="text-label">Quorum</dt>
             <dd className="text-body mt-0.5 text-mono text-text-1">
@@ -149,20 +149,23 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
         </dl>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+      <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="text-label">Your position</p>
           {positionNote ? (
             <p className="text-caption mt-0.5">{positionNote}</p>
           ) : null}
           {connected && canClaim ? (
-            <p className="text-mono mt-0.5 text-[var(--color-success)]">
-              {formatEUR(row.claimableAmount ?? 0)} claimable
+            <p className="mt-0.5 inline-flex items-center gap-2">
+              <span className="text-mono text-[var(--color-success)]">
+                {formatEUR(row.claimableAmount ?? 0)} claimable
+              </span>
+              <StatusChip status="open" label="Claimable" />
             </p>
           ) : null}
         </div>
 
-        <div className="flex flex-shrink-0 items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {canClaim ? (
             <Button
               size="sm"

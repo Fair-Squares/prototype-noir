@@ -1,4 +1,9 @@
-import type { ReactNode } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 
 export interface FormFieldProps {
   label: ReactNode;
@@ -37,17 +42,32 @@ export function FormField({
         : undefined
     : undefined;
 
+  // Inject aria-describedby onto the control so the hint/error announces,
+  // unless the child already sets its own.
+  const field =
+    describedById && isValidElement(children) &&
+    (children.props as { "aria-describedby"?: string })["aria-describedby"] ==
+      null
+      ? cloneElement(
+          children as ReactElement<{ "aria-describedby"?: string }>,
+          { "aria-describedby": describedById },
+        )
+      : children;
+
   return (
     <div className={`flex flex-col gap-1.5 ${className ?? ""}`}>
       <label htmlFor={htmlFor} className="text-label flex items-center gap-1">
         <span>{label}</span>
         {required ? (
-          <span className="text-[var(--color-alert)]" aria-hidden="true">
-            *
-          </span>
+          <>
+            <span className="text-[var(--color-alert)]" aria-hidden="true">
+              *
+            </span>
+            <span className="sr-only">(required)</span>
+          </>
         ) : null}
       </label>
-      {children}
+      {field}
       {error ? (
         <p
           id={describedById}

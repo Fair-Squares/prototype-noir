@@ -43,8 +43,8 @@ export function ProtocolFormulas() {
         expr={"fifo_share = overlap( [cum_before, cum_before + amount), [0, fifo_cap) )"}
       >
         Each deposit owns an immutable FIFO interval starting at the cumulative deposits before it.
-        Its FIFO share is the exact 1:1 overlap of that interval with the window
-        <span className="text-mono"> [0, fifo_cap)</span> — earliest deposits fill first until the
+        Its FIFO share is the exact 1:1 overlap of that interval with the window{" "}
+        <span className="text-mono">[0, fifo_cap)</span> — earliest deposits fill first until the
         cap is exhausted. No division, so the allocation is exact.
       </Formula>
 
@@ -54,8 +54,8 @@ export function ProtocolFormulas() {
       >
         Small depositors share the 30% floor pro-rata by amount (floored, guarded against an empty
         small population). A small early depositor earns both the floor and its FIFO share. The
-        total claimable is the sum of the two, verified in-circuit against the on-chain snapshots
-        <span className="text-mono"> small_pool</span>, <span className="text-mono">small_total</span>,
+        total claimable is the sum of the two, verified in-circuit against the on-chain snapshots{" "}
+        <span className="text-mono">small_pool</span>, <span className="text-mono">small_total</span>,
         and <span className="text-mono">fifo_cap</span>.
       </Formula>
 

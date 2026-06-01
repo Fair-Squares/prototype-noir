@@ -131,24 +131,26 @@ export function HoldingsBreakdown({
       />
 
       {hasLocked ? (
-        <div className="surface-muted flex flex-wrap items-center gap-x-4 gap-y-2 p-4">
-          <span className="text-label flex items-center gap-1.5">
-            Locked
-            <InfoDot
-              label="What does locked mean"
-              content="Funds reserved against your open trade orders. They are still yours, but are committed until the order fills, is cancelled, or expires."
-            />
-          </span>
-          {lockedEur > 0 ? (
-            <span className="text-mono text-text-1">
-              {formatEUR(lockedEur)} {cashSymbol}
+        <div className="surface-muted flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span className="text-label flex items-center gap-1.5">
+              Locked
+              <InfoDot
+                label="What does locked mean"
+                content="Funds reserved against your open trade orders. They are still yours, but are committed until the order fills, is cancelled, or expires."
+              />
             </span>
-          ) : null}
-          {lockedFsft > 0 ? (
-            <span className="text-mono text-text-1">
-              {lockedFsft.toLocaleString()} {fundShareSymbol}
-            </span>
-          ) : null}
+            {lockedEur > 0 ? (
+              <span className="text-mono text-text-1">
+                {formatEUR(lockedEur)} {cashSymbol}
+              </span>
+            ) : null}
+            {lockedFsft > 0 ? (
+              <span className="text-mono text-text-1">
+                {lockedFsft.toLocaleString()} {fundShareSymbol}
+              </span>
+            ) : null}
+          </div>
           <StatusChip status="pending" label="Committed to open orders" />
         </div>
       ) : null}

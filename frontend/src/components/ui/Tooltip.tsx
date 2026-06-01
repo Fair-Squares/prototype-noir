@@ -42,6 +42,7 @@ export function Tooltip({ content, children, align = "center", className }: Tool
       onMouseLeave={() => setOpen(false)}
       onFocusCapture={() => setOpen(true)}
       onBlurCapture={() => setOpen(false)}
+      onClick={() => setOpen((o) => !o)}
       onKeyDown={(e) => {
         if (e.key === "Escape") setOpen(false);
       }}
@@ -52,7 +53,7 @@ export function Tooltip({ content, children, align = "center", className }: Tool
       <span
         role="tooltip"
         id={id}
-        className={`pointer-events-none absolute top-full z-50 mt-2 w-56 rounded-lg border border-border bg-card px-3 py-2 text-caption text-text-2 shadow-sm transition-[opacity,transform] duration-150 ${alignClass} ${
+        className={`absolute top-full z-50 mt-2 w-[min(16rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-card px-3 py-2 text-caption text-text-2 shadow-sm transition-[opacity,transform] duration-150 ${alignClass} ${
           open ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0"
         }`}
       >
@@ -80,7 +81,7 @@ export function InfoDot({ label, content, align = "center" }: InfoDotProps) {
       <button
         type="button"
         aria-label={label}
-        className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-border bg-surface-muted text-[10px] font-bold text-text-3 transition-colors hover:text-text-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
+        className="relative inline-flex h-4 w-4 items-center justify-center rounded-full border border-border bg-surface-muted text-num font-bold text-text-3 transition-colors before:absolute before:-inset-3 before:content-[''] hover:text-text-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
       >
         <span aria-hidden="true">i</span>
       </button>

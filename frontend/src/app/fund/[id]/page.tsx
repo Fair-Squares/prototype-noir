@@ -95,13 +95,17 @@ function ProjectDetail({ projectId }: { projectId: number }) {
   useEffect(() => {
     fetchProperties()
       .then((deeds) => setDeed(deeds.find((d) => d.proposalId === projectId) ?? null))
-      .catch(() => setDeed(null));
+      .catch((loadError: unknown) => {
+        setError(loadError instanceof Error ? loadError.message : "Could not load property deed.");
+      });
   }, [projectId]);
 
   useEffect(() => {
     fetchFundStats()
       .then(setFundStats)
-      .catch(() => setFundStats(null));
+      .catch((loadError: unknown) => {
+        setError(loadError instanceof Error ? loadError.message : "Could not load fund stats.");
+      });
   }, []);
 
   useEffect(() => {
@@ -111,7 +115,9 @@ function ProjectDetail({ projectId }: { projectId: number }) {
     }
     fetchGovernanceEligibility(address, accountIndex)
       .then(setEligibility)
-      .catch(() => setEligibility(null));
+      .catch((loadError: unknown) => {
+        setError(loadError instanceof Error ? loadError.message : "Could not load vote readiness.");
+      });
   }, [address, accountIndex]);
 
   // Real 404 for a syntactically valid id that has no matching proposal.

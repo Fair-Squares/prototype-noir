@@ -52,12 +52,39 @@ export default function MobileDrawer() {
 
   useEffect(() => {
     if (!drawerOpen) return;
+    const opener = document.activeElement as HTMLElement | null;
     closeRef.current?.focus();
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setDrawerOpen(false);
+      if (e.key === "Escape") {
+        setDrawerOpen(false);
+        return;
+      }
+      if (e.key === "Tab") {
+        const focusable = panelRef.current?.querySelectorAll<HTMLElement>(
+          "a[href], button:not([disabled])",
+        );
+        if (!focusable || focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener("keydown", onKey);
+      opener?.focus();
+    };
   }, [drawerOpen, setDrawerOpen]);
 
   if (!drawerOpen) return null;
@@ -65,11 +92,12 @@ export default function MobileDrawer() {
   const close = () => setDrawerOpen(false);
 
   return (
-    <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Navigation">
+    <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
       {/* Scrim */}
       <button
         type="button"
-        aria-label="Close navigation"
+        aria-hidden="true"
+        tabIndex={-1}
         className="absolute inset-0 bg-fs-anthracite/40 opacity-100 transition-opacity"
         onClick={close}
       />
@@ -84,13 +112,13 @@ export default function MobileDrawer() {
         }}
       >
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <span className="font-semibold text-text-1">Fair Squares</span>
+          <span id="drawer-title" className="font-semibold text-text-1">Fair Squares</span>
           <button
             ref={closeRef}
             type="button"
             aria-label="Close navigation"
             onClick={close}
-            className="btn btn-ghost btn-sm"
+            className="btn btn-ghost btn-sm min-h-11"
           >
             Close
           </button>

@@ -1,4 +1,4 @@
-import { InfoDot } from "@/components/ui";
+import { InfoDot, StatusChip } from "@/components/ui";
 import { quorumFor, votingWindowFor } from "@/lib/proposalLifecycle";
 import {
   formatEUR,
@@ -123,13 +123,15 @@ export function ProjectDetailDistribution({
       <section className="surface p-5">
         <div className="flex items-start justify-between gap-3">
           <h2 className="text-heading text-text-1">On-chain property deed</h2>
-          <span className="text-meta inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-text-2">
-            {deed
-              ? deed.distributionOpen
-                ? "Held · distribution open"
-                : "Held by fund"
-              : "Not yet minted"}
-          </span>
+          {deed ? (
+            deed.distributionOpen ? (
+              <StatusChip status="active" label="Held · distribution open" />
+            ) : (
+              <StatusChip status="ready" label="Held by fund" />
+            )
+          ) : (
+            <StatusChip status="pending" label="Not yet minted" />
+          )}
         </div>
 
         {deed ? (

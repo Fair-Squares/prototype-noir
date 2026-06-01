@@ -217,9 +217,11 @@ export default function PortfolioPage() {
                 {claimingRewards ? "Claiming…" : "Claim rewards"}
               </Button>
             ) : null}
-            <Link href="/dex" className="btn btn-ghost">
-              Trade shares
-            </Link>
+            <span className="hidden sm:contents">
+              <Link href="/dex" className="btn btn-ghost">
+                Trade shares
+              </Link>
+            </span>
           </>
         }
       />
@@ -230,9 +232,7 @@ export default function PortfolioPage() {
         </Alert>
       ) : null}
 
-      <div aria-live="polite">
-        {notice ? <Alert tone={notice.tone}>{notice.text}</Alert> : null}
-      </div>
+      {notice ? <Alert tone={notice.tone}>{notice.text}</Alert> : null}
 
       {!address ? (
         <Section>
@@ -242,10 +242,13 @@ export default function PortfolioPage() {
           />
         </Section>
       ) : loading && !portfolio ? (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <SkeletonKpi key={i} />
-          ))}
+        <div className="space-y-6">
+          <div className="surface p-5 h-28" />
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <SkeletonKpi key={i} />
+            ))}
+          </div>
         </div>
       ) : portfolio ? (
         <>

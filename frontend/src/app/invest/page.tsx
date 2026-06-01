@@ -41,7 +41,7 @@ const QUICK_AMOUNTS = [1_000, 5_000, 10_000];
 const STEP_LABELS = [
   "Connect",
   "Verify",
-  "Fund wallet",
+  "Fund",
   "Amount",
   "Review",
   "Confirm",
@@ -348,7 +348,7 @@ function InvestPageInner() {
             <div className="space-y-4">
               <div className="surface-muted flex items-baseline justify-between gap-3 p-4">
                 <span className="text-label">Available cash</span>
-                <span className="text-num text-text-1">{formatEURDecimals(eurBalance)}</span>
+                <span className="text-mono text-text-1">{formatEURDecimals(eurBalance)}</span>
               </div>
 
               <FormField
@@ -374,11 +374,10 @@ function InvestPageInner() {
                     placeholder="0"
                     aria-invalid={amountError ? true : undefined}
                     aria-describedby={amountError ? "deposit-amount-error" : "deposit-amount-hint"}
-                    className="text-num w-full rounded-md border border-border bg-card px-3 py-2 text-text-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fs-teal"
+                    className="text-body text-mono h-11 w-full rounded-md border border-border-strong bg-card px-3 text-text-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fs-teal"
                   />
                   <Button
                     variant="secondary"
-                    size="sm"
                     onClick={() => {
                       setAmount(String(eurBalance));
                       if (amountError) setAmountError(null);
@@ -394,7 +393,6 @@ function InvestPageInner() {
                   <Button
                     key={quick}
                     variant="ghost"
-                    size="sm"
                     onClick={() => {
                       setAmount(String(quick));
                       if (amountError) setAmountError(null);

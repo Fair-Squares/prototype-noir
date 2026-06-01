@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { Button, FormField, Tabs } from "@/components/ui";
 
 const INPUT_CLASS =
-  "w-full rounded-md border border-border bg-card px-3 py-2 text-body text-text-1 tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] disabled:opacity-60";
+  "h-11 w-full rounded-md border border-border-strong bg-card px-3 text-body text-text-1 tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] disabled:opacity-60";
 
 export interface TradeTicketProps {
   /** FSFT symbol for labels (from portfolio.fundTokenSymbol). */
@@ -114,6 +114,7 @@ export function TradeTicket({
           onChange={(e) => setAmount(e.target.value)}
           disabled={busy || !canTrade}
           aria-invalid={errors.amount ? true : undefined}
+          aria-describedby={errors.amount ? `${amountId}-error` : `${amountId}-hint`}
           className={INPUT_CLASS}
         />
       </FormField>
@@ -135,6 +136,7 @@ export function TradeTicket({
           onChange={(e) => setLimitPrice(e.target.value)}
           disabled={busy || !canTrade}
           aria-invalid={errors.limitPrice ? true : undefined}
+          aria-describedby={errors.limitPrice ? `${priceId}-error` : `${priceId}-hint`}
           className={INPUT_CLASS}
         />
       </FormField>

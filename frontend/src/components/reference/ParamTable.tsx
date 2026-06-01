@@ -21,7 +21,6 @@ const COLUMNS: Column<ParamRow>[] = [
   {
     key: "note",
     header: "Notes",
-    hideOnMobile: true,
     render: (r) => (r.note ? <span className="text-caption text-text-3">{r.note}</span> : null),
   },
 ];

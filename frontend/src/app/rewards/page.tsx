@@ -118,15 +118,7 @@ export default function RewardsPage() {
           <KpiCard
             label="Claimable now"
             tone={canClaim ? "success" : "default"}
-            value={
-              stats ? (
-                <span className="tabular-nums">
-                  {formatToken(stats.claimable, symbol)}
-                </span>
-              ) : (
-                "Connect wallet"
-              )
-            }
+            value={stats ? formatToken(stats.claimable, symbol) : "Connect wallet"}
             sub={
               stats
                 ? canClaim
@@ -137,34 +129,18 @@ export default function RewardsPage() {
           />
           <KpiCard
             label="Your reward balance"
-            value={
-              stats ? (
-                <span className="tabular-nums">
-                  {formatToken(stats.balance, symbol)}
-                </span>
-              ) : (
-                "—"
-              )
-            }
+            value={stats ? formatToken(stats.balance, symbol) : "—"}
             sub={stats ? "Claimed to date and held" : undefined}
           />
           <KpiCard
             label="Current epoch"
-            value={
-              <span className="tabular-nums">
-                {overview.currentEpoch} / {overview.token.totalEpochs}
-              </span>
-            }
+            value={`${overview.currentEpoch} / ${overview.token.totalEpochs}`}
             sub={`Next epoch ${formatDateTime(overview.nextEpochAt)}`}
             hint={`The ${formatToken(overview.token.distributionPool, symbol)} pool releases over ${overview.token.years} years across ${overview.token.totalEpochs} epochs.`}
           />
           <KpiCard
             label="Distribution pool"
-            value={
-              <span className="tabular-nums">
-                {formatToken(overview.remainingPool, symbol)}
-              </span>
-            }
+            value={formatToken(overview.remainingPool, symbol)}
             sub={`${formatToken(overview.emittedToDate, symbol)} released so far`}
           />
         </KpiGrid>

@@ -102,7 +102,7 @@ export function Tabs({
               disabled={tab.disabled}
               onClick={() => !tab.disabled && onValueChange(tab.value)}
               onKeyDown={(e) => onKeyDown(e, i)}
-              className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2.5 min-h-[44px] text-body font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50 ${
                 selected
                   ? "border-fs-magenta text-text-1"
                   : "border-transparent text-text-3 hover:text-text-1"
@@ -118,7 +118,6 @@ export function Tabs({
           role="tabpanel"
           id={`tabpanel-${value}`}
           aria-labelledby={`tab-${value}`}
-          tabIndex={0}
           className="pt-4 focus-visible:outline-none"
         >
           {children}

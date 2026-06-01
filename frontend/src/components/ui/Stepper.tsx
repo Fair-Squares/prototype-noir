@@ -70,9 +70,16 @@ export function Stepper({ steps, current, className }: StepperProps) {
               ) : null}
             </div>
             {/* Label */}
-            <div className={`pb-4 sm:pb-0 ${isLast ? "" : ""}`}>
+            <div className="pb-4 sm:pb-0">
               <p className={`text-caption font-semibold ${LABEL[state]}`}>
                 {step.label}
+                <span className="sr-only">
+                  {state === "done"
+                    ? " Completed"
+                    : state === "active"
+                      ? " Current step"
+                      : " Upcoming"}
+                </span>
               </p>
               {step.description ? (
                 <p className="text-caption mt-0.5 text-text-3">
