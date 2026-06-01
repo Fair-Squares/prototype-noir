@@ -1183,6 +1183,117 @@ pub contract HousingFund {
         self.storage.total_rent_claimed.write(claimed + (share as u64));
     }
 
+    // -- Phase 1.1 step 3: PRIVATE reinvest -----------------------------------
+    // The private mirror of reinvest_rent: a private depositor reinvests accrued
+    // rent instead of withdrawing it. The share is computed from the
+    // KERNEL-VERIFIED DepositNote + caller-supplied epoch snapshots (re-checked in
+    // the tail); rather than paying EUR out (claim_rent_private), it mints a NEW
+    // private DepositNote to the caller for `share` -- the rent re-enters as fresh
+    // capital. The new note's FIFO cursors are supplied-then-verified exactly like
+    // deposit_private. No EUR moves: the rent EUR stays in the fund and
+    // reclassifies from the rent pool to capital. Uses the SAME (note, epoch)
+    // nullifier slot as claim_rent_private, so a note cannot both withdraw and
+    // reinvest the same epoch.
+    #[external("private")]
+    fn reinvest_rent_private(
+        rent_epoch_id: u32,
+        hinted_deposit: HintedNote<DepositNote>,
+        supplied_small_pool: u128,
+        supplied_small_total: u128,
+        supplied_fifo_cap: u128,
+        supplied_cum_before: u128,
+        supplied_seq: u64,
+        supplied_is_small: bool,
+    ) {
+        let header = self.context.get_anchor_block_header();
+        let confirmed = assert_note_existed_by(header, hinted_deposit);
+
+        let caller = self.msg_sender();
+        assert(confirmed.owner == caller, "deposit note not owned by caller");
+        assert(confirmed.note.owner == caller, "deposit note owner mismatch");
+        assert(
+            confirmed.contract_address == self.context.this_address(),
+            "deposit note from wrong contract",
+        );
+
+        // Shared with claim_rent_private: a note acts at most once per epoch.
+        let note_hash = compute_confirmed_note_hash_for_nullification(confirmed);
+        let rid = rent_epoch_id as Field;
+        let claim_key = poseidon2_hash([note_hash, rid]);
+        self.storage.r_claim_nullifiers.at(claim_key).at(caller).claim();
+
+        let note = confirmed.note;
+        let share = total_claim(
+            note.amount,
+            note.cum_before,
+            note.is_small,
+            supplied_small_pool,
+            supplied_small_total,
+            supplied_fifo_cap,
+        );
+        assert(share > 0, "share is zero");
+
+        // Mint the reinvested capital as a NEW DepositNote in the caller's set,
+        // stamped with the supplied FIFO cursors (verified in the public tail).
+        let new_note = DepositNote::new(caller, share, supplied_cum_before, supplied_seq, supplied_is_small);
+        self.storage.deposit_notes.at(caller).insert(new_note).deliver(
+            MessageDelivery.ONCHAIN_CONSTRAINED,
+        );
+
+        self.enqueue_self._record_rent_reinvest(
+            rent_epoch_id,
+            share,
+            supplied_small_pool,
+            supplied_small_total,
+            supplied_fifo_cap,
+            supplied_cum_before,
+            supplied_seq,
+            supplied_is_small,
+        );
+    }
+
+    #[external("public")]
+    #[only_self]
+    fn _record_rent_reinvest(
+        rent_epoch_id: u32,
+        share: u128,
+        supplied_small_pool: u128,
+        supplied_small_total: u128,
+        supplied_fifo_cap: u128,
+        supplied_cum_before: u128,
+        supplied_seq: u64,
+        supplied_is_small: bool,
+    ) {
+        let rid = rent_epoch_id as Field;
+        // (a) Rent side: verify epoch + snapshots, enforce ceiling, consume rent.
+        assert(self.storage.r_open.at(rid).read(), "rent distribution not open");
+        assert(supplied_small_pool == self.storage.r_small_pool.at(rid).read(), "small pool mismatch");
+        assert(supplied_small_total == self.storage.r_small_total.at(rid).read(), "small total mismatch");
+        assert(supplied_fifo_cap == self.storage.r_fifo_cap.at(rid).read(), "fifo cap mismatch");
+        let claimed_total = self.storage.r_claimed_total.at(rid).read();
+        let pool = self.storage.r_amount.at(rid).read();
+        assert(claimed_total + share <= pool, "rent distribution exhausted");
+        self.storage.r_claimed_total.at(rid).write(claimed_total + share);
+        let claimed = self.storage.total_rent_claimed.read();
+        self.storage.total_rent_claimed.write(claimed + (share as u64));
+
+        // (b) Deposit side: supplied-then-verified cursor stamping (mirrors
+        // _record_deposit_private), advancing the FIFO axis + total_deposits.
+        let cum_before = self.storage.cum_deposits.read();
+        let seq = self.storage.deposit_seq.read();
+        let threshold = self.storage.small_threshold.read();
+        assert(supplied_cum_before == cum_before, "stale cum_before");
+        assert(supplied_seq == seq, "stale seq");
+        assert(supplied_is_small == (share <= threshold), "is_small mismatch");
+        self.storage.cum_deposits.write(cum_before + share);
+        if supplied_is_small {
+            self.storage.cum_small_deposits.write(self.storage.cum_small_deposits.read() + share);
+        }
+        self.storage.deposit_seq.write(seq + 1);
+        let total = self.storage.total_deposits.read();
+        self.storage.total_deposits.write(total + (share as u64));
+    }
+
     // -- Emergency controls -----------------------------------------------
 
     #[external("public")]
