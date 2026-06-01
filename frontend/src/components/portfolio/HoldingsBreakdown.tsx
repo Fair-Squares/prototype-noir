@@ -24,7 +24,7 @@ interface HoldingRow {
 
 /**
  * "What do I own" — a single holdings table that lists each real balance the
- * contracts expose (fund shares, cash, deposited capital, accrued yield,
+ * contracts expose (fund shares, cash, deposited capital, rent earnings,
  * protocol rewards) with its amount and EUR value where one exists. Locked
  * amounts and per-share / supply detail are tucked into AdvancedDetails so the
  * primary view stays calm. Every field is read from PortfolioData — nothing is
@@ -75,15 +75,24 @@ export function HoldingsBreakdown({
       value: formatEUR(portfolio.depositedAmount),
     },
     {
-      key: "yield",
+      key: "rent",
       asset: (
         <div className="min-w-0">
-          <p className="text-body text-text-1">Accrued yield</p>
-          <p className="text-caption text-text-3">On your deposited capital</p>
+          <p className="text-body inline-flex items-center gap-1 text-text-1">
+            Rent earnings
+            <InfoDot
+              label="What are rent earnings"
+              content="Your pooled, pro-rata share of the rent the fund has collected on-chain (record_rent) across ALL its homes — not just any one. This is a separate earnings stream (your return on investment), claimable as EUR to withdraw or reinvest. It is income on top of your share value, NOT part of NAV."
+            />
+          </p>
+          <p className="text-caption text-text-3">On-chain · separate from share value · withdraw or reinvest</p>
         </div>
       ),
-      amount: formatEUR(portfolio.estimatedYield),
-      value: formatEUR(portfolio.estimatedYield),
+      // Show the UNCLAIMED (claimable) rent here — the asset still held. Withdrawn
+      // rent moves to "Cash in wallet", reinvested rent to "Deposited capital", so
+      // this row never double-counts. Falls back to lifetime earned pre-ledger.
+      amount: formatEUR(portfolio.rentClaimable ?? portfolio.estimatedYield),
+      value: formatEUR(portfolio.rentClaimable ?? portfolio.estimatedYield),
     },
     {
       key: "rewards",

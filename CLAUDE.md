@@ -135,6 +135,104 @@ Pattern lives in `noir-projects/noir-contracts/contracts/test/public_immutable_c
 4. ProtocolRewards — allocate_reward_private → RewardClaimNote present; claim_reward_private consumes and re-claim rejected.
 5. FSFTDex — place_order_private → commitment OPEN; cancel_order_private flips to CANCELLED.
 
+## Economic model: rent, return & NAV (canonical)
+
+This is the **single source of truth** for how money moves for an FSFT holder. It
+supersedes the older "capped-return → affordability-reserve" framing in
+[`docs/FUTURE_DEVELOPMENT_PLAN.md`](./docs/FUTURE_DEVELOPMENT_PLAN.md) §4.0 and the
+modelled `CAPPED_RETURN_PCT` overlay (see the demo-layer note below).
+
+### Two numbers, kept separate
+
+An FSFT holder has exactly two figures, and the UI must keep them distinct:
+
+1. **Stake / share value (NAV).** What their FSFT is worth as a claim on the
+   fund's **capital** — property value (and not-yet-deployed deposit principal).
+   In the read layer today `NAV = total_deposits` (property marks land later via
+   the valuation oracle, §3.2). **Rent does NOT inflate NAV.**
+2. **Rent earnings.** A **separate, claimable income stream** — "monthly
+   earnings" / the return on their investment. Paid out as EUR (withdraw) or
+   reinvested; it never silently rolls into NAV-per-FSFT.
+
+> Why separate: rent is *income on top of* the capital, not appreciation of it.
+> Folding rent into NAV conflates "what my share is worth" with "what I can take
+> out." (An earlier commit folded rent into NAV; that is being reversed — see
+> [`docs/PHASE1_YIELD_AND_RENT.md`](./docs/PHASE1_YIELD_AND_RENT.md).)
+
+### ROR is the master parameter — rent is cost-based, not market-based
+
+Rent is defined off the property's **acquisition value**, not the open market:
+
+```
+annual rent  = ROR × acquisition_value          (ROR e.g. 3% = 300 bps)
+monthly rent = annual rent / 12
+```
+
+Example: a €500K home at ROR 3% → €15,000/yr → **€1,250/mo**. That full amount
+flows to the investor pool. This **is** the "capped return": the investor return
+is fixed by the ROR formula, and because that rent is **below market**
+(cost-based), the household gets the affordability benefit directly — there is
+**no separate "surplus → affordability reserve"** step (the older §4.0 mechanism
+is dropped). ROR is a fund/property parameter; the keeper still posts **actual
+collected** rent (which may fall short of the ROR target when households underpay
+— see risk-pooling below), and the ROR figure drives the *expected/billed* rent.
+
+### One shared pool, pro-rata, risk-pooled
+
+- **All rent from all properties is pooled.** A holder does **not** get the rent
+  of "their" house. Every FSFT holder shares the rental income of **all** homes,
+  **pro-rata to FSFT** — with the protocol's small-depositor floor still
+  over-allocating small savers (`SMALL_POOL_BPS` 30%, the same FIFO+floor
+  machinery as proposal distributions).
+- **Why pooled:** risk-pooling. If some households are late or default, the whole
+  pool dips slightly rather than one investor eating the loss on one house.
+  Holders hold a diversified claim on the entire portfolio's rent.
+
+### Withdraw or reinvest — and track which
+
+A holder chooses, via the **Rent earnings** panel on `/portfolio`:
+
+- **Withdraw as cash** — the claimable rent is paid out as EUR
+  (`HousingFund.claim_rent` public / `claim_rent_private` private).
+- **Reinvest** — the rent re-enters the fund via the **normal deposit route** as
+  fresh capital (`HousingFund.reinvest_rent`): NAV grows and the holder compounds
+  (a larger deposit → larger future FSFT + rent share).
+
+A per-holder ledger tracks **withdrawn vs reinvested** (`get_rent_withdrawn` /
+`get_rent_reinvested`, public path only — private claims are not attributed
+on-chain, for privacy). `rentClaimable = earned − withdrawn − reinvested`.
+
+**Status — what is / isn't wired (keep this honest):**
+- **Simulation (the default demo): fully working.** Withdraw + Reinvest act on the
+  in-memory store (`simClaimRent` / `simReinvestRent`); `/portfolio` shows the
+  earned/withdrawn/reinvested/claimable breakdown with both buttons.
+- **Live: Withdraw + Reinvest are both wired** — `claim_rent_private` and
+  `reinvest_rent_private` (each needs a keeper-opened rent epoch). Both are
+  **single-note** (claim against the caller's first deposit note — the repo's
+  `claim_distribution` posture; multi-note is a uniform follow-up) and **untested
+  against a live stack** here (the demo runs in sim). Artifacts in
+  `frontend/src/artifacts/` are **gitignored / build-generated** (codegen output,
+  tracked via `codegenCache.json`) — there is no committed artifact to refresh; the
+  deploy/bootstrap build regenerates them from the contracts (the contract-hash
+  change triggers it). Local-live uses the freshly compiled
+  `contracts/housing_fund/target/*.json` (the loader prefers it).
+- **ROR is surfaced in the dossier from chain.** `get_ror_bps` flows into
+  `FundStats.rorBps`; `ReturnsCapPanel` shows the **real** ROR (labelled "on-chain")
+  when set, falling back to the modelled `CAPPED_RETURN_PCT` otherwise. The worked
+  euro example stays modelled. `scripts/seed-fsft.sh` seeds `set_ror_bps` (3%) +
+  `set_acquisition_value` (€500K → €1,250/mo) via `POST /api/fund/ror`; sim defaults
+  ROR to 300 bps so the demo shows it without seeding. (`get_expected_monthly_rent`
+  is on-chain but not yet rendered — the example uses a modelled acquisition.)
+
+### Frontend rule for this model
+
+Keep it **simple and legible** (the frontend principles below still apply):
+present the two numbers plainly — *"Stake (share value): €X"* and *"Rent earnings:
+€Y — [Withdraw] [Reinvest]"*. Do not merge them; never show rent as an APY; use an
+`InfoDot` for the pooled / pro-rata / risk-pooling explanation rather than a
+paragraph. Real on-chain figures are untagged; only genuinely modelled inputs
+(e.g. an acquisition value not yet on-chain) carry the `ModelledChip`.
+
 ## Frontend design system & app shell
 
 ### Run mode: production by default, `FRONTEND_DEV=1` to edit
@@ -195,3 +293,54 @@ Reuse these; do **not** build per-page chrome or invent type sizes:
 `SimplePage.tsx` is legacy (only `explain` still uses it) — migrate off it, do
 not extend it. Any client page reading `useSearchParams()` must be wrapped in a
 `<Suspense>` boundary or the Vercel static build fails.
+
+### Project dossier & the demo layer (FUTURE_DEVELOPMENT_PLAN §9 / D1–D4)
+
+The §9 demo build ("housing first, mechanics second") adds a **modelled
+project-finance layer** overlaid on the real on-chain proposal/deed. Read
+[`docs/FUTURE_DEVELOPMENT_PLAN.md` §9](./docs/FUTURE_DEVELOPMENT_PLAN.md) and
+[`docs/DEMO_RUNBOOK.md`](./docs/DEMO_RUNBOOK.md) before touching it.
+
+- **The honesty rule (non-negotiable).** Every on-screen number is either
+  **verifiably real** (on-chain reads) or **chip-labelled "Modelled for demo"**.
+  Never present a modelled number as live — that honesty *is* the pitch to
+  housing partners. Use `ui/ModelledChip` (built on `.chip-sim`, the dashed
+  low-key variant) next to any modelled figure / section.
+- **`frontend/src/lib/projectDossier.ts`** — the modelled metadata (capital
+  stack, documented financing gap / `onrendabele top`, affordability covenant,
+  milestones, impact, role-gated sensitive rows). It is a **typed sidecar, not
+  on-chain** (HousingFund has no covenant/reserve fields). Resolve it with
+  `getProjectDossier(proposal)` (keys by proposal id **or** title-slug; returns
+  `null` when none is authored — never invent one). `aggregateImpact(proposals)`
+  feeds the impact strip; `modelledReturnSplit(pool)` the capped-return display.
+  `SMALL_DEPOSITOR_FLOOR_BPS` (3000) mirrors the **real** on-chain `SMALL_POOL_BPS`
+  and is surfaced *without* a modelled tag; `CAPPED_RETURN_PCT` (3.5) is a legacy
+  modelled overlay — the canonical return model is now **ROR-based** (rent = ROR ×
+  acquisition value, fully to investors, no surplus reserve); see the
+  *"Economic model: rent, return & NAV"* section above, which the dossier
+  return-split display should follow.
+- **Where it renders.** D1 dossier = a **"Dossier" tab** on `/fund/[id]`
+  (`components/projects/ProjectDetailDossier.tsx`), which becomes the **default
+  tab** when a dossier exists (lead with housing); sensitive rows are gated on
+  `eligibility.investorRole`. D2 capped-return = `ProjectDetailDossier` +
+  `components/projects/ReturnsCapPanel.tsx` (a compact banner also sits on the
+  Distribution tab). D4 impact = `components/overview/ImpactStrip.tsx` at the top
+  of the Overview. `components/projects/CapitalStack.tsx` is the stacked-bar
+  visual. The dossier draws the **modelled↔on-chain bridge** explicitly — the
+  proposal amount *represents* the Fair Squares tranche; the two are never merged
+  into one euro figure.
+- **Seed / demo headroom.** `scripts/seed-fsft.sh` funds a proposal **below**
+  total deposits (`PROPOSAL_AMOUNT=20000` of 30000) so the fund shows non-zero
+  "Available to deploy", and titles it `Maashaven Wonen — Rotterdam` so the
+  dossier resolves. The dossier content is **illustrative** (a representative
+  Rotterdam wooncoöperatie), not a real partner's finances.
+
+### Verifying a frontend change without clobbering the running container
+
+The docker `frontend` service serves a **root-owned `.next/`**; never `rm`/build
+over it. To typecheck + build safely: `npm run typecheck` (skip `next typegen`
+and call `tsc` directly if `.next` is root-owned — it fails to write route
+types), and for a full build use the env-gated `distDir`:
+`NEXT_DIST_DIR=.next-verify npx next build` then `rm -rf .next-verify`. (Building
+with `NEXT_DIST_DIR` set rewrites `next-env.d.ts`/`tsconfig.json` to point at the
+verify dir — `git checkout` those two afterward.)

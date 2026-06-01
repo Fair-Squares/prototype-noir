@@ -24,9 +24,9 @@ export function FundHealthKpis({ stats }: { stats: FundStats }) {
       <KpiCard
         label="Fund value (NAV)"
         value={stats.navEur != null ? formatEUR(stats.navEur) : "—"}
-        sub="Capital + homes held"
+        sub="Capital backing every share"
         tone="accent"
-        hint="Net asset value: pooled capital plus the appraised value of property deeds the fund holds."
+        hint="Net asset value: the pooled capital (deposit principal, and property once marked) backing every Fund Share. Rent is a SEPARATE claimable earnings stream — it does not inflate NAV. No DeFi yield is included; there is no real yield source yet."
       />
       <KpiCard
         label="Available capital"
@@ -37,8 +37,8 @@ export function FundHealthKpis({ stats }: { stats: FundStats }) {
       <KpiCard
         label="Parked in DeFi"
         value={formatEUR(stats.totalInDefi)}
-        sub="Earning while idle"
-        hint="Idle capital parked in DeFi yield while it waits to be deployed into housing."
+        sub="Held idle"
+        hint="Idle capital set aside to be parked in a yield source. No real DeFi yield is earned yet — wiring a real yield adapter is future work (see docs/PHASE1_YIELD_AND_RENT.md)."
       />
       <KpiCard
         label="Committed to homes"

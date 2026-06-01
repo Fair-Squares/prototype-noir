@@ -13,6 +13,11 @@ const ZKPASSPORT_EXTERNALS_PREFIX = "@zkpassport/";
 const nextConfig: NextConfig = {
   outputFileTracingRoot: __dirname,
 
+  // Build output dir. Defaults to ".next" (unchanged for docker / next start);
+  // set NEXT_DIST_DIR to build into an isolated folder without clobbering a
+  // running production server's ".next".
+  distDir: process.env.NEXT_DIST_DIR || ".next",
+
   webpack: (config, { isServer }) => {
     // ── WebAssembly support (required for @aztec/bb.js in browser) ─────────
     config.experiments = { ...config.experiments, asyncWebAssembly: true };

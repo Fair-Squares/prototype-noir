@@ -92,6 +92,8 @@ export async function GET() {
       investorCount,
       isPaused,
       totalSupply,
+      totalRentIncome,
+      rorBps,
     ] = await Promise.all([
       hfContract.methods.get_fund_stats().simulate({ from }).then((r) =>
         simResult<{
@@ -123,14 +125,23 @@ export async function GET() {
       ftContract.methods.total_supply().simulate({ from }).then((r) =>
         toNumberStrict(simResult(r), "FundToken.total_supply")
       ),
+      hfContract.methods.get_total_rent_income().simulate({ from }).then((r) =>
+        toNumberStrict(simResult(r), "HousingFund.get_total_rent_income")
+      ),
+      hfContract.methods.get_ror_bps().simulate({ from }).then((r) =>
+        toNumberStrict(simResult(r), "HousingFund.get_ror_bps")
+      ),
     ]);
 
     const totalDeposits = toNumberStrict(stats.total_deposits, "HousingFund.get_fund_stats.total_deposits");
     const totalInDefi = toNumberStrict(stats.total_in_defi, "HousingFund.get_fund_stats.total_in_defi");
     const totalAllocated = toNumberStrict(stats.total_allocated, "HousingFund.get_fund_stats.total_allocated");
     const available = toNumberStrict(stats.available, "HousingFund.get_fund_stats.available");
-    // No on-chain yield source (the AIP-4626 vault was dropped), so NAV is just
-    // the pooled capital.
+    // NAV = pooled CAPITAL only (deposit principal; property marks land later via
+    // the valuation oracle). Rent is a SEPARATE claimable earnings stream and does
+    // NOT inflate NAV — it is surfaced as `totalRentIncome` for the dedicated
+    // "Rent earnings" display. See the canonical model in CLAUDE.md and
+    // docs/PHASE1_YIELD_AND_RENT.md.
     const navEur = Math.max(0, totalDeposits);
     const navPerFsftEur = totalSupply > 0 ? Math.round((navEur / totalSupply) * 10000) / 10000 : 0;
 
@@ -148,6 +159,8 @@ export async function GET() {
       valuationBlock: toNumberStrict(valuation.last_valuation_block, "HousingFund.get_valuation.last_valuation_block"),
       navEur,
       navPerFsftEur,
+      totalRentIncome,
+      rorBps,
       parkedAllocationBps: toNumberStrict(parkedPolicy.target_bps, "HousingFund.get_parked_capital_policy.target_bps"),
       parkedMinBps: toNumberStrict(parkedPolicy.min_bps, "HousingFund.get_parked_capital_policy.min_bps"),
       parkedMaxBps: toNumberStrict(parkedPolicy.max_bps, "HousingFund.get_parked_capital_policy.max_bps"),

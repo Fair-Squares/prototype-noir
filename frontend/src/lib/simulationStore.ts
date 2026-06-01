@@ -74,7 +74,12 @@ interface SimFundState {
   tokenPriceBps: number;
   isPaused: boolean;
   investorCount: number;
-  totalYield: number;
+  // Phase 1.1: cumulative on-chain rent income (mirrors HousingFund.record_rent).
+  rentIncome: number;
+  rentByProperty: Record<number, number>;
+  // Phase 1.1 step 3: Return on Rent in basis points (mirrors HousingFund.ror_bps).
+  // Rent = ROR × acquisition value; this is the real capped-return parameter.
+  rorBps: number;
   parkedAllocationBps: number;
   parkedMinBps: number;
   parkedMaxBps: number;
@@ -91,6 +96,11 @@ interface SimAccountState {
   lockedFsft: number;
   fsftVotingAttested: boolean;
   fsftRewardsAttested: boolean;
+  // Phase 1.1 step 3: per-holder rent taken as fiat vs reinvested (the
+  // withdraw-vs-reinvest ledger). Optional so existing account literals need no
+  // change; read with `?? 0`. claimable = earned - withdrawn - reinvested.
+  rentWithdrawn?: number;
+  rentReinvested?: number;
 }
 
 export interface SimProposal {
@@ -228,7 +238,9 @@ function rewardEpochStartMs(epoch: number): number {
 }
 
 function getReferenceFsftPriceEur(state: SimState): number {
-  const navEur = Math.max(0, state.fund.totalDeposits + state.fund.totalYield);
+  // DEX reference price tracks NAV (share value) = CAPITAL only. Rent is a
+  // separate claimable earnings stream and does not move share value. (CLAUDE.md)
+  const navEur = Math.max(0, state.fund.totalDeposits);
   if (state.fund.fsftTotalSupply > 0) {
     return roundTo4(navEur / state.fund.fsftTotalSupply);
   }
@@ -352,7 +364,9 @@ function createInitialState(): SimState {
       tokenPriceBps: 10_000,
       isPaused: false,
       investorCount: 3,
-      totalYield: 15_000,
+      rentIncome: 0,
+      rentByProperty: {},
+      rorBps: 300, // demo Return on Rent: 3% of acquisition value, paid monthly
       parkedAllocationBps: 3000,
       parkedMinBps: 2000,
       parkedMaxBps: 5000,
@@ -577,7 +591,8 @@ export function simAttestFsftForRewards(address: string): { success: boolean; er
 
 export function simGetFundStats() {
   const { fund } = getState();
-  const navEur = Math.max(0, fund.totalDeposits + fund.totalYield);
+  // NAV = pooled CAPITAL only. Rent is surfaced separately as totalRentIncome.
+  const navEur = Math.max(0, fund.totalDeposits);
   const navPerFsftEur = fund.fsftTotalSupply > 0 ? roundTo4(navEur / fund.fsftTotalSupply) : 0;
   const available = Math.max(0, fund.totalDeposits - fund.totalInDefi - fund.totalAllocated);
 
@@ -593,7 +608,8 @@ export function simGetFundStats() {
     tokenPriceBps: fund.tokenPriceBps,
     isPaused: fund.isPaused,
     investorCount: fund.investorCount,
-    totalYield: fund.totalYield,
+    totalRentIncome: fund.rentIncome,
+    rorBps: fund.rorBps,
     navEur,
     navPerFsftEur,
     parkedAllocationBps: fund.parkedAllocationBps,
@@ -603,6 +619,88 @@ export function simGetFundStats() {
   };
 }
 
+/**
+ * Phase 1.1: record collected rent for a property -- mirrors
+ * HousingFund.record_rent. Accrues to the lifetime + per-property rent income
+ * that forms the SEPARATE claimable rent-earnings pool (NOT NAV — rent is income
+ * on top of capital, per CLAUDE.md). No simulated yield: rent is posted, never
+ * fabricated.
+ */
+export function simRecordRent(
+  propertyId: number,
+  amount: number,
+): { success: boolean; error?: string } {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { success: false, error: "rent amount must be positive" };
+  }
+  const s = getState();
+  if (s.fund.isPaused) return { success: false, error: "fund is paused" };
+  s.fund.rentIncome += amount;
+  s.fund.rentByProperty[propertyId] = (s.fund.rentByProperty[propertyId] ?? 0) + amount;
+  return { success: true };
+}
+
+/** A holder's currently-claimable (unclaimed) rent = earned - withdrawn - reinvested. */
+function simClaimableRent(s: SimState, acct: SimAccountState): number {
+  const earned =
+    s.fund.fsftTotalSupply > 0
+      ? Math.round((s.fund.rentIncome * acct.fsftBalance) / s.fund.fsftTotalSupply)
+      : 0;
+  return Math.max(0, earned - (acct.rentWithdrawn ?? 0) - (acct.rentReinvested ?? 0));
+}
+
+/**
+ * Phase 1.1 step 3: WITHDRAW claimable rent as fiat (mirrors HousingFund.claim_rent).
+ * Moves the holder's unclaimed pooled rent share to their EUR wallet and records
+ * it on the withdraw side of the ledger. No fabrication: bounded by earned rent.
+ */
+export function simClaimRent(address: string): { success: boolean; error?: string; claimed?: number } {
+  const s = getState();
+  if (s.fund.isPaused) return { success: false, error: "Fund is paused" };
+  const acct = getOrCreateAccount(address);
+  const claimable = simClaimableRent(s, acct);
+  if (claimable <= 0) return { success: false, error: "No claimable rent" };
+  acct.eurBalance += claimable;
+  acct.rentWithdrawn = (acct.rentWithdrawn ?? 0) + claimable;
+  return { success: true, claimed: claimable };
+}
+
+/**
+ * Phase 1.1 step 3: REINVEST claimable rent (mirrors HousingFund.reinvest_rent).
+ * The rent re-enters the fund via the usual deposit route -- it becomes fresh
+ * capital (NAV grows) and is recorded on the reinvest side of the ledger. The
+ * EUR stays in the fund; this is the "put it back in the fund" path.
+ */
+export function simReinvestRent(address: string): { success: boolean; error?: string; reinvested?: number } {
+  const s = getState();
+  if (s.fund.isPaused) return { success: false, error: "Fund is paused" };
+  const acct = getOrCreateAccount(address);
+  if (!acct.investorRole) return { success: false, error: "Investor role required" };
+  const claimable = simClaimableRent(s, acct);
+  if (claimable <= 0) return { success: false, error: "No claimable rent" };
+  acct.depositedAmount += claimable;
+  s.fund.totalDeposits += claimable;
+  acct.rentReinvested = (acct.rentReinvested ?? 0) + claimable;
+  // Keep the parked-capital allocation consistent with simDeposit.
+  const targetInDefi = Math.floor((s.fund.totalDeposits * s.fund.parkedAllocationBps) / 10_000);
+  s.fund.totalInDefi = Math.min(targetInDefi, Math.max(0, s.fund.totalDeposits - s.fund.totalAllocated));
+  recalcInvestorCount(s);
+  return { success: true, reinvested: claimable };
+}
+
+/**
+ * Phase 1.1 step 3: set the Return on Rent (mirrors HousingFund.set_ror_bps).
+ * Acquisition value is per-property on-chain but not tracked in the sim fund
+ * (the dossier worked example uses a modelled acquisition), so only ROR is set.
+ */
+export function simSetRorConfig(rorBps: number): { success: boolean; error?: string } {
+  if (!Number.isFinite(rorBps) || rorBps < 0 || rorBps > 10000) {
+    return { success: false, error: "ror bps out of range" };
+  }
+  getState().fund.rorBps = Math.floor(rorBps);
+  return { success: true };
+}
+
 // ── Portfolio ─────────────────────────────────────────────────────────────────
 
 export function simGetPortfolio(address: string) {
@@ -610,8 +708,19 @@ export function simGetPortfolio(address: string) {
   const { fund } = getState();
   const eligibility = simGetVotingEligibility(address);
   const sharePercent = fund.fsftTotalSupply > 0 ? (acct.fsftBalance / fund.fsftTotalSupply) * 100 : 0;
-  const navEur = Math.max(0, fund.totalDeposits + fund.totalYield);
+  // NAV = pooled CAPITAL only; rent does NOT inflate share value (CLAUDE.md).
+  const navEur = Math.max(0, fund.totalDeposits);
   const navPerFsftEur = fund.fsftTotalSupply > 0 ? roundTo4(navEur / fund.fsftTotalSupply) : 0;
+  // The holder's pooled pro-rata slice of REAL rent income — a SEPARATE claimable
+  // earnings stream (withdraw or reinvest), not part of NAV. No fake APY. This is
+  // lifetime EARNED; claimable nets out what they already withdrew/reinvested.
+  const rentEarned =
+    fund.fsftTotalSupply > 0
+      ? Math.round((fund.rentIncome * acct.fsftBalance) / fund.fsftTotalSupply)
+      : 0;
+  const rentWithdrawn = acct.rentWithdrawn ?? 0;
+  const rentReinvested = acct.rentReinvested ?? 0;
+  const rentClaimable = Math.max(0, rentEarned - rentWithdrawn - rentReinvested);
   const tokenPriceEur = fund.tokenPriceBps / 10_000;
   const rewards = simGetRewardsStatus(address);
 
@@ -625,11 +734,18 @@ export function simGetPortfolio(address: string) {
     available: Math.max(0, fund.totalDeposits - fund.totalInDefi - fund.totalAllocated),
     totalSupply: fund.fsftTotalSupply,
     sharePercent: Math.round(sharePercent * 100) / 100,
-    estimatedYield: Math.round(acct.depositedAmount * 0.03),
+    // estimatedYield = lifetime EARNED rent (unchanged semantics). The actionable
+    // unclaimed figure is rentClaimable; the ledger is rentWithdrawn/reinvested.
+    estimatedYield: rentEarned,
+    rentEarned,
+    rentClaimable,
+    rentWithdrawn,
+    rentReinvested,
     tokenPriceBps: fund.tokenPriceBps,
     tokenPriceEur,
     navPerFsftEur,
     navEur,
+    totalRentIncome: fund.rentIncome,
     fsftMarketValue: Math.round(acct.fsftBalance * navPerFsftEur * 100) / 100,
     lastAssetSalePrice: fund.lastAssetSalePrice,
     lastFsftMinted: fund.lastFsftMinted,

@@ -32,6 +32,34 @@ else
   CONTRACTS=("${DEFAULT_CONTRACTS[@]}")
 fi
 
+# -- Cross-contract test staging ----------------------------------------------
+# Some contracts' tests deploy a DEPENDENCY contract via `env.deploy(...)`, which
+# resolves "<pkg>-<Contract>.json" from the package's OWN target dir. A
+# single-contract `aztec test` only emits that package's own artifact, so we
+# stage the dependency artifact (compiling the dep first if needed). `aztec test`
+# preserves foreign files in target, so staging before it is safe. Extend the
+# case as more cross-contract tests are added.
+_stage_dep() { # _stage_dep <main_pkg> <dep_pkg> <ContractName>
+  local main="$1" dep="$2" contract="$3"
+  local src="$ROOT_DIR/contracts/$dep/target/${dep}-${contract}.json"
+  local dst="$ROOT_DIR/contracts/$main/target/${main}-${contract}.json"
+  if [ ! -f "$src" ]; then
+    echo "[aztec-test] staging: compiling $dep (cross-contract dep of $main)..."
+    ( cd "$ROOT_DIR/contracts/$dep" && aztec compile >/dev/null 2>&1 ) || true
+  fi
+  if [ -f "$src" ]; then
+    mkdir -p "$ROOT_DIR/contracts/$main/target" && cp "$src" "$dst"
+    echo "[aztec-test] staged ${dep}-${contract}.json -> ${main}/target/${main}-${contract}.json"
+  else
+    echo "[aztec-test] WARN: could not stage $dep/$contract for $main (cross-contract test may fail)" >&2
+  fi
+}
+stage_cross_contract_deps() {
+  case "$1" in
+    housing_fund) _stage_dep housing_fund kyc_verifier KYCVerifier ;;
+  esac
+}
+
 # -- Docker fallback (legacy path, opt-in) -------------------------------------
 if [ "${FS_AZTEC_TEST_DOCKER:-0}" = "1" ]; then
   cd "$ROOT_DIR"
@@ -57,6 +85,10 @@ if [ "${FS_AZTEC_TEST_DOCKER:-0}" = "1" ]; then
         cd /workspace/contracts/\$c
         rm -rf target
         node --no-warnings /usr/src/yarn-project/aztec/dest/bin/index.js compile 2>&1 | tail -1
+        if [ \"\$c\" = housing_fund ]; then
+          cp /workspace/contracts/kyc_verifier/target/kyc_verifier-KYCVerifier.json /workspace/contracts/housing_fund/target/housing_fund-KYCVerifier.json 2>/dev/null \
+            || echo '[aztec-test] WARN: KYCVerifier not staged (run the full suite so kyc_verifier compiles first)'
+        fi
         if nargo test --oracle-resolver http://127.0.0.1:8080 --silence-warnings; then
           PASS=\$((PASS+1))
         else
@@ -88,6 +120,7 @@ for c in "${CONTRACTS[@]}"; do
   echo "=== $c"
   echo "================================"
   cd "$ROOT_DIR/contracts/$c"
+  stage_cross_contract_deps "$c"
   if aztec test; then
     PASS=$((PASS + 1))
   else

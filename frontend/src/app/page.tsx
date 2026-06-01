@@ -22,6 +22,7 @@ import {
   deriveNextStep,
 } from "@/components/overview/OverviewNextStep";
 import { ProjectsPreview } from "@/components/overview/ProjectsPreview";
+import { ImpactStrip } from "@/components/overview/ImpactStrip";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   fetchChainParams,
@@ -159,6 +160,9 @@ export default function OverviewPage() {
           {error}
         </Alert>
       ) : null}
+
+      {/* Affordable-housing impact — lead with homes/affordability, not tokens */}
+      {!loading && !error ? <ImpactStrip proposals={proposals} /> : null}
 
       {/* Fund health: how much capital is available vs deployed */}
       <section className="space-y-3" aria-label="Fund health">

@@ -20,6 +20,9 @@ export type { DataTableProps, Column, ColumnAlign } from "./DataTable";
 export { StatusChip } from "./StatusChip";
 export type { StatusChipProps, StatusKind } from "./StatusChip";
 
+export { ModelledChip } from "./ModelledChip";
+export type { ModelledChipProps } from "./ModelledChip";
+
 export { ProofChip } from "./ProofChip";
 export type { ProofChipProps, ProofState } from "./ProofChip";
 

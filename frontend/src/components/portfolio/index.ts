@@ -7,6 +7,9 @@ export type { HoldingsBreakdownProps } from "./HoldingsBreakdown";
 export { RewardsPanel } from "./RewardsPanel";
 export type { RewardsPanelProps } from "./RewardsPanel";
 
+export { RentEarningsPanel } from "./RentEarningsPanel";
+export type { RentEarningsPanelProps } from "./RentEarningsPanel";
+
 export { ReadinessSummary } from "./ReadinessSummary";
 export type { ReadinessSummaryProps } from "./ReadinessSummary";
 

@@ -22,7 +22,13 @@ export function ProjectDetailNotOnChain() {
       <p className="text-caption mt-1 max-w-prose text-text-2">
         Location, unit counts, the affordability covenant, capped-return terms
         and valuation reports are not part of any on-chain record for this
-        project, so they are omitted here rather than estimated.
+        project. Where a project has a financing dossier on file, those off-chain
+        facts appear in the <span className="font-semibold">Dossier</span> tab,
+        each clearly tagged <span className="italic">&ldquo;Modelled for
+        demo&rdquo;</span> — never mixed into the on-chain figures above. In
+        particular the capped return is a documented covenant policy, not yet
+        enforced in the circuit, so it does not reduce the on-chain distribution
+        each holder claims.
       </p>
     </div>
   );

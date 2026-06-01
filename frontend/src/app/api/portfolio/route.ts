@@ -152,7 +152,7 @@ export async function GET(request: NextRequest) {
       const hfArtifact = loadContractArtifact(HfJson as Parameters<typeof loadContractArtifact>[0]);
       const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, wallet);
 
-      const [stats, depositNotesResult, valuation] = await Promise.all([
+      const [stats, depositNotesResult, valuation, totalRentIncome, rentWithdrawn, rentReinvested] = await Promise.all([
         hfContract.methods
           .get_fund_stats()
           .simulate({ from: selectedAddr })
@@ -190,8 +190,23 @@ export async function GET(request: NextRequest) {
               last_valuation_block: bigint;
             }>(r)
           ),
+        hfContract.methods
+          .get_total_rent_income()
+          .simulate({ from: selectedAddr })
+          .then((r) => toNumberStrict(simResult(r), "HousingFund.get_total_rent_income")),
+        // Public-path withdraw-vs-reinvest ledger (per-holder). Accurate for
+        // public-path claims; private-path rent claims are intentionally not
+        // attributed on-chain (privacy), so this is a lower bound for those.
+        hfContract.methods
+          .get_rent_withdrawn(ownerAddr)
+          .simulate({ from: selectedAddr })
+          .then((r) => toNumberStrict(simResult(r), "HousingFund.get_rent_withdrawn")),
+        hfContract.methods
+          .get_rent_reinvested(ownerAddr)
+          .simulate({ from: selectedAddr })
+          .then((r) => toNumberStrict(simResult(r), "HousingFund.get_rent_reinvested")),
       ]);
-      return { stats, depositNotesResult, valuation };
+      return { stats, depositNotesResult, valuation, totalRentIncome, rentWithdrawn, rentReinvested };
     })();
 
     const ptRead = protocolTokenAddr
@@ -241,7 +256,7 @@ export async function GET(request: NextRequest) {
     fsftBalance = privateFsft + publicFsftBalance;
     totalSupply = supply;
 
-    const { stats, depositNotesResult, valuation } = hfResult;
+    const { stats, depositNotesResult, valuation, totalRentIncome, rentWithdrawn, rentReinvested } = hfResult;
     totalFundDeposits = toNumberStrict(stats.total_deposits, "HousingFund.get_fund_stats.total_deposits");
     totalInDefi = toNumberStrict(stats.total_in_defi, "HousingFund.get_fund_stats.total_in_defi");
     totalAllocated = toNumberStrict(stats.total_allocated, "HousingFund.get_fund_stats.total_allocated");
@@ -264,10 +279,15 @@ export async function GET(request: NextRequest) {
 
     const sharePercent = totalSupply > 0 ? Math.round((fsftBalance / totalSupply) * 10000) / 100 : 0;
     const tokenPriceEur = tokenPriceBps > 0 ? tokenPriceBps / 10000 : 0;
-    // No on-chain yield source (the AIP-4626 vault was dropped) — NAV is pooled capital.
+    // NAV = pooled CAPITAL only (deposit principal). Rent is a SEPARATE claimable
+    // earnings stream and does NOT inflate NAV / share value — the holder's rent
+    // is surfaced via `estimatedYield` (their pooled pro-rata rent share). See the
+    // canonical model in CLAUDE.md and docs/PHASE1_YIELD_AND_RENT.md.
     const navEur = Math.max(0, totalFundDeposits);
     const navPerFsftEur = totalSupply > 0 ? Math.round((navEur / totalSupply) * 10000) / 10000 : 0;
     const fsftMarketValue = Math.round(fsftBalance * navPerFsftEur * 100) / 100;
+    // Lifetime EARNED rent (pro-rata); claimable nets out the on-chain ledger.
+    const rentEarned = totalSupply > 0 ? Math.round((totalRentIncome * fsftBalance) / totalSupply) : 0;
     const hasDepositTicket = depositTicket > 0;
     const hasFsftExposure = publicFsftBalance > 0;
     const canVote = investorRole && (hasDepositTicket || hasFsftExposure);
@@ -288,11 +308,20 @@ export async function GET(request: NextRequest) {
       available,
       totalSupply,
       sharePercent,
-      estimatedYield: Math.round(depositTicket * 0.03),
+      // The holder's pro-rata slice of REAL on-chain rent income (record_rent),
+      // not a fabricated APY. estimatedYield = lifetime EARNED (unchanged); the
+      // actionable unclaimed figure is rentClaimable, net of the on-chain
+      // withdraw/reinvest ledger. Zero until rent is posted.
+      estimatedYield: rentEarned,
+      rentEarned,
+      rentWithdrawn,
+      rentReinvested,
+      rentClaimable: Math.max(0, rentEarned - rentWithdrawn - rentReinvested),
       tokenPriceBps,
       tokenPriceEur,
       navEur,
       navPerFsftEur,
+      totalRentIncome,
       fsftMarketValue,
       lastAssetSalePrice,
       lastFsftMinted,

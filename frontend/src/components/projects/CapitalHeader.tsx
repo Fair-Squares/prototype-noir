@@ -60,7 +60,7 @@ export function CapitalHeader({ stats, loading }: CapitalHeaderProps) {
             Fund NAV{" "}
             <InfoDot
               label="What is NAV"
-              content="Net asset value: the fund's total on-chain value backing every Fund Share, including capital deployed in strategies and committed to homes."
+              content="Net asset value: the fund's pooled capital backing every Fund Share (deposit principal, and property once marked). Rent is a separate claimable earnings stream and is not included in NAV."
             />
           </span>{" "}
           <span className="text-mono text-text-1">{formatEUR(stats.navEur)}</span>
