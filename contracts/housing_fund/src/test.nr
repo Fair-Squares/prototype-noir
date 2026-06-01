@@ -127,3 +127,83 @@ unconstrained fn test_open_rent_distribution_requires_deposits() {
     // guard fires -- proving the undistributed check passed first.
     env.call_public(admin, HousingFund::at(addr).open_rent_distribution(0, 500));
 }
+
+// -- Capped-return (ROR) + acquisition value ----------------------------------
+
+#[test]
+unconstrained fn test_ror_starts_zero() {
+    let (env, addr, _admin) = setup();
+    assert_eq(env.execute_utility(HousingFund::at(addr).get_ror_bps()), 0);
+}
+
+#[test]
+unconstrained fn test_set_ror_bps_by_admin() {
+    let (env, addr, admin) = setup();
+    env.call_public(admin, HousingFund::at(addr).set_ror_bps(300));
+    assert_eq(env.execute_utility(HousingFund::at(addr).get_ror_bps()), 300);
+}
+
+#[test(should_fail_with = "not admin")]
+unconstrained fn test_set_ror_bps_requires_admin() {
+    let (mut env, addr, _admin) = setup();
+    let stranger = env.create_light_account();
+    env.call_public(stranger, HousingFund::at(addr).set_ror_bps(300));
+}
+
+#[test(should_fail_with = "ror bps out of range")]
+unconstrained fn test_set_ror_bps_rejects_out_of_range() {
+    let (env, addr, admin) = setup();
+    env.call_public(admin, HousingFund::at(addr).set_ror_bps(10001));
+}
+
+// The core capped-return primitive: rent = ROR * acquisition_value, paid
+// monthly. Mirrors the canonical example (a EUR 500,000 home at ROR 3% ->
+// EUR 15,000/yr -> EUR 1,250/mo, fully to investors). See CLAUDE.md.
+#[test]
+unconstrained fn test_expected_rent_from_ror_and_acquisition() {
+    let (env, addr, admin) = setup();
+    env.call_public(admin, HousingFund::at(addr).set_ror_bps(300)); // 3%
+    env.call_public(admin, HousingFund::at(addr).set_acquisition_value(1, 500_000));
+
+    assert_eq(env.execute_utility(HousingFund::at(addr).get_acquisition_value(1)), 500_000);
+    assert_eq(env.execute_utility(HousingFund::at(addr).get_expected_annual_rent(1)), 15_000);
+    assert_eq(env.execute_utility(HousingFund::at(addr).get_expected_monthly_rent(1)), 1_250);
+    // A property with no acquisition value set yields zero expected rent (no
+    // fabrication).
+    assert_eq(env.execute_utility(HousingFund::at(addr).get_expected_monthly_rent(2)), 0);
+}
+
+#[test(should_fail_with = "not authorized to set acquisition value")]
+unconstrained fn test_set_acquisition_value_requires_auth() {
+    let (mut env, addr, _admin) = setup();
+    let stranger = env.create_light_account();
+    env.call_public(stranger, HousingFund::at(addr).set_acquisition_value(1, 500_000));
+}
+
+#[test]
+unconstrained fn test_keeper_can_set_acquisition_value() {
+    let (mut env, addr, admin) = setup();
+    let keeper = env.create_light_account();
+    env.call_public(admin, HousingFund::at(addr).set_rent_keeper(keeper));
+    env.call_public(keeper, HousingFund::at(addr).set_acquisition_value(3, 420_000));
+    assert_eq(env.execute_utility(HousingFund::at(addr).get_acquisition_value(3)), 420_000);
+}
+
+// -- Withdraw-vs-reinvest ledger ----------------------------------------------
+
+#[test]
+unconstrained fn test_rent_ledger_starts_zero() {
+    let (env, addr, admin) = setup();
+    assert_eq(env.execute_utility(HousingFund::at(addr).get_rent_withdrawn(admin)), 0);
+    assert_eq(env.execute_utility(HousingFund::at(addr).get_rent_reinvested(admin)), 0);
+}
+
+#[test(should_fail_with = "rent distribution is not open")]
+unconstrained fn test_reinvest_rent_requires_open_epoch() {
+    let (env, addr, admin) = setup();
+    // No rent epoch opened, so reinvest fails the open guard before touching the
+    // deposit record. (Full deposit -> record_rent -> open -> reinvest E2E needs
+    // a KYC'd deposit and is deferred -- the repo's "Task 22" posture, same as
+    // the claim_distribution tests.)
+    env.call_public(admin, HousingFund::at(addr).reinvest_rent(0, 0));
+}

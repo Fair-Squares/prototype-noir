@@ -223,6 +223,23 @@ pub contract HousingFund {
         r_record_has_claimed: Map<Field, PublicMutable<bool, Context>, Context>,
         // Private-path nullifiers, keyed poseidon2([note_hash, rent_epoch_id]).
         r_claim_nullifiers: Map<Field, Owned<SingleUseClaim<Context>, Context>, Context>,
+        // -- Capped-return (ROR) parameters -----------------------------------
+        // Return on Rent in basis points (e.g. 300 = 3%). Rent is defined as
+        // ROR * acquisition_value -- the cost-based, below-market rent that flows
+        // FULLY to investors (the "cap" is cost-based rent, not a reserve skim;
+        // see CLAUDE.md "Economic model"). The keeper still posts ACTUAL collected
+        // rent via record_rent; ROR drives the EXPECTED/billed rent (get_expected_*).
+        // 0 = unset: expected rent reads 0 until an admin configures it.
+        ror_bps: PublicMutable<u64, Context>,
+        // Per-property acquisition value (whole EUR), keyed by property_id.
+        acquisition_value_by_property: Map<Field, PublicMutable<u64, Context>, Context>,
+        // -- Withdraw-vs-reinvest ledger (PUBLIC path only) -------------------
+        // Per-holder lifetime rent taken as fiat (claim_rent) vs reinvested back
+        // into the fund as a new deposit (reinvest_rent). The private claim paths
+        // cannot attribute per-holder without leaking identity, so this ledger
+        // covers the public path; private claimants track their own off-chain.
+        rent_withdrawn_by: Map<AztecAddress, PublicMutable<u64, Context>, Context>,
+        rent_reinvested_by: Map<AztecAddress, PublicMutable<u64, Context>, Context>,
     }
 
     // ====================================================================
@@ -292,7 +309,9 @@ pub contract HousingFund {
         self.storage.total_rent_income.write(0);
         self.storage.undistributed_rent.write(0);
         self.storage.total_rent_claimed.write(0);
-        // rent_keeper / eur_token intentionally left unset (zero) until wired.
+        self.storage.ror_bps.write(0);
+        // rent_keeper / eur_token / acquisition values intentionally left unset
+        // (zero) until wired by the admin/keeper.
     }
 
     // -- Contract wiring (called after all contracts are deployed) ---------
@@ -333,6 +352,31 @@ pub contract HousingFund {
     fn set_rent_keeper(keeper: AztecAddress) {
         assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
         self.storage.rent_keeper.write(keeper);
+    }
+
+    // Admin: set the fund-level Return on Rent (ROR) in basis points. Rent is
+    // defined as ROR * acquisition_value (cost-based, below market, fully to
+    // investors), so this is the master return parameter. Capped at 100% (10000
+    // bps) as a sanity bound.
+    #[external("public")]
+    fn set_ror_bps(bps: u64) {
+        assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
+        assert(bps <= 10000, "ror bps out of range");
+        self.storage.ror_bps.write(bps);
+    }
+
+    // Admin or keeper: record a property's acquisition value (whole EUR). The
+    // expected rent for the property is ROR * acquisition_value (get_expected_*).
+    #[external("public")]
+    fn set_acquisition_value(property_id: u32, value: u64) {
+        let caller = self.msg_sender();
+        let admin = self.storage.admin.read();
+        let keeper = self.storage.rent_keeper.read();
+        assert(
+            admin.eq(caller) | (!keeper.is_zero() & keeper.eq(caller)),
+            "not authorized to set acquisition value",
+        );
+        self.storage.acquisition_value_by_property.at(property_id as Field).write(value);
     }
 
     // -- Core operations --------------------------------------------------
@@ -663,6 +707,99 @@ pub contract HousingFund {
         self.storage.r_record_has_claimed.at(claim_key).write(true);
         let claimed = self.storage.total_rent_claimed.read();
         self.storage.total_rent_claimed.write(claimed + (share as u64));
+        // Ledger: rent this holder took as fiat (the withdraw side of the
+        // withdraw-vs-reinvest choice).
+        let prev_withdrawn = self.storage.rent_withdrawn_by.at(caller).read();
+        self.storage.rent_withdrawn_by.at(caller).write(prev_withdrawn + (share as u64));
+    }
+
+    // Public-path REINVEST: instead of paying the rent share out as EUR
+    // (claim_rent), credit it as a NEW deposit for the caller -- "put it back in
+    // the fund, the usual deposit route" (CLAUDE.md economic model). The rent EUR
+    // stays in the fund; the counters shift from the rent pool to capital
+    // (total_rent_claimed += share, total_deposits += share), so NAV grows and
+    // the holder compounds (a larger deposit -> larger future FSFT + rent share).
+    // No EUR transfer -- the EUR was already in the fund (custody is orchestrated
+    // off-contract, exactly like deposit/record_rent). Public path only: the
+    // per-holder reinvested ledger needs the caller address, which the private
+    // path keeps hidden.
+    #[external("public")]
+    fn reinvest_rent(rent_epoch_id: u32, seq: u64) {
+        let rid = rent_epoch_id as Field;
+        assert(self.storage.r_open.at(rid).read(), "rent distribution is not open");
+
+        let caller = self.msg_sender();
+        let rec_key = poseidon2_hash([caller.to_field(), seq as Field]);
+        let rec = self.storage.deposit_records.at(rec_key).read();
+        assert(rec.owner == caller, "no deposit record for caller/seq");
+        assert(rec.amount > 0, "empty deposit record");
+
+        let claim_key = poseidon2_hash([caller.to_field(), seq as Field, rid]);
+        assert(!self.storage.r_record_has_claimed.at(claim_key).read(), "already claimed");
+
+        let small_pool = self.storage.r_small_pool.at(rid).read();
+        let small_total = self.storage.r_small_total.at(rid).read();
+        let fifo_cap = self.storage.r_fifo_cap.at(rid).read();
+        let share = total_claim(rec.amount, rec.cum_before, rec.is_small, small_pool, small_total, fifo_cap);
+        assert(share > 0, "nothing to claim");
+
+        // Fail-closed ceiling -- mathematically guaranteed by interval tiling.
+        let claimed_total = self.storage.r_claimed_total.at(rid).read();
+        let pool = self.storage.r_amount.at(rid).read();
+        assert(claimed_total + share <= pool, "rent distribution exhausted");
+
+        // Consume the rent claim and move it out of the rent pool.
+        self.storage.r_claimed_total.at(rid).write(claimed_total + share);
+        self.storage.r_record_has_claimed.at(claim_key).write(true);
+        let claimed = self.storage.total_rent_claimed.read();
+        self.storage.total_rent_claimed.write(claimed + (share as u64));
+
+        // Re-deposit the share as fresh capital for the caller (the usual deposit
+        // route): stamp a new public deposit record at the current FIFO cursor,
+        // advance the cursors, and bump the aggregates. `share` is bounded by the
+        // rent pool (a u64 amount), so the u64 cast is safe.
+        let share_u64 = share as u64;
+        let cum_before = self.storage.cum_deposits.read();
+        let new_seq = self.storage.deposit_seq.read();
+        let threshold = self.storage.small_threshold.read();
+        let is_small = share <= threshold;
+
+        let new_rec_key = poseidon2_hash([caller.to_field(), new_seq as Field]);
+        self.storage.deposit_records.at(new_rec_key).write(DepositRecord {
+            owner: caller,
+            amount: share,
+            cum_before,
+            is_small,
+        });
+        let dcount = self.storage.user_deposit_count.at(caller).read();
+        self.storage.user_deposit_seq.at(poseidon2_hash([caller.to_field(), dcount as Field])).write(
+            new_seq,
+        );
+        self.storage.user_deposit_count.at(caller).write(dcount + 1);
+
+        self.storage.cum_deposits.write(cum_before + share);
+        if is_small {
+            self.storage.cum_small_deposits.write(self.storage.cum_small_deposits.read() + share);
+        }
+        self.storage.deposit_seq.write(new_seq + 1);
+
+        let previous_ticket = self.storage.deposit_tickets.at(caller).read();
+        if previous_ticket == 0 {
+            if !self.storage.investor_seen.at(caller).read() {
+                let next_index = self.storage.investor_count.read();
+                self.storage.investor_index.at(next_index as Field).write(caller);
+                self.storage.investor_count.write(next_index + 1);
+                self.storage.investor_seen.at(caller).write(true);
+            }
+        }
+        self.storage.deposit_tickets.at(caller).write(previous_ticket + share_u64);
+
+        let current = self.storage.total_deposits.read();
+        self.storage.total_deposits.write(current + share_u64);
+
+        // Ledger: rent this holder reinvested (the reinvest side of the choice).
+        let prev_reinvested = self.storage.rent_reinvested_by.at(caller).read();
+        self.storage.rent_reinvested_by.at(caller).write(prev_reinvested + share_u64);
     }
 
     // -- Governance/accounting: valuation snapshot ------------------------
@@ -1141,6 +1278,48 @@ pub contract HousingFund {
         } else {
             income - claimed
         }
+    }
+
+    // -- Capped-return (ROR) getters --------------------------------------
+
+    #[external("utility")]
+    unconstrained fn get_ror_bps() -> pub u64 {
+        self.storage.ror_bps.read()
+    }
+
+    #[external("utility")]
+    unconstrained fn get_acquisition_value(property_id: u32) -> pub u64 {
+        self.storage.acquisition_value_by_property.at(property_id as Field).read()
+    }
+
+    // Expected ANNUAL rent for a property = ROR * acquisition_value (cost-based,
+    // fully to investors). Integer math via a u128 intermediate (no overflow),
+    // floored to whole EUR. Zero if ROR or the acquisition value is unset.
+    #[external("utility")]
+    unconstrained fn get_expected_annual_rent(property_id: u32) -> pub u64 {
+        let acq = self.storage.acquisition_value_by_property.at(property_id as Field).read() as u128;
+        let bps = self.storage.ror_bps.read() as u128;
+        ((acq * bps) / 10000) as u64
+    }
+
+    // Expected MONTHLY rent = expected annual / 12 (floored).
+    #[external("utility")]
+    unconstrained fn get_expected_monthly_rent(property_id: u32) -> pub u64 {
+        let acq = self.storage.acquisition_value_by_property.at(property_id as Field).read() as u128;
+        let bps = self.storage.ror_bps.read() as u128;
+        (((acq * bps) / 10000) / 12) as u64
+    }
+
+    // -- Withdraw-vs-reinvest ledger getters (public path) ----------------
+
+    #[external("utility")]
+    unconstrained fn get_rent_withdrawn(user: AztecAddress) -> pub u64 {
+        self.storage.rent_withdrawn_by.at(user).read()
+    }
+
+    #[external("utility")]
+    unconstrained fn get_rent_reinvested(user: AztecAddress) -> pub u64 {
+        self.storage.rent_reinvested_by.at(user).read()
     }
 
     // Per-rent-epoch snapshot (reuses the DistributionStatus shape).
