@@ -1,4 +1,5 @@
 use crate::HousingFund;
+use kyc_verifier::KYCVerifier;
 use aztec::{protocol::address::AztecAddress, test::helpers::test_environment::TestEnvironment};
 
 /// Constructor smoke test. Full V2 end-to-end (issue KYC credential ->
@@ -202,8 +203,74 @@ unconstrained fn test_rent_ledger_starts_zero() {
 unconstrained fn test_reinvest_rent_requires_open_epoch() {
     let (env, addr, admin) = setup();
     // No rent epoch opened, so reinvest fails the open guard before touching the
-    // deposit record. (Full deposit -> record_rent -> open -> reinvest E2E needs
-    // a KYC'd deposit and is deferred -- the repo's "Task 22" posture, same as
-    // the claim_distribution tests.)
+    // deposit record.
     env.call_public(admin, HousingFund::at(addr).reinvest_rent(0, 0));
+}
+
+// -- Cross-contract PUBLIC E2E (KYCVerifier + HousingFund) --------------------
+// Deploys KYCVerifier alongside HousingFund, makes a user an investor via the
+// public register_kyc path, then exercises deposit -> record_rent ->
+// open_rent_distribution -> reinvest_rent end to end. This is the previously
+// deferred "Task 22" E2E, made tractable on the PUBLIC path (no private-note
+// hinting): public deposit() creates a public deposit record claimable by seq.
+// The PRIVATE paths (deposit_private / claim_rent_private / reinvest_rent_private)
+// still need hinted notes and remain deferred.
+
+unconstrained fn setup_with_investor() -> (TestEnvironment, AztecAddress, AztecAddress, AztecAddress) {
+    let mut env = TestEnvironment::new();
+    let admin = env.create_light_account();
+    let user = env.create_light_account();
+    let kyc = env.deploy("KYCVerifier").with_public_initializer(
+        admin,
+        KYCVerifier::interface().constructor(admin),
+    );
+    let hf = env.deploy("HousingFund").with_public_initializer(
+        admin,
+        HousingFund::interface().constructor(admin),
+    );
+    // Wire KYC into the fund; the other links are unused by this flow, so admin
+    // stands in as a harmless placeholder.
+    env.call_public(admin, HousingFund::at(hf).set_contracts(kyc, admin, admin, admin));
+    // admin is the constructor-seeded verifier, so it can register the investor.
+    env.call_public(admin, KYCVerifier::at(kyc).register_kyc(user));
+    (env, hf, admin, user)
+}
+
+#[test]
+unconstrained fn test_reinvest_rent_public_e2e() {
+    let (mut env, hf, admin, user) = setup_with_investor();
+
+    // user deposits 10,000 (== small threshold, so it is a "small" depositor) ->
+    // public deposit record seq 0 with cum_before 0.
+    env.call_public(user, HousingFund::at(hf).deposit(10000));
+
+    // admin records 600 rent and opens an epoch for it.
+    env.call_public(admin, HousingFund::at(hf).record_rent(1, 600));
+    env.call_public(admin, HousingFund::at(hf).open_rent_distribution(0, 600));
+
+    // Sole small depositor reinvests their share of the whole pool:
+    //   small_pool = 600*3000/10000 = 180 ; fifo_cap = 420
+    //   share = fifo_share(0,10000,420)=420 + small_share=180 = 600.
+    env.call_public(user, HousingFund::at(hf).reinvest_rent(0, 0));
+
+    // Reinvested rent re-enters as capital: deposits 10,000 -> 10,600.
+    assert_eq(env.execute_utility(HousingFund::at(hf).get_rent_reinvested(user)), 600);
+    assert_eq(env.execute_utility(HousingFund::at(hf).get_total_deposits()), 10600);
+    // Rent left the pool (reinvested), so rent-in-fund drains to zero.
+    assert_eq(env.execute_utility(HousingFund::at(hf).get_total_rent_claimed()), 600);
+    assert_eq(env.execute_utility(HousingFund::at(hf).get_rent_in_fund()), 0);
+    // Withdraw side of the ledger is untouched.
+    assert_eq(env.execute_utility(HousingFund::at(hf).get_rent_withdrawn(user)), 0);
+}
+
+#[test(should_fail_with = "already claimed")]
+unconstrained fn test_cannot_withdraw_after_reinvest_same_record() {
+    let (mut env, hf, admin, user) = setup_with_investor();
+    env.call_public(user, HousingFund::at(hf).deposit(10000));
+    env.call_public(admin, HousingFund::at(hf).record_rent(1, 600));
+    env.call_public(admin, HousingFund::at(hf).open_rent_distribution(0, 600));
+    env.call_public(user, HousingFund::at(hf).reinvest_rent(0, 0));
+    // The (seq 0, epoch 0) record is consumed; withdrawing it now must revert
+    // before the EUR path is even reached.
+    env.call_public(user, HousingFund::at(hf).claim_rent(0, 0));
 }
