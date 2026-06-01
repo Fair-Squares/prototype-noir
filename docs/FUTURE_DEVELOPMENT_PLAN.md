@@ -221,6 +221,11 @@ ask for. That is the defensible wedge over a plain RWA-on-a-public-L2 competitor
 
 Each plan phase below is chosen to close one broken arrow in this loop.
 
+> *Note (per the canonical model in `CLAUDE.md`): in the loop above, **rent is a
+> separate claimable earnings stream, not NAV growth** — only property
+> appreciation accrues to NAV. "Make holding attractive" = rewards + withdrawable
+> (or reinvestable) rent earnings.*
+
 ---
 
 ## 3. Phased development plan
@@ -238,8 +243,10 @@ ease. Each item lists the concrete contract/frontend touchpoints.
      so idle deposit capital earns *actual* return while waiting to be deployed
      into property. Keep `DeFiVault`'s interface; swap the implementation.
    - Medium term: **rent ingestion** — an oracle/keeper posts collected rent per
-     property; `HousingFund` distributes it as FSFT NAV growth and/or a
-     claimable EUR yield. *This is the cash flow that justifies "earn the rent."*
+     property; `HousingFund` pools it across all properties and distributes it as
+     a **claimable EUR earnings stream, separate from NAV** (per the canonical
+     model in `CLAUDE.md` — rent is income, not NAV growth; holders withdraw it as
+     fiat or reinvest). *This is the cash flow that justifies "earn the rent."*
    - Code: `contracts/defi_vault/`, new `record_rent(property_id, amount)` on
      `HousingFund`, keeper script under `scripts/`.
 
@@ -345,6 +352,18 @@ alignment first — no extractive design.**
 
 ### 4.0 Capped-return accounting — the mechanism the docs actually commit to
 
+> **Update (2026-06-01) — refined to the ROR model; this paragraph's
+> "surplus → reserve" mechanism is superseded.** The canonical model is now
+> defined in [`CLAUDE.md` → "Economic model: rent, return & NAV"](../CLAUDE.md):
+> the "cap" is **cost-based rent**, not a payout skim. Rent = **ROR ×
+> acquisition_value** (e.g. 3% of a €500K home = €15K/yr = €1,250/mo), paid
+> monthly, and the **full** amount flows to the investor pool. The affordability
+> benefit reaches the household *directly* via below-market rent, so there is
+> **no separate surplus-to-affordability-reserve** route. The 15–25 yr covenant,
+> clawbacks, and anti-speculation posture below still hold; only the
+> "cap per-investor payout, route the remainder to a reserve note/pool"
+> implementation is dropped.
+
 Before any of the crypto-native mechanisms below, the protocol's economic
 **default** must match the published `pilot-term-sheet.md`: a **capped return
 (~3–4% net)**, a **15–25 year affordability covenant**, **clawbacks** if
@@ -448,7 +467,7 @@ make those conversations land:
 
 | Order | Item | DoD (trust unlocked) |
 |---|---|---|
-| 1 | Real yield + rent ingestion (§3.1) | FSFT NAV grows from actual cash flow in a test deploy. |
+| 1 | Real yield + rent ingestion (§3.1) | Pooled rent accrues as a **claimable EUR earnings stream (separate from NAV)** from actual cash flow in a test deploy; a holder can withdraw or reinvest it. |
 | 2 | NAV oracle + valuation proof (§3.2) | `get_valuation_public()` is fresh & attested; DEX band tracks it. |
 | 3 | Redemption floor (§3.3) | A holder can redeem at NAV-capped-by-reserve on testnet. |
 | 4 | Rent-to-equity MVP (§3.4) | A tenant credential converts rent → FSFT end-to-end. |
@@ -557,12 +576,14 @@ heavy legal/audit lift:
   gap closed"** KPIs. Public aggregates for everyone; sensitive rows role-gated.
   *Mostly presentation over data the contracts + a small project-metadata JSON
   can express.* This is what a partner actually wants to see on the call.
-- **D2 — Capped-return + covenant accounting (visible).** *(§4.0)* Wire the
-  distribution/claim path to display the **capped return** and route modelled
-  excess-over-cap to an "affordability reserve" line. Even if the cap math is a
-  thin overlay for the demo, *showing* "investor return is capped at ~3–4%;
-  surplus protects affordability" is the core anti-speculation story and
-  differentiator. Tag clearly as modelled where not enforced in-circuit yet.
+- **D2 — Capped-return + covenant accounting (visible).** *(§4.0, refined to the
+  ROR model — see `CLAUDE.md`)* Show the **capped return as cost-based rent**:
+  rent = ROR × acquisition value (e.g. ~3% of acquisition), paid monthly, **fully
+  to the investor pool**, with the affordability coming from the rent being
+  *below market* (no surplus-to-reserve skim). *Showing* "investor return is the
+  ROR (~3%); rent is cost-based so the household is protected" is the core
+  anti-speculation story and differentiator. Tag clearly as modelled where ROR /
+  acquisition value are not yet on-chain.
 - **D3 — Rent-to-equity teaser (tenant scenario).** *(§3.4)* A minimal tenant
   flow: a tenant credential scoped to the project, and a "rent payment → mints a
   small FSFT slice to the tenant" action (modelled rent for the demo). Even a
@@ -613,7 +634,7 @@ each starts instantly.
 |---|---|---|
 | 1 | **Seed a believable project + cohort.** Extend `scripts/seed-*`/bootstrap to plant one project (metadata + a proposal sized *below* total deposits so "ready to deploy" is non-zero — closes the open `docs/TODO.md` demo-headroom item) and 3–4 pre-funded personas. | `docker compose --profile aztec up` yields a demo-ready state with no manual clicks. |
 | 2 | **D1 project dossier page.** | `/projects/[id]` renders the chosen project's gap, capital stack, covenant, milestones, KPIs from live reads + project JSON; sensitive rows role-gated. |
-| 3 | **D2 capped-return + reserve display** on the distribution/claim + dossier. | Claim screens show capped return and surplus→affordability-reserve, labelled real vs modelled. |
+| 3 | **D2 capped-return (ROR) display** on the distribution/claim + dossier. | Claim screens show the ROR-based capped return (rent = ROR × acquisition, cost-based, fully to investors — no reserve skim), labelled real vs modelled. |
 | 4 | **D4 impact + trust strip.** | Homes enabled / affordability-years / small-depositor % / proof-state visible app-wide via TrustChip+ProofRail. |
 | 5 | **D3 rent-to-equity teaser.** | One tenant credential → one rent→FSFT mint → private tenant balance, end-to-end. |
 | 6 | **Demo script + "Modelled for demo" chips + mobile pass.** | A written 8–10 min runbook; every modelled number is chip-labelled; the redesigned pages survive a phone viewport (the open `docs/TODO.md` mobile audit). |

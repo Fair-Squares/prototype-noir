@@ -230,7 +230,9 @@ function rewardEpochStartMs(epoch: number): number {
 }
 
 function getReferenceFsftPriceEur(state: SimState): number {
-  const navEur = Math.max(0, state.fund.totalDeposits + state.fund.rentIncome);
+  // DEX reference price tracks NAV (share value) = CAPITAL only. Rent is a
+  // separate claimable earnings stream and does not move share value. (CLAUDE.md)
+  const navEur = Math.max(0, state.fund.totalDeposits);
   if (state.fund.fsftTotalSupply > 0) {
     return roundTo4(navEur / state.fund.fsftTotalSupply);
   }
@@ -580,7 +582,8 @@ export function simAttestFsftForRewards(address: string): { success: boolean; er
 
 export function simGetFundStats() {
   const { fund } = getState();
-  const navEur = Math.max(0, fund.totalDeposits + fund.rentIncome);
+  // NAV = pooled CAPITAL only. Rent is surfaced separately as totalRentIncome.
+  const navEur = Math.max(0, fund.totalDeposits);
   const navPerFsftEur = fund.fsftTotalSupply > 0 ? roundTo4(navEur / fund.fsftTotalSupply) : 0;
   const available = Math.max(0, fund.totalDeposits - fund.totalInDefi - fund.totalAllocated);
 
@@ -609,7 +612,9 @@ export function simGetFundStats() {
 /**
  * Phase 1.1: record collected rent for a property -- mirrors
  * HousingFund.record_rent. Accrues to the lifetime + per-property rent income
- * that backs NAV. No simulated yield: rent is posted, never fabricated.
+ * that forms the SEPARATE claimable rent-earnings pool (NOT NAV — rent is income
+ * on top of capital, per CLAUDE.md). No simulated yield: rent is posted, never
+ * fabricated.
  */
 export function simRecordRent(
   propertyId: number,
@@ -632,9 +637,11 @@ export function simGetPortfolio(address: string) {
   const { fund } = getState();
   const eligibility = simGetVotingEligibility(address);
   const sharePercent = fund.fsftTotalSupply > 0 ? (acct.fsftBalance / fund.fsftTotalSupply) * 100 : 0;
-  const navEur = Math.max(0, fund.totalDeposits + fund.rentIncome);
+  // NAV = pooled CAPITAL only; rent does NOT inflate share value (CLAUDE.md).
+  const navEur = Math.max(0, fund.totalDeposits);
   const navPerFsftEur = fund.fsftTotalSupply > 0 ? roundTo4(navEur / fund.fsftTotalSupply) : 0;
-  // The holder's pro-rata slice of REAL on-chain rent income (no fake APY).
+  // The holder's pooled pro-rata slice of REAL rent income — a SEPARATE claimable
+  // earnings stream (withdraw or reinvest), not part of NAV. No fake APY.
   const rentShare =
     fund.fsftTotalSupply > 0
       ? Math.round((fund.rentIncome * acct.fsftBalance) / fund.fsftTotalSupply)

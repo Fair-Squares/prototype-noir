@@ -2,6 +2,15 @@
 
 > **Status:** Implemented (first slice) · **Plan:** [`FUTURE_DEVELOPMENT_PLAN.md`](./FUTURE_DEVELOPMENT_PLAN.md) §3.1 / §8 item 1 · **Contracts:** `contracts/defi_vault`, `contracts/housing_fund`
 
+> **Model update (2026-06-01) — rent is now SEPARATE from NAV.** The canonical
+> economic model is defined in [`CLAUDE.md` → "Economic model: rent, return &
+> NAV"](../CLAUDE.md). Two refinements supersede parts of this doc: **(1)** rent
+> is a **separate claimable earnings stream, not NAV** — so step-1 below (folding
+> rent into NAV) is being **reversed** (NAV = capital/property value only); and
+> **(2)** "capped return" means **cost-based rent** (rent = ROR × acquisition
+> value, fully to investors), so the §4.0 surplus-to-reserve mechanism is dropped.
+> Sections below are annotated where they predate this.
+
 ## Why
 
 The plan's #1 priority (§1.3, §3.1): *"FSFT is backed by property value, but the
@@ -73,38 +82,45 @@ suite `./scripts/aztec-test.sh` → **5 passed, 0 failed**.
 - Like `deposit`, `record_rent` is **counter accounting**: it records the rent
   collected. Moving the actual EUR token is orchestrated off-contract (the API
   layer / keeper), exactly as deposits already work in this prototype.
-- Rent income is **transparent** (public aggregate) and **backs NAV**. As of the
-  follow-up below, `NAV = total_deposits + total_rent_income` is computed in both
-  `/api/fund/stats` and `/api/portfolio` (live) and the simulation store, so
-  NAV-per-FSFT, the holder's market value, and the DEX reference price all move
-  with real rent. What it does **not** yet do is distribute rent to holders as a
-  *separate claimable EUR yield* — the rent benefit currently reaches holders
-  only via NAV-per-FSFT. That is the next step (below).
+- Rent income is **transparent** (public aggregate) and is a **separate
+  claimable earnings stream — it does NOT back / inflate NAV** (per the model
+  update above). `NAV = total_deposits` (capital / property value); the holder's
+  rent benefit reaches them as **claimable EUR earnings** (withdraw or reinvest),
+  pooled across all properties and shared pro-rata (with the small-depositor
+  floor). *(The earlier `NAV = total_deposits + total_rent_income` folding is
+  being reversed in the read layer — see the frontend slice in the next-steps.)*
 
 ## What is intentionally NOT done yet (the next step)
 
-In strict trust-priority order (each turns a *modelled* demo number into a *real*
-enforced one):
+In strict trust-priority order, **revised to the canonical model** (rent is
+separate from NAV; ROR is the whole story):
 
-1. ~~**Wire rent into NAV.**~~ **DONE** (follow-up commit). `get_total_rent_income()`
-   is read in `/api/fund/stats` + `/api/portfolio` and folded into
-   `NAV = total_deposits + total_rent_income` (live + sim); `totalRentIncome` is
-   surfaced on the Overview/`/fund`/Portfolio; the fake 3% "Accrued yield" row is
-   replaced by the holder's **real** pro-rata rent share; and `scripts/record-rent.sh`
-   posts rent via `POST /api/fund/rent` → `HousingFund.record_rent`. The "earn the
-   rent" line is now a real on-chain figure end-to-end.
-2. **Rent → claimable distribution (next step).** Let FSFT holders *claim* accrued
-   rent as EUR yield (reuse the FIFO + small-floor share machinery, or a simpler
-   pro-rata on a rent epoch), so rent reaches holders as a withdrawable amount,
-   not only via NAV-per-FSFT.
-3. **Capped-return in-circuit (§4.0).** Turn the demo's D2 *display* overlay into
-   enforcement: cap the per-investor payout and route the surplus to an on-chain
-   affordability reserve note/pool. *Do this before staking/fees — every other
-   mechanism must respect the cap.*
-4. **Real yield adapter.** Implement one `yield_source` adapter (tokenized
+1. ~~**Wire rent into NAV.**~~ **DONE, then REVERSED.** The follow-up commit
+   folded rent into `NAV = total_deposits + total_rent_income` and replaced the
+   fake 3% "Accrued yield" with the holder's real pro-rata rent share + a keeper
+   (`scripts/record-rent.sh` → `POST /api/fund/rent` → `record_rent`). Per the
+   model update, rent is **separate from NAV**, so the **un-fold** is the current
+   frontend slice: `NAV = total_deposits` (capital), and `totalRentIncome` is
+   surfaced as a distinct **"Rent earnings"** figure rather than added to NAV. The
+   real on-chain rent figure and the keeper stay; only its *placement* changes.
+2. ~~**Rent → claimable distribution.**~~ **DONE** (`ff104d4`). `open_rent_distribution`
+   + `claim_rent` / `claim_rent_private` pay rent as EUR from the pool, FIFO +
+   30% small-floor, per rent epoch. This is the **withdraw-as-fiat** path.
+3. **ROR + acquisition value (NEW — the capped-return primitive).** Add
+   `acquisition_value` per property + a fund/property `ror_bps` to `HousingFund`;
+   derive **expected monthly rent = ROR × acquisition_value / 12** (the bill /
+   display). Keeper keeps posting **actual collected** rent (≤ expected when
+   households underpay — the pool absorbs it). This *is* "capped return": the
+   investor return is the ROR; rent is cost-based, fully to investors, **no
+   surplus reserve** (the old §4.0 skim is dropped).
+4. **Reinvest path + withdraw/reinvest ledger (NEW).** A first-class **reinvest**
+   action: claimed rent re-enters via the normal deposit route (→ mints FSFT under
+   FIFO+floor), and a **per-holder ledger tracks withdrawn-as-fiat vs reinvested**.
+   Today only withdraw (claim_rent) exists.
+5. **Real yield adapter.** Implement one `yield_source` adapter (tokenized
    T-bill / money-market) against the seam added here, and route idle capital
    through the vault (`deploy_to_defi` actually calling `DeFiVault.deposit`).
-5. **Redemption floor (§3.3).** A reserve-funded `redeem_request` /
+6. **Redemption floor (§3.3).** A reserve-funded `redeem_request` /
    `process_redemptions` so retail can exit at NAV-capped-by-reserve.
 
 ## Equity-gate check (§0.6.1)
@@ -113,9 +129,11 @@ enforced one):
   affordable homes; no new credit channel.
 - **(b) Improves/measures distributional equity** — rent is tracked per property
   and is destined to flow through the same small-depositor-floored distribution.
-- **(c) Rate-resilient** — real rent cash flow + the (next) reserve is precisely
-  what makes the capped-return promise survivable across a cycle; the fake yield
-  it replaces was not resilient, it was fictional.
+- **(c) Rate-resilient** — real rent cash flow + the (next) **redemption** reserve
+  (§3.3) is precisely what makes the capped-return promise survivable across a
+  cycle; the fake yield it replaces was not resilient, it was fictional. (Note:
+  this is the *redemption-floor* reserve, not a rent-surplus reserve — rent flows
+  fully to investors per the ROR model.)
 
 ## Note on generated artifacts
 

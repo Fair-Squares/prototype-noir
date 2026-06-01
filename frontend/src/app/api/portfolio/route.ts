@@ -268,9 +268,11 @@ export async function GET(request: NextRequest) {
 
     const sharePercent = totalSupply > 0 ? Math.round((fsftBalance / totalSupply) * 10000) / 100 : 0;
     const tokenPriceEur = tokenPriceBps > 0 ? tokenPriceBps / 10000 : 0;
-    // NAV = pooled capital + real on-chain rent income (Phase 1.1); no real DeFi
-    // yield source yet. See docs/PHASE1_YIELD_AND_RENT.md.
-    const navEur = Math.max(0, totalFundDeposits + totalRentIncome);
+    // NAV = pooled CAPITAL only (deposit principal). Rent is a SEPARATE claimable
+    // earnings stream and does NOT inflate NAV / share value — the holder's rent
+    // is surfaced via `estimatedYield` (their pooled pro-rata rent share). See the
+    // canonical model in CLAUDE.md and docs/PHASE1_YIELD_AND_RENT.md.
+    const navEur = Math.max(0, totalFundDeposits);
     const navPerFsftEur = totalSupply > 0 ? Math.round((navEur / totalSupply) * 10000) / 10000 : 0;
     const fsftMarketValue = Math.round(fsftBalance * navPerFsftEur * 100) / 100;
     const hasDepositTicket = depositTicket > 0;

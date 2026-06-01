@@ -24,7 +24,7 @@ interface HoldingRow {
 
 /**
  * "What do I own" — a single holdings table that lists each real balance the
- * contracts expose (fund shares, cash, deposited capital, accrued yield,
+ * contracts expose (fund shares, cash, deposited capital, rent earnings,
  * protocol rewards) with its amount and EUR value where one exists. Locked
  * amounts and per-share / supply detail are tucked into AdvancedDetails so the
  * primary view stays calm. Every field is read from PortfolioData — nothing is
@@ -79,13 +79,13 @@ export function HoldingsBreakdown({
       asset: (
         <div className="min-w-0">
           <p className="text-body inline-flex items-center gap-1 text-text-1">
-            Rent income share
+            Rent earnings
             <InfoDot
-              label="What is rent income share"
-              content="Your pro-rata slice of the rent the fund has collected on-chain (record_rent). It already backs your fund-share value via NAV-per-share — shown here for transparency, not as a separate balance to add on top."
+              label="What are rent earnings"
+              content="Your pooled, pro-rata share of the rent the fund has collected on-chain (record_rent) across ALL its homes — not just any one. This is a separate earnings stream (your return on investment), claimable as EUR to withdraw or reinvest. It is income on top of your share value, NOT part of NAV."
             />
           </p>
-          <p className="text-caption text-text-3">On-chain · already in fund-share value</p>
+          <p className="text-caption text-text-3">On-chain · separate from share value · withdraw or reinvest</p>
         </div>
       ),
       amount: formatEUR(portfolio.estimatedYield),

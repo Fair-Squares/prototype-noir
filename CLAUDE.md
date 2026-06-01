@@ -135,6 +135,81 @@ Pattern lives in `noir-projects/noir-contracts/contracts/test/public_immutable_c
 4. ProtocolRewards — allocate_reward_private → RewardClaimNote present; claim_reward_private consumes and re-claim rejected.
 5. FSFTDex — place_order_private → commitment OPEN; cancel_order_private flips to CANCELLED.
 
+## Economic model: rent, return & NAV (canonical)
+
+This is the **single source of truth** for how money moves for an FSFT holder. It
+supersedes the older "capped-return → affordability-reserve" framing in
+[`docs/FUTURE_DEVELOPMENT_PLAN.md`](./docs/FUTURE_DEVELOPMENT_PLAN.md) §4.0 and the
+modelled `CAPPED_RETURN_PCT` overlay (see the demo-layer note below).
+
+### Two numbers, kept separate
+
+An FSFT holder has exactly two figures, and the UI must keep them distinct:
+
+1. **Stake / share value (NAV).** What their FSFT is worth as a claim on the
+   fund's **capital** — property value (and not-yet-deployed deposit principal).
+   In the read layer today `NAV = total_deposits` (property marks land later via
+   the valuation oracle, §3.2). **Rent does NOT inflate NAV.**
+2. **Rent earnings.** A **separate, claimable income stream** — "monthly
+   earnings" / the return on their investment. Paid out as EUR (withdraw) or
+   reinvested; it never silently rolls into NAV-per-FSFT.
+
+> Why separate: rent is *income on top of* the capital, not appreciation of it.
+> Folding rent into NAV conflates "what my share is worth" with "what I can take
+> out." (An earlier commit folded rent into NAV; that is being reversed — see
+> [`docs/PHASE1_YIELD_AND_RENT.md`](./docs/PHASE1_YIELD_AND_RENT.md).)
+
+### ROR is the master parameter — rent is cost-based, not market-based
+
+Rent is defined off the property's **acquisition value**, not the open market:
+
+```
+annual rent  = ROR × acquisition_value          (ROR e.g. 3% = 300 bps)
+monthly rent = annual rent / 12
+```
+
+Example: a €500K home at ROR 3% → €15,000/yr → **€1,250/mo**. That full amount
+flows to the investor pool. This **is** the "capped return": the investor return
+is fixed by the ROR formula, and because that rent is **below market**
+(cost-based), the household gets the affordability benefit directly — there is
+**no separate "surplus → affordability reserve"** step (the older §4.0 mechanism
+is dropped). ROR is a fund/property parameter; the keeper still posts **actual
+collected** rent (which may fall short of the ROR target when households underpay
+— see risk-pooling below), and the ROR figure drives the *expected/billed* rent.
+
+### One shared pool, pro-rata, risk-pooled
+
+- **All rent from all properties is pooled.** A holder does **not** get the rent
+  of "their" house. Every FSFT holder shares the rental income of **all** homes,
+  **pro-rata to FSFT** — with the protocol's small-depositor floor still
+  over-allocating small savers (`SMALL_POOL_BPS` 30%, the same FIFO+floor
+  machinery as proposal distributions).
+- **Why pooled:** risk-pooling. If some households are late or default, the whole
+  pool dips slightly rather than one investor eating the loss on one house.
+  Holders hold a diversified claim on the entire portfolio's rent.
+
+### Withdraw or reinvest — and track which
+
+When rent is distributed, a holder chooses per claim:
+
+- **Withdraw as fiat** — booked as a realized earning (EUR out). This is today's
+  `claim_rent` / `claim_rent_private`.
+- **Reinvest** — the rent re-enters the fund via the **normal deposit route**
+  (→ mints more FSFT under the same FIFO+floor formula), compounding their stake.
+
+The protocol must **track per holder how much was withdrawn vs reinvested** — it
+is the holder's earnings ledger, and reinvested rent must actually mint FSFT, not
+just bump a counter.
+
+### Frontend rule for this model
+
+Keep it **simple and legible** (the frontend principles below still apply):
+present the two numbers plainly — *"Stake (share value): €X"* and *"Rent earnings:
+€Y — [Withdraw] [Reinvest]"*. Do not merge them; never show rent as an APY; use an
+`InfoDot` for the pooled / pro-rata / risk-pooling explanation rather than a
+paragraph. Real on-chain figures are untagged; only genuinely modelled inputs
+(e.g. an acquisition value not yet on-chain) carry the `ModelledChip`.
+
 ## Frontend design system & app shell
 
 ### Run mode: production by default, `FRONTEND_DEV=1` to edit
@@ -216,8 +291,11 @@ project-finance layer** overlaid on the real on-chain proposal/deed. Read
   `null` when none is authored — never invent one). `aggregateImpact(proposals)`
   feeds the impact strip; `modelledReturnSplit(pool)` the capped-return display.
   `SMALL_DEPOSITOR_FLOOR_BPS` (3000) mirrors the **real** on-chain `SMALL_POOL_BPS`
-  and is surfaced *without* a modelled tag; `CAPPED_RETURN_PCT` (3.5) is the
-  modelled pilot-term-sheet policy, **not** enforced in-circuit.
+  and is surfaced *without* a modelled tag; `CAPPED_RETURN_PCT` (3.5) is a legacy
+  modelled overlay — the canonical return model is now **ROR-based** (rent = ROR ×
+  acquisition value, fully to investors, no surplus reserve); see the
+  *"Economic model: rent, return & NAV"* section above, which the dossier
+  return-split display should follow.
 - **Where it renders.** D1 dossier = a **"Dossier" tab** on `/fund/[id]`
   (`components/projects/ProjectDetailDossier.tsx`), which becomes the **default
   tab** when a dossier exists (lead with housing); sensitive rows are gated on

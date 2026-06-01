@@ -24,13 +24,9 @@ export function FundHealthKpis({ stats }: { stats: FundStats }) {
       <KpiCard
         label="Fund value (NAV)"
         value={stats.navEur != null ? formatEUR(stats.navEur) : "—"}
-        sub={
-          stats.totalRentIncome && stats.totalRentIncome > 0
-            ? `incl. ${formatEUR(stats.totalRentIncome)} rent`
-            : "Capital + homes held"
-        }
+        sub="Capital backing every share"
         tone="accent"
-        hint="Net asset value: pooled capital plus real rent income recorded on-chain (record_rent). No DeFi yield is included — there is no real yield source yet."
+        hint="Net asset value: the pooled capital (deposit principal, and property once marked) backing every Fund Share. Rent is a SEPARATE claimable earnings stream — it does not inflate NAV. No DeFi yield is included; there is no real yield source yet."
       />
       <KpiCard
         label="Available capital"

@@ -133,10 +133,12 @@ export async function GET() {
     const totalInDefi = toNumberStrict(stats.total_in_defi, "HousingFund.get_fund_stats.total_in_defi");
     const totalAllocated = toNumberStrict(stats.total_allocated, "HousingFund.get_fund_stats.total_allocated");
     const available = toNumberStrict(stats.available, "HousingFund.get_fund_stats.available");
-    // NAV = pooled capital + real rent income recorded on-chain via record_rent
-    // (Phase 1.1). There is still no real DeFi yield source, so nothing else is
-    // added — see docs/PHASE1_YIELD_AND_RENT.md.
-    const navEur = Math.max(0, totalDeposits + totalRentIncome);
+    // NAV = pooled CAPITAL only (deposit principal; property marks land later via
+    // the valuation oracle). Rent is a SEPARATE claimable earnings stream and does
+    // NOT inflate NAV — it is surfaced as `totalRentIncome` for the dedicated
+    // "Rent earnings" display. See the canonical model in CLAUDE.md and
+    // docs/PHASE1_YIELD_AND_RENT.md.
+    const navEur = Math.max(0, totalDeposits);
     const navPerFsftEur = totalSupply > 0 ? Math.round((navEur / totalSupply) * 10000) / 10000 : 0;
 
     return NextResponse.json({

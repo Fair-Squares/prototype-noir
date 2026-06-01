@@ -39,11 +39,14 @@ export const SMALL_DEPOSITOR_FLOOR_PCT = SMALL_DEPOSITOR_FLOOR_BPS / 100; // 30
 // ── Modelled policy defaults (per docs/pilot-term-sheet.md, NOT yet in-circuit)
 
 /**
- * Capped net annual return to investors (~3–4% per the pilot term sheet). This
- * is the protocol's anti-speculation default; value above the cap is routed to
- * an affordability reserve / tenant benefit / public partner. It is NOT yet
- * enforced in the HousingFund circuit, so anywhere it drives a number on screen
- * the UI must label it modelled.
+ * The capped net annual return to investors — the "Return on Rent" (ROR), the
+ * master parameter of the model (see CLAUDE.md → "Economic model: rent, return &
+ * NAV"). Rent is defined as ROR × acquisition value (e.g. ~3% of a €500K home →
+ * €1,250/mo), paid monthly, and flows FULLY to investors. The "cap" is that the
+ * rent is cost-based / below market, so the household gets the affordability
+ * benefit directly — there is NO surplus-to-reserve skim. ~3–4% per the pilot
+ * term sheet; NOT yet enforced in the HousingFund circuit, so anywhere it drives
+ * a number on screen the UI must label it modelled.
  */
 export const CAPPED_RETURN_PCT = 3.5;
 
@@ -191,7 +194,7 @@ const DOSSIERS: ProjectDossier[] = [
         "Key workers — healthcare, education, public safety; household income €38k–€52k",
       lockYears: 20,
       clawback:
-        "If affordability is removed early, the capped return is clawed back and the affordability reserve is forfeited to the public partner.",
+        "If affordability is removed early (e.g. rent is pushed above the cost-based ROR ceiling), the capped return is clawed back to the public partner.",
       cappedReturnPct: CAPPED_RETURN_PCT,
     },
     milestones: [
@@ -315,25 +318,25 @@ export function aggregateImpact(
   };
 }
 
+/** Illustrative acquisition value for the worked ROR rent example (modelled). */
+export const MODELLED_EXAMPLE_ACQUISITION_EUR = 500_000;
+
 /**
- * The capped-return split for a given realised distribution pool, MODELLED.
+ * The ROR-based rent for a home of a given acquisition value, MODELLED.
  *
- * The real on-chain claim still mints the full FIFO + small-floor share to each
- * holder — this does NOT change that. It illustrates the *covenant policy*: of
- * the value a home generates, investors receive up to the capped return and the
- * surplus is routed to the affordability reserve. Components render the result
- * under a "Modelled for demo" chip and never restate the real claim amount as
- * if it were reduced.
+ * The canonical model (CLAUDE.md): rent = ROR × acquisition_value, paid monthly,
+ * flowing FULLY to the investor pool. This illustrates that cost-based rent — it
+ * does NOT change the real on-chain distribution (which still mints each holder
+ * their full FIFO + small-floor share). Rendered under a "Modelled for demo"
+ * chip. There is no investor/reserve split: the full rent goes to investors and
+ * the affordability is the below-market rent the household pays.
  */
-export function modelledReturnSplit(
-  poolEur: number,
-  cappedReturnPct: number = CAPPED_RETURN_PCT
-): { investorCapEur: number; reserveEur: number; cappedReturnPct: number } {
-  const safePool = Math.max(0, poolEur);
-  // Illustrative: treat the realised pool as one year's value and split it at
-  // the cap. Investors keep up to `cappedReturnPct` of the pool; the remainder
-  // protects affordability. Rounded to whole euros.
-  const investorCapEur = Math.round((safePool * cappedReturnPct) / 100);
-  const reserveEur = Math.max(0, safePool - investorCapEur);
-  return { investorCapEur, reserveEur, cappedReturnPct };
+export function modelledRorRent(
+  acquisitionEur: number,
+  rorPct: number = CAPPED_RETURN_PCT
+): { annualRentEur: number; monthlyRentEur: number; rorPct: number } {
+  const base = Math.max(0, acquisitionEur);
+  const annualRentEur = Math.round((base * rorPct) / 100);
+  const monthlyRentEur = Math.round(annualRentEur / 12);
+  return { annualRentEur, monthlyRentEur, rorPct };
 }

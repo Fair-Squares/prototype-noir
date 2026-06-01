@@ -146,7 +146,7 @@ export function ProjectDetailDossier({
       {/* Affordability covenant. */}
       <CovenantCard dossier={dossier} />
 
-      {/* Capped return + affordability reserve (D2). */}
+      {/* Capped return — cost-based ROR rent, fully to investors (D2). */}
       <ReturnsCapPanel cappedReturnPct={covenant.cappedReturnPct} />
 
       {/* Milestones. */}
