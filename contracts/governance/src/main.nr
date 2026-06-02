@@ -96,6 +96,22 @@ pub contract Governance {
     }
 
     // -- Create a new proposal --------------------------------------------
+    //
+    // PRIVACY NOTE (L8): `create_proposal` runs entirely in public, so it
+    // records the proposer's address (`p_proposer`) and, via the public
+    // `is_investor(caller)` check below, publicly confirms the proposer's KYC
+    // status. Unlike `cast_vote_private`, proposer identity here is treated as
+    // INTENTIONALLY PUBLIC: proposals are accountable governance actions whose
+    // author is meant to be attributable. A future privacy-preserving variant
+    // could mirror `cast_vote_private` (attest a hinted KYC credential and keep
+    // the proposer address off the public boundary); see also M15 below.
+    //
+    // PRIVACY NOTE (M15): the `is_investor(caller)` call reads KYCVerifier's
+    // legacy PUBLIC `investor_role` map on a public path, so every public
+    // proposal creation publicly confirms the caller is KYC-verified and leaks
+    // them into the participant set. This legacy public check should be scoped
+    // to transparency-mode callers; the privacy-preserving everyday flow is the
+    // private KYC-credential attestation used by `cast_vote_private`.
 
     #[external("public")]
     fn create_proposal(description_hash: Field, amount: u64) -> pub u32 {
@@ -157,6 +173,14 @@ pub contract Governance {
         self.storage.vote_claims.at(pid).at(caller).claim();
 
         // Compute the credential's revocation commitment for the public tail.
+        //
+        // PRIVACY NOTE (M12 — known linkage): this commitment is the constant
+        // handle `poseidon2([owner, nonce])`, the same value HousingFund's
+        // deposit_private tail publishes. An on-chain observer can therefore
+        // cluster a user's deposits and votes by matching this field. See the
+        // matching note in housing_fund deposit_private for the remediation
+        // options (private revocation via DelayedPublicMutable, or a per-action
+        // salt with per-domain revocation registration).
         let credential_commitment = poseidon2_hash([
             confirmed_kyc.note.owner.to_field(),
             confirmed_kyc.note.nonce,

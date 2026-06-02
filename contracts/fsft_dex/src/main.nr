@@ -575,6 +575,10 @@ pub contract FSFTDex {
 
     #[external("public")]
     #[view]
+    // PRIVACY NOTE (M15): public `can_trade` proxies KYCVerifier.is_investor on a
+    // public path, so calling it publicly confirms `user`'s KYC status and leaks
+    // them into the participant set. Treat as transparency-mode-only; the private
+    // order path (place_order with a hinted KYC credential) avoids this exposure.
     fn can_trade(user: AztecAddress) -> pub bool {
         let kyc_contract = KYCVerifier::at(self.storage.kyc_verifier.read());
         self.view(kyc_contract.is_investor(user))

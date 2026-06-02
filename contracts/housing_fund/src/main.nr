@@ -412,6 +412,10 @@ pub contract HousingFund {
         assert(amount > 0, "amount must be positive");
         let caller = self.msg_sender();
         let kyc_contract = KYCVerifier::at(self.storage.kyc_verifier.read());
+        // PRIVACY NOTE (M15): this public `is_investor(caller)` check publicly
+        // confirms the caller's KYC status (transparency mode). The privacy-
+        // preserving everyday path is `deposit_private`, which attests a hinted
+        // KYC credential without exposing the caller on the public boundary.
         let is_investor = self.view(kyc_contract.is_investor(caller));
         assert(is_investor, "investor role required");
 
@@ -977,6 +981,19 @@ pub contract HousingFund {
 
         // Compute the credential's revocation commitment from the note's packed
         // fields so the public tail can reject revoked credentials.
+        //
+        // PRIVACY NOTE (M12 — known linkage): this commitment is the constant
+        // handle `poseidon2([owner, nonce])`. The identical value is also
+        // published by Governance.cast_vote_private's public tail, so an
+        // on-chain observer can cluster the same user's deposits and votes by
+        // matching the commitment field (the owner/nonce pre-image stays
+        // private, but the equality of the published field is enough to link).
+        // Fully closing this requires checking revocation privately — migrate
+        // KYCVerifier.revocations to DelayedPublicMutable (verify the pattern
+        // against aztec-packages v4.3 first) — or binding a per-action salt
+        // `poseidon2([owner, nonce, action_domain])` AND having the verifier
+        // register a revocation entry per action domain. Documented here until
+        // that migration lands.
         let credential_commitment = poseidon2_hash([
             confirmed.note.owner.to_field(),
             confirmed.note.nonce,

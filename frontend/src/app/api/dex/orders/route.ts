@@ -255,10 +255,14 @@ export async function POST(request: NextRequest) {
       )
       .send({ from, authWitnesses: [escrowAuthwit] });
 
+    // SECURITY (M17): never return `secretOwnerKey`. It is the pre-image of the
+    // anonymous owner tag (`owner_tag = poseidon2([secret, seq])`). Because `seq`
+    // is public, leaking the secret lets anyone recompute the tag and read the
+    // order owner's claimable balances via the unauthenticated `get_claimable`.
+    // No client consumes it, so it stays server-side only.
     return NextResponse.json({
       success: true,
       seq: suppliedSeq,
-      ownerTagSecret: secretOwnerKey.toString(),
       side,
       amount: Number(amountU128),
       priceBps,
