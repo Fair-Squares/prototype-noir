@@ -104,7 +104,13 @@ Recursive-verification model (v3.1 rollout path):
 - `HousingFund.record_asset_sale_recursive(...)` verifies a recursive proof before writing valuation snapshot fields.
 - `ProtocolRewards.set_user_epoch_weights_recursive(...)` verifies a recursive proof before writing per-user epoch weights.
 
-Why this matters:
+> **Status caveat:** this is a *rollout path*, not a delivered guarantee. The
+> demo circuits in `proofs/recursive/*` only check input shape (see "What each
+> demo proof actually checks" below), so the verification wiring above does not
+> yet establish the correctness/eligibility properties it is meant to. The
+> "Why this matters" benefits below describe the intended end state.
+
+Why this matters (intended end state, once the circuits are hardened):
 - Private values stay private, but correctness can still be verified on-chain.
 - Users can trust eligibility and valuation updates without trusting a backend operator.
 - The UI can show whether a recursive verifier key is configured for each proof path.
@@ -282,12 +288,20 @@ Other bundle kinds:
 
 Implementation note:
 - The circuits in `proofs/recursive/*` are integration/demo circuits for recursive wiring.
-- They prove input consistency and shape, but do not yet bind to live private note state.
+- They only check input shape / non-zero values. They do NOT bind to live private
+  note state, do NOT bind their witnesses with a Poseidon2 commitment, and expose
+  identity/amount inputs publicly. They must not be relied on for any security or
+  privacy property until hardened.
 
-What each proof does in simple terms:
-- FSFT holder proof: proves "I hold private FSFT" without revealing how much.
-- Valuation proof: proves the valuation update follows the agreed calculation rules.
-- Rewards weight proof: proves epoch reward weights were computed from valid inputs.
+What each demo proof actually checks today (NOT what a production version would prove):
+- FSFT holder proof: checks its inputs are non-zero plus a hardcoded `signal == 1`
+  placeholder. It does **not** prove "I hold private FSFT" — it never reads any
+  balance or note.
+- Valuation proof: checks its inputs are non-zero. It does **not** constrain any
+  relationship between sale price and minted FSFT, so it proves nothing about the
+  valuation calculation.
+- Rewards weight proof: checks its inputs are non-zero and that the weights sum is
+  non-zero. It does **not** prove the weights were computed from valid inputs.
 
 ---
 
