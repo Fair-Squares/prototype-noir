@@ -35,7 +35,7 @@ pub contract HousingFund {
     use kyc_verifier::{KYCVerifier, credential_note::KycCredentialNote};
     use nft_contract::NFT;
     use aztec::{
-        history::note::assert_note_existed_by,
+        history::{note::assert_note_existed_by, nullifier::assert_nullifier_did_not_exist_by},
         macros::{
             functions::{external, initializer, only_self, view},
             storage::storage,
@@ -49,7 +49,7 @@ pub contract HousingFund {
         },
         protocol::{
             address::AztecAddress,
-            hash::poseidon2_hash,
+            hash::{compute_siloed_nullifier, poseidon2_hash},
             traits::{Deserialize, Packable, Serialize, ToField},
         },
         state_vars::{Map, Owned, PrivateSet, PublicMutable, SingleUseClaim, StateVariable},
@@ -60,6 +60,15 @@ pub contract HousingFund {
     global DEFAULT_SMALL_THRESHOLD: u128 = 10000;
     // Allocation split: 30% reserved for the small-depositor pool, 70% FIFO.
     global SMALL_POOL_BPS: u128 = 3000;
+    // Domain separator for the per-note withdraw marker nullifier (H1). withdraw_private
+    // emits poseidon2([note_hash, this]) so claim/reinvest paths can prove (via
+    // nullifier non-existence at a distribution's snapshot block) that a deposit
+    // note was not withdrawn by then.
+    global WITHDRAW_NULLIFIER_DOMAIN: Field = 0x1505_5749_5448_4452_4157; // "WITHDRAW" tag
+    // Upper bound on public DepositRecords retracted per withdraw() (H2). A public
+    // depositor whose withdrawal spans more than this many of their own records must
+    // split the withdrawal; the loop is bounded for the public VM.
+    global MAX_WITHDRAW_RECORDS: u32 = 64;
 
     #[derive(Serialize, Deserialize)]
     pub struct FundStatsView {
@@ -240,6 +249,14 @@ pub contract HousingFund {
         // covers the public path; private claimants track their own off-chain.
         rent_withdrawn_by: Map<AztecAddress, PublicMutable<u64, Context>, Context>,
         rent_reinvested_by: Map<AztecAddress, PublicMutable<u64, Context>, Context>,
+        // -- Phase 0 (H1/H3): snapshot block per distribution / rent epoch ----
+        // The block at which open_distribution / open_rent_distribution snapshotted
+        // the deposit set. The private claim/reinvest paths fetch this block's
+        // header and prove (a) the deposit note EXISTED and (b) its withdraw marker
+        // did NOT exist as of that block -- binding every claim to the snapshot so a
+        // post-snapshot depositor cannot claim and a pre-snapshot withdrawer cannot.
+        d_snapshot_block: Map<Field, PublicMutable<u32, Context>, Context>,
+        r_snapshot_block: Map<Field, PublicMutable<u32, Context>, Context>,
     }
 
     // ====================================================================
@@ -283,6 +300,14 @@ pub contract HousingFund {
     ) -> u128 {
         fifo_share(cum_before, amount, fifo_cap)
             + small_share(amount, is_small, small_pool, small_total)
+    }
+
+    // H1: the per-note withdraw marker (inner nullifier). withdraw_private pushes
+    // this; claim/reinvest paths recompute it from the same kernel-verified note
+    // and prove its SILOED form was absent at the distribution's snapshot block.
+    #[contract_library_method]
+    fn withdraw_marker_nullifier(note_hash: Field) -> Field {
+        poseidon2_hash([note_hash, WITHDRAW_NULLIFIER_DOMAIN])
     }
 
     #[initializer]
@@ -456,11 +481,36 @@ pub contract HousingFund {
         let updated_ticket = ticket - amount;
         self.storage.deposit_tickets.at(caller).write(updated_ticket);
         self.storage.total_deposits.write(deposits - amount);
-        // NOTE: cum_deposits is monotonic (FIFO axis) and is NOT rolled back on
-        // withdraw; nor are the public deposit_records retracted. A public
-        // depositor who withdraws can still hold claim records for the FIFO
-        // position they originally took -- a known prototype limitation of the
-        // legacy public path. The canonical privacy path nullifies the note.
+
+        // H2: retract this caller's public DepositRecords FIFO (oldest first) so a
+        // withdrawn public depositor stops minting FSFT / claiming rent on principal
+        // they pulled out. cum_deposits stays monotonic (the global FIFO axis is
+        // shared and must not shift other depositors' intervals); we only SHRINK
+        // this caller's own record amounts, which can never increase any claim, so
+        // the "sum of claims <= pool" tiling invariant is preserved (fail-closed:
+        // the freed FIFO/small capacity simply becomes dust). The sum of a caller's
+        // record amounts always equals their deposit_tickets, so `remaining` reaches
+        // zero unless the withdrawal spans more than MAX_WITHDRAW_RECORDS records.
+        let mut remaining = amount as u128;
+        let count = self.storage.user_deposit_count.at(caller).read();
+        for i in 0..MAX_WITHDRAW_RECORDS {
+            if (i < count) & (remaining > 0) {
+                let seq = self.storage.user_deposit_seq.at(poseidon2_hash([caller.to_field(), i as Field])).read();
+                let rec_key = poseidon2_hash([caller.to_field(), seq as Field]);
+                let rec = self.storage.deposit_records.at(rec_key).read();
+                if rec.amount > 0 {
+                    let reduce = if remaining < rec.amount { remaining } else { rec.amount };
+                    self.storage.deposit_records.at(rec_key).write(DepositRecord {
+                        owner: rec.owner,
+                        amount: rec.amount - reduce,
+                        cum_before: rec.cum_before,
+                        is_small: rec.is_small,
+                    });
+                    remaining -= reduce;
+                }
+            }
+        }
+        assert(remaining == 0, "withdraw spans too many records");
     }
 
     // -- DeFi management --------------------------------------------------
@@ -574,6 +624,8 @@ pub contract HousingFund {
         self.storage.d_fifo_cap.at(pid).write(fifo_cap);
         self.storage.d_claimed_total.at(pid).write(0);
         self.storage.d_dust.at(pid).write(fifo_dust + small_dust_max);
+        // H1/H3: record the snapshot block so private claims can bind to it.
+        self.storage.d_snapshot_block.at(pid).write(self.context.block_number());
 
         // Issue-time pricing snapshot: used as reference, not hard peg.
         self.storage.last_asset_sale_price.write(proposal_amount);
@@ -605,6 +657,14 @@ pub contract HousingFund {
         let rec = self.storage.deposit_records.at(rec_key).read();
         assert(rec.owner == caller, "no deposit record for caller/seq");
         assert(rec.amount > 0, "empty deposit record");
+
+        // H3: bind the claim to the snapshot. A record created AFTER the
+        // distribution was opened (cum_before+amount beyond the snapshot total)
+        // never participated in that pool and must not dilute it.
+        assert(
+            rec.cum_before + rec.amount <= self.storage.d_snapshot_total.at(pid).read(),
+            "deposit not in snapshot",
+        );
 
         let claim_key = poseidon2_hash([caller.to_field(), seq as Field, pid]);
         assert(!self.storage.d_record_has_claimed.at(claim_key).read(), "already claimed");
@@ -665,6 +725,8 @@ pub contract HousingFund {
         self.storage.r_small_pool.at(rid).write(small_pool);
         self.storage.r_fifo_cap.at(rid).write(fifo_cap);
         self.storage.r_claimed_total.at(rid).write(0);
+        // H1/H3: record the snapshot block so private rent claims can bind to it.
+        self.storage.r_snapshot_block.at(rid).write(self.context.block_number());
 
         self.storage.undistributed_rent.write(undistributed - amount);
     }
@@ -681,6 +743,13 @@ pub contract HousingFund {
         let rec = self.storage.deposit_records.at(rec_key).read();
         assert(rec.owner == caller, "no deposit record for caller/seq");
         assert(rec.amount > 0, "empty deposit record");
+
+        // H3: bind to the snapshot -- a deposit made after the epoch opened did
+        // not back this rent and must not dilute the per-epoch pool.
+        assert(
+            rec.cum_before + rec.amount <= self.storage.r_snapshot_total.at(rid).read(),
+            "deposit not in snapshot",
+        );
 
         let claim_key = poseidon2_hash([caller.to_field(), seq as Field, rid]);
         assert(!self.storage.r_record_has_claimed.at(claim_key).read(), "already claimed");
@@ -733,6 +802,13 @@ pub contract HousingFund {
         let rec = self.storage.deposit_records.at(rec_key).read();
         assert(rec.owner == caller, "no deposit record for caller/seq");
         assert(rec.amount > 0, "empty deposit record");
+
+        // H3: bind to the snapshot -- a deposit made after the epoch opened did
+        // not back this rent and must not dilute the per-epoch pool.
+        assert(
+            rec.cum_before + rec.amount <= self.storage.r_snapshot_total.at(rid).read(),
+            "deposit not in snapshot",
+        );
 
         let claim_key = poseidon2_hash([caller.to_field(), seq as Field, rid]);
         assert(!self.storage.r_record_has_claimed.at(claim_key).read(), "already claimed");
@@ -981,6 +1057,13 @@ pub contract HousingFund {
 
         let note_hash = compute_confirmed_note_hash_for_nullification(confirmed);
         self.storage.w_withdraw_nullifiers.at(note_hash).at(caller).claim();
+        // H1: also emit a deterministic, claim-recomputable withdraw marker. The
+        // SingleUseClaim above is owner-siloed (private, double-withdraw guard) but
+        // CANNOT be re-derived by the claim paths; this marker can, so a claim can
+        // prove (nullifier non-existence at the distribution snapshot block) that
+        // the note had not been withdrawn by then. Without it, withdraw only proved
+        // INCLUSION historically -- it never made the note ineligible to claim.
+        self.context.push_nullifier(withdraw_marker_nullifier(note_hash));
 
         self.enqueue_self._record_withdraw_private(confirmed.note.amount);
     }
@@ -995,8 +1078,9 @@ pub contract HousingFund {
         let available = deposits - in_defi - allocated;
         assert(amount_u64 <= available, "insufficient available balance");
         self.storage.total_deposits.write(deposits - amount_u64);
-        // cum_deposits is NOT decremented (monotonic FIFO axis); the nullified
-        // note can no longer prove existence, so it is ineligible to claim.
+        // cum_deposits is NOT decremented (monotonic FIFO axis). The withdraw
+        // marker emitted in the private leg makes this note ineligible for any
+        // distribution/rent epoch snapshotted at or after this block (H1).
     }
 
     // -- V2: private claim_distribution ---------------------------------------
@@ -1018,8 +1102,14 @@ pub contract HousingFund {
         supplied_small_pool: u128,
         supplied_small_total: u128,
         supplied_fifo_cap: u128,
+        supplied_snapshot_block: u32,
     ) {
-        let header = self.context.get_anchor_block_header();
+        // H1/H3: prove the deposit against the SNAPSHOT block, not a caller-chosen
+        // anchor. assert_note_existed_by binds the claim to a note that existed at
+        // snapshot time (excludes post-snapshot deposits = H3), and the withdraw
+        // marker non-existence check below excludes notes withdrawn by then (H1).
+        // supplied_snapshot_block is re-checked against d_snapshot_block in the tail.
+        let header = self.context.get_block_header_at(supplied_snapshot_block);
         let confirmed = assert_note_existed_by(header, hinted_deposit);
 
         let caller = self.msg_sender();
@@ -1033,6 +1123,11 @@ pub contract HousingFund {
         // Per-(note_hash, proposal_id, owner) nullifier so the same note can
         // claim across DIFFERENT proposals but not the same proposal twice.
         let note_hash = compute_confirmed_note_hash_for_nullification(confirmed);
+        // H1: a note withdrawn at/before the snapshot block is ineligible.
+        assert_nullifier_did_not_exist_by(
+            header,
+            compute_siloed_nullifier(self.context.this_address(), withdraw_marker_nullifier(note_hash)),
+        );
         let pid = proposal_id as Field;
         let claim_key = poseidon2_hash([note_hash, pid]);
         self.storage.d_claim_nullifiers.at(claim_key).at(caller).claim();
@@ -1061,6 +1156,7 @@ pub contract HousingFund {
             supplied_small_pool,
             supplied_small_total,
             supplied_fifo_cap,
+            supplied_snapshot_block,
         );
     }
 
@@ -1073,6 +1169,7 @@ pub contract HousingFund {
         supplied_small_pool: u128,
         supplied_small_total: u128,
         supplied_fifo_cap: u128,
+        supplied_snapshot_block: u32,
     ) {
         let pid = proposal_id as Field;
         assert(self.storage.d_open.at(pid).read(), "distribution not open");
@@ -1083,6 +1180,13 @@ pub contract HousingFund {
         assert(supplied_small_pool == self.storage.d_small_pool.at(pid).read(), "small pool mismatch");
         assert(supplied_small_total == self.storage.d_small_total.at(pid).read(), "small total mismatch");
         assert(supplied_fifo_cap == self.storage.d_fifo_cap.at(pid).read(), "fifo cap mismatch");
+        // H1/H3: the private leg proved note existence + non-withdrawal against
+        // THIS block; pin it to the real snapshot so an attacker cannot pick an
+        // earlier (pre-withdraw / pre-deposit) block.
+        assert(
+            supplied_snapshot_block == self.storage.d_snapshot_block.at(pid).read(),
+            "snapshot block mismatch",
+        );
 
         let claimed_total = self.storage.d_claimed_total.at(pid).read();
         let pool = self.storage.d_amount.at(pid).read();
@@ -1104,8 +1208,12 @@ pub contract HousingFund {
         supplied_small_pool: u128,
         supplied_small_total: u128,
         supplied_fifo_cap: u128,
+        supplied_snapshot_block: u32,
     ) {
-        let header = self.context.get_anchor_block_header();
+        // H1/H3: prove the deposit against the rent-epoch SNAPSHOT block (re-checked
+        // in the tail), excluding post-snapshot deposits, and reject notes withdrawn
+        // by then via the withdraw-marker non-existence check.
+        let header = self.context.get_block_header_at(supplied_snapshot_block);
         let confirmed = assert_note_existed_by(header, hinted_deposit);
 
         let caller = self.msg_sender();
@@ -1119,6 +1227,11 @@ pub contract HousingFund {
         // Per-(note_hash, rent_epoch_id, owner) nullifier: a note claims each rent
         // epoch at most once, but can claim across different epochs.
         let note_hash = compute_confirmed_note_hash_for_nullification(confirmed);
+        // H1: a note withdrawn at/before the snapshot block is ineligible.
+        assert_nullifier_did_not_exist_by(
+            header,
+            compute_siloed_nullifier(self.context.this_address(), withdraw_marker_nullifier(note_hash)),
+        );
         let rid = rent_epoch_id as Field;
         let claim_key = poseidon2_hash([note_hash, rid]);
         self.storage.r_claim_nullifiers.at(claim_key).at(caller).claim();
@@ -1155,6 +1268,7 @@ pub contract HousingFund {
             supplied_small_pool,
             supplied_small_total,
             supplied_fifo_cap,
+            supplied_snapshot_block,
         );
     }
 
@@ -1167,6 +1281,7 @@ pub contract HousingFund {
         supplied_small_pool: u128,
         supplied_small_total: u128,
         supplied_fifo_cap: u128,
+        supplied_snapshot_block: u32,
     ) {
         let rid = rent_epoch_id as Field;
         assert(self.storage.r_open.at(rid).read(), "rent distribution not open");
@@ -1174,6 +1289,11 @@ pub contract HousingFund {
         assert(supplied_small_pool == self.storage.r_small_pool.at(rid).read(), "small pool mismatch");
         assert(supplied_small_total == self.storage.r_small_total.at(rid).read(), "small total mismatch");
         assert(supplied_fifo_cap == self.storage.r_fifo_cap.at(rid).read(), "fifo cap mismatch");
+        // H1/H3: pin to the real rent-epoch snapshot block.
+        assert(
+            supplied_snapshot_block == self.storage.r_snapshot_block.at(rid).read(),
+            "snapshot block mismatch",
+        );
 
         let claimed_total = self.storage.r_claimed_total.at(rid).read();
         let pool = self.storage.r_amount.at(rid).read();
@@ -1204,8 +1324,12 @@ pub contract HousingFund {
         supplied_cum_before: u128,
         supplied_seq: u64,
         supplied_is_small: bool,
+        supplied_snapshot_block: u32,
     ) {
-        let header = self.context.get_anchor_block_header();
+        // H1/H3: prove the claimed-against deposit at the rent-epoch SNAPSHOT block
+        // (re-checked in the tail) and reject notes withdrawn by then. The NEW note
+        // minted below is unaffected -- only the rent-bearing source note is bound.
+        let header = self.context.get_block_header_at(supplied_snapshot_block);
         let confirmed = assert_note_existed_by(header, hinted_deposit);
 
         let caller = self.msg_sender();
@@ -1218,6 +1342,11 @@ pub contract HousingFund {
 
         // Shared with claim_rent_private: a note acts at most once per epoch.
         let note_hash = compute_confirmed_note_hash_for_nullification(confirmed);
+        // H1: a note withdrawn at/before the snapshot block is ineligible.
+        assert_nullifier_did_not_exist_by(
+            header,
+            compute_siloed_nullifier(self.context.this_address(), withdraw_marker_nullifier(note_hash)),
+        );
         let rid = rent_epoch_id as Field;
         let claim_key = poseidon2_hash([note_hash, rid]);
         self.storage.r_claim_nullifiers.at(claim_key).at(caller).claim();
@@ -1249,6 +1378,7 @@ pub contract HousingFund {
             supplied_cum_before,
             supplied_seq,
             supplied_is_small,
+            supplied_snapshot_block,
         );
     }
 
@@ -1263,6 +1393,7 @@ pub contract HousingFund {
         supplied_cum_before: u128,
         supplied_seq: u64,
         supplied_is_small: bool,
+        supplied_snapshot_block: u32,
     ) {
         let rid = rent_epoch_id as Field;
         // (a) Rent side: verify epoch + snapshots, enforce ceiling, consume rent.
@@ -1270,6 +1401,11 @@ pub contract HousingFund {
         assert(supplied_small_pool == self.storage.r_small_pool.at(rid).read(), "small pool mismatch");
         assert(supplied_small_total == self.storage.r_small_total.at(rid).read(), "small total mismatch");
         assert(supplied_fifo_cap == self.storage.r_fifo_cap.at(rid).read(), "fifo cap mismatch");
+        // H1/H3: pin to the real rent-epoch snapshot block.
+        assert(
+            supplied_snapshot_block == self.storage.r_snapshot_block.at(rid).read(),
+            "snapshot block mismatch",
+        );
         let claimed_total = self.storage.r_claimed_total.at(rid).read();
         let pool = self.storage.r_amount.at(rid).read();
         assert(claimed_total + share <= pool, "rent distribution exhausted");

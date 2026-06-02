@@ -256,6 +256,14 @@ pub contract FSFTDex {
         );
 
         let owner_tag = poseidon2_hash([secret_owner_key, supplied_seq as Field]);
+        // Recompute the credential's revocation commitment from the KYC note's
+        // packed fields so the public tail can reject revoked/sanctioned traders.
+        // Note existence (above) proves issuance, NOT current standing -- revocation
+        // lives in KYCVerifier.revocations, which only the public tail can read.
+        let credential_commitment = poseidon2_hash([
+            confirmed.note.owner.to_field(),
+            confirmed.note.nonce,
+        ]);
         self.enqueue_self._place_and_match(
             side,
             amount,
@@ -267,6 +275,7 @@ pub contract FSFTDex {
             match_count,
             maker_seqs,
             policy,
+            credential_commitment,
         );
     }
 
@@ -283,7 +292,16 @@ pub contract FSFTDex {
         match_count: u32,
         maker_seqs: [u64; MAX_FILLS],
         policy: u8,
+        credential_commitment: Field,
     ) {
+        // Gate-check the trader's KYC standing. place_order proved the caller
+        // OWNS a KycCredentialNote, but issuance != current standing: a revoked
+        // or sanctioned investor still holds the note. HousingFund checks this on
+        // every deposit; mirror it here so the DEX cannot be a revocation bypass.
+        let kyc = KYCVerifier::at(self.storage.kyc_verifier.read());
+        let revoked = self.view(kyc.is_credential_revoked(credential_commitment));
+        assert(!revoked, "credential revoked");
+
         // Forge-proof FCFS sequence stamp (supplied-then-verified).
         let seq = self.storage.seq_counter.read();
         assert(supplied_seq == seq, "stale seq");
