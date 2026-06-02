@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
+import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simDeposit } from "@/lib/simulationStore";
 import { getAztecTxMeta } from "@/lib/txHash";
 import { simResult } from "@/lib/aztecSim";
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Simulation mode ──────────────────────────────────────────────────────
-  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
+  if (!isLiveModeEnabled()) {
     const result = simDeposit(address, amount);
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({
@@ -20,12 +20,6 @@ export async function POST(request: NextRequest) {
       message: `Deposited €${amount.toLocaleString()} to housing fund (simulation)`,
       txHash: `sim_deposit_${Date.now()}`,
     });
-  }
-  if (!isLiveModeEnabled()) {
-    return NextResponse.json(
-      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
-      { status: 503 }
-    );
   }
 
   // ── Live mode: call contracts via server wallet ──────────────────────────

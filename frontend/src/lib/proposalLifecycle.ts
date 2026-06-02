@@ -27,22 +27,32 @@ export interface VotingWindow {
   remainingLabel: string;
   /** True locally where blocks advance with activity, not on a wall-clock cadence. */
   onDemand: boolean;
+  /** True when the current block height is unknown (not supplied by the caller),
+   * so blocksRemaining/closed cannot be computed. */
+  unknown: boolean;
 }
 
 export function votingWindowFor(proposal: Proposal): VotingWindow {
   const deadlineBlock = proposal.deadlineBlock ?? proposal.deadline;
+  // currentBlock may be absent (e.g. the on-chain height wasn't fetched). Don't
+  // silently assume block 0 — that would render an arbitrary, wrong countdown.
+  // Surface an explicit "unknown" state instead.
+  const unknown = proposal.currentBlock == null;
   const currentBlock = proposal.currentBlock ?? 0;
   const blocksRemaining = Math.max(0, deadlineBlock - currentBlock);
-  const closed = blocksRemaining === 0;
+  const closed = !unknown && blocksRemaining === 0;
   return {
     deadlineBlock,
     currentBlock,
     blocksRemaining,
     closed,
-    remainingLabel: closed
-      ? "Closed"
-      : `${blocksRemaining.toLocaleString()} block${blocksRemaining === 1 ? "" : "s"}`,
+    remainingLabel: unknown
+      ? "Unknown"
+      : closed
+        ? "Closed"
+        : `${blocksRemaining.toLocaleString()} block${blocksRemaining === 1 ? "" : "s"}`,
     onDemand: BLOCK_PRODUCTION_MODE === "on-demand",
+    unknown,
   };
 }
 

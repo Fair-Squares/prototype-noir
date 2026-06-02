@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBlockNumber } from "@/lib/aztecClient";
-import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
+import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { getAztecTxHash } from "@/lib/txHash";
 import { simResult } from "@/lib/aztecSim";
 import {
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
   const address = searchParams.get("address") ?? "";
   const accountIndex = Number(searchParams.get("accountIndex") ?? "0");
 
-  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
+  if (!isLiveModeEnabled()) {
     const proposals = simGetProposals().map((proposal) => {
       const totalVotes = proposal.yesVotes + proposal.noVotes;
       const claimableAmount = address ? simGetClaimableAmount(proposal.id, address) : 0;
@@ -59,12 +59,6 @@ export async function GET(request: NextRequest) {
       };
     });
     return NextResponse.json({ proposals, source: "simulation" });
-  }
-  if (!isLiveModeEnabled()) {
-    return NextResponse.json(
-      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
-      { status: 503 }
-    );
   }
 
   try {
@@ -243,7 +237,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const { action = "create", title, description, amount, proposalId, accountIndex = 0, address } = body;
 
-  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
+  if (!isLiveModeEnabled()) {
     if (action === "create") {
       if (!title || !amount) {
         return NextResponse.json({ error: "title and amount required" }, { status: 400 });
@@ -276,12 +270,6 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
-  }
-  if (!isLiveModeEnabled()) {
-    return NextResponse.json(
-      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
-      { status: 503 }
-    );
   }
 
   try {

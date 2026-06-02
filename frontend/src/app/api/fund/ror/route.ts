@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
+import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simSetRorConfig } from "@/lib/simulationStore";
 import { getAztecTxMeta } from "@/lib/txHash";
 
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     Number.isInteger(Number(propertyId)) && Number(propertyId) >= 0 && Number(acquisitionValue) >= 0;
 
   // ── Simulation mode ──────────────────────────────────────────────────────
-  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
+  if (!isLiveModeEnabled()) {
     const result = simSetRorConfig(bps);
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({
@@ -32,12 +32,6 @@ export async function POST(request: NextRequest) {
       message: `Set ROR to ${(bps / 100).toFixed(2)}% (simulation)`,
       txHash: `sim_ror_${Date.now()}`,
     });
-  }
-  if (!isLiveModeEnabled()) {
-    return NextResponse.json(
-      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
-      { status: 503 }
-    );
   }
 
   // ── Live mode: set_ror_bps (+ optional set_acquisition_value) ──────────────

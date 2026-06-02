@@ -9,7 +9,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
+import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { SIM_ACCOUNTS } from "@/lib/simulationStore";
 
 export interface TestAccount {
@@ -51,14 +51,8 @@ function getAccountsFromEnv(): TestAccount[] {
 
 export async function GET() {
   // ── Simulation mode ────────────────────────────────────────────────────
-  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
-    return NextResponse.json({ accounts: SIM_ACCOUNTS, initialized: true, source: "simulation" });
-  }
   if (!isLiveModeEnabled()) {
-    return NextResponse.json(
-      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
-      { status: 503 }
-    );
+    return NextResponse.json({ accounts: SIM_ACCOUNTS, initialized: true, source: "simulation" });
   }
 
   // ── Live mode: always derive from serverWallet for address correctness ─

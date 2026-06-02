@@ -68,7 +68,7 @@ const columns: Column<Proposal>[] = [
       const w = votingWindowFor(p);
       return (
         <span className="text-caption text-mono tabular-nums text-text-2">
-          {w.closed ? "Closed" : `${w.remainingLabel} left`}
+          {w.unknown ? "Unknown" : w.closed ? "Closed" : `${w.remainingLabel} left`}
         </span>
       );
     },

@@ -15,9 +15,6 @@ import { resolveServerPxeUrl } from "@/lib/pxeUrl";
 const DEFAULT_NODE_URL =
   resolveServerPxeUrl();
 
-let lastFailure = 0;
-const COOLDOWN_MS = 15_000;
-
 // ── Lightweight JSON-RPC client (zero Aztec SDK dependencies) ────────────────
 
 interface JsonRpcResult<T = unknown> {
@@ -51,73 +48,6 @@ export async function callNodeRpc<T = unknown>(
 
 // ── Node health check ─────────────────────────────────────────────────────────
 
-export async function getNodeInfo(): Promise<{
-  nodeVersion: string;
-  l1ChainId: number;
-  rollupVersion: number;
-}> {
-  return callNodeRpc("node_getNodeInfo");
-}
-
 export async function getBlockNumber(): Promise<number> {
   return callNodeRpc("node_getBlockNumber");
-}
-
-// ── getNode() / getWallet() — API compatibility shims ────────────────────────
-//
-// These are kept for backward compatibility with aztecLive.ts.
-// They return an object that can call the Aztec node via JSON-RPC.
-// Contract .simulate() calls on this "wallet" are not supported
-// (no ABI encoding without the SDK).
-
-let cooldown = false;
-
-export async function getNode() {
-  if (cooldown) {
-    throw new Error("Aztec node in cooldown");
-  }
-
-  const now = Date.now();
-  if (lastFailure > 0 && now - lastFailure < COOLDOWN_MS) {
-    throw new Error("Aztec node connection in cooldown after failure");
-  }
-
-  try {
-    // Lightweight health check using raw JSON-RPC (no Aztec SDK)
-    await callNodeRpc("node_getBlockNumber");
-    lastFailure = 0;
-    cooldown = false;
-    return createNodeShim();
-  } catch (err) {
-    lastFailure = Date.now();
-    cooldown = true;
-    setTimeout(() => { cooldown = false; }, COOLDOWN_MS);
-    throw err;
-  }
-}
-
-/**
- * Returns a minimal shim that satisfies the wallet type used in aztecLive.ts.
- * Contract .simulate() calls on this shim will fail (no ABI encoding).
- */
-function createNodeShim() {
-  return {
-    _isNodeShim: true,
-    getNodeInfo,
-    getBlockNumber,
-    // Wallet-compatible methods that will fail gracefully
-    getRegisteredAccounts: async () => [],
-    getAccounts: async () => [],
-    simulateTx: async () => { throw new Error("SDK not loaded server-side"); },
-    sendTx: async () => { throw new Error("SDK not loaded server-side"); },
-  };
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getWallet(): Promise<any> {
-  return getNode();
-}
-
-export function getPxeUrl(): string {
-  return DEFAULT_NODE_URL;
 }

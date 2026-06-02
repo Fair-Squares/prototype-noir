@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
+import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simClaimDistribution } from "@/lib/simulationStore";
 import { requireAztecTxHash } from "@/lib/txHash";
 import { simResult, isDuplicateNullifierError } from "@/lib/aztecSim";
@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "proposalId required" }, { status: 400 });
   }
 
-  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
+  if (!isLiveModeEnabled()) {
     const result = simClaimDistribution(Number(proposalId), address ?? "0x0");
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({
@@ -20,12 +20,6 @@ export async function POST(request: NextRequest) {
       txHash: `sim_claim_${Date.now()}`,
       message: "Distribution claimed (simulation)",
     });
-  }
-  if (!isLiveModeEnabled()) {
-    return NextResponse.json(
-      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
-      { status: 503 }
-    );
   }
 
   try {

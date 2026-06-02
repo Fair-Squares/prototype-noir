@@ -32,6 +32,18 @@ function isDockerRuntime(): boolean {
  * `http://localhost:8080` and keep the original path/query.
  */
 export function resolveServerPxeUrl(): string {
+  // The server `.send()` flow has no fee-payment method wired (no
+  // SponsoredFeePaymentMethod), so it cannot pay fees on the public testnet.
+  // Reject `AZTEC_NETWORK=testnet` here rather than silently handing back a
+  // testnet RPC URL that every write would fail against.
+  if (getAztecNetwork() === "testnet") {
+    throw new Error(
+      "AZTEC_NETWORK=testnet is not supported by the server flow: no fee-payment " +
+        "method is wired (SponsoredFeePaymentMethod), so transactions cannot pay " +
+        "fees on testnet. Use the local network."
+    );
+  }
+
   const configured = getConfiguredPxeUrl();
   let parsed: URL;
   try {

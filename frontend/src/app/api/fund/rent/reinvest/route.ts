@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
+import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simReinvestRent } from "@/lib/simulationStore";
 import { requireAztecTxHash } from "@/lib/txHash";
 import { simResult, isDuplicateNullifierError } from "@/lib/aztecSim";
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
   const { accountIndex = 0, address, rentEpochId = 0 } = await request.json();
 
   // ── Simulation mode ──────────────────────────────────────────────────────
-  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
+  if (!isLiveModeEnabled()) {
     const result = simReinvestRent(address ?? "0x0");
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({
@@ -44,12 +44,6 @@ export async function POST(request: NextRequest) {
       txHash: `sim_rent_reinvest_${Date.now()}`,
       message: `Reinvested €${(result.reinvested ?? 0).toLocaleString()} rent into the fund (simulation)`,
     });
-  }
-  if (!isLiveModeEnabled()) {
-    return NextResponse.json(
-      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
-      { status: 503 }
-    );
   }
 
   // ── Live mode: reinvest_rent_private ───────────────────────────────────────

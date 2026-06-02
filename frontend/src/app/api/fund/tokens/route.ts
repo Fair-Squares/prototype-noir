@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
+import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simGetFundStats, simGetPortfolio } from "@/lib/simulationStore";
 import { requireAztecTxHash } from "@/lib/txHash";
 import { simResult } from "@/lib/aztecSim";
@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   const address = searchParams.get("address") ?? "";
 
   // ── Simulation mode ──────────────────────────────────────────────────────
-  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
+  if (!isLiveModeEnabled()) {
     const stats = simGetFundStats();
     const portfolio = address ? simGetPortfolio(address) : null;
 
@@ -45,12 +45,6 @@ export async function GET(request: NextRequest) {
       address: address || null,
       source: "simulation",
     });
-  }
-  if (!isLiveModeEnabled()) {
-    return NextResponse.json(
-      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
-      { status: 503 }
-    );
   }
 
   // ── Live mode ────────────────────────────────────────────────────────────
@@ -173,19 +167,13 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Simulation mode ──────────────────────────────────────────────────────
-  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
+  if (!isLiveModeEnabled()) {
     // Simulation store already has seeded balances; keep this endpoint as no-op success.
     return NextResponse.json({
       success: true,
       message: `Simulation mode: topped up ${Number(amount).toLocaleString()} EURs`,
       source: "simulation",
     });
-  }
-  if (!isLiveModeEnabled()) {
-    return NextResponse.json(
-      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
-      { status: 503 }
-    );
   }
 
   // ── Live mode: drip EURs to the caller via the Dripper faucet ────────────
@@ -222,7 +210,9 @@ export async function POST(request: NextRequest) {
     const receipt = await dripper.methods
       .drip_to_public(AztecAddress.fromString(eurTokenAddr), BigInt(Number(amount)))
       .send({ from: actorAddress });
-    console.info(`[fund/tokens POST] Dripped ${Number(amount)} EURs to ${actor.address}`);
+    // Avoid logging the funded amount/address together: that ties an identity
+    // to a chosen EUR amount in server logs. Log only that a drip succeeded.
+    console.info(`[fund/tokens POST] Drip succeeded`);
 
     return NextResponse.json({
       success: true,

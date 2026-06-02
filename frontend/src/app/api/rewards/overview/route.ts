@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
+import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simGetRewardsOverview } from "@/lib/simulationStore";
 import { simResult } from "@/lib/aztecSim";
 
@@ -32,14 +32,8 @@ function buildYearlySchedule(distributionPool: number) {
 }
 
 export async function GET() {
-  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
-    return NextResponse.json(simGetRewardsOverview());
-  }
   if (!isLiveModeEnabled()) {
-    return NextResponse.json(
-      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
-      { status: 503 }
-    );
+    return NextResponse.json(simGetRewardsOverview());
   }
 
   try {

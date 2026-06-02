@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
+import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simGetPortfolio } from "@/lib/simulationStore";
 import { simResult } from "@/lib/aztecSim";
 
@@ -30,14 +30,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "address required" }, { status: 400 });
   }
 
-  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
-    return NextResponse.json(simGetPortfolio(address));
-  }
   if (!isLiveModeEnabled()) {
-    return NextResponse.json(
-      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
-      { status: 503 }
-    );
+    return NextResponse.json(simGetPortfolio(address));
   }
 
   try {
