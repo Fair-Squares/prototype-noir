@@ -2,6 +2,42 @@
 
 This file is the canonical agent guide for this repo. [AGENTS.md](./AGENTS.md) is a stub that points here so Codex (and any other tool that reads `AGENTS.md`) gets the same instructions.
 
+## Review status & known issues (2026-06-02)
+
+A full contract + PXE/frontend review (14-dimension multi-agent pass, every
+finding adversarially verified against the pinned v4.3 sources) is tracked in
+[`docs/REVIEW_FINDINGS.md`](./docs/REVIEW_FINDINGS.md) — **read it before
+extending the deposit/claim/rewards/vote paths.** Headline: the v4.3.0 API
+surface, crate identity, and the FIFO + 30% small-pool allocation math are clean,
+but there are **release-blocker correctness + privacy defects on the
+value-bearing paths** (none yet Critical). The recurring traps:
+
+- **`assert_note_existed_by` ≠ valid/unspent/unrevoked** (inclusion only). Claims
+  and the DEX trade gate don't check the withdraw nullifier / revocation, so
+  withdrawn deposit notes keep claiming rent (H1/H2) and revoked KYC can still
+  trade (H4). Use `assert_note_was_valid_by` / add the public-tail revocation
+  check on any new claim/gate path.
+- **Configured-but-unenforced controls** — DEX price-band/TTL, the rewards 8M cap
+  on the private path, `checkpoint_epoch` idempotency, and the vote deadline are
+  stored/surfaced but never asserted on the write path (H5/H6/M5–M7).
+- **Pooled pro-rata claims aren't snapshot-bound** — late deposits dilute honest
+  snapshot-time depositors (H3).
+- **Privacy leaks at the boundaries** — the on-chain note crypto is correct
+  (randomness + secret-derived unlinkable nullifiers), but a deterministic KYC
+  commitment is reused across deposit+vote (M12), per-user rewards/KYC state lives
+  in address-keyed *public* maps (M13–M15), and public `is_investor(caller)`
+  checks recreate the membership set.
+
+**Live-mode auth posture (M16 — document, don't silently rely on):** live mode is
+a **single-tenant local demo**. One server PXE (`frontend/src/lib/serverWallet.ts`)
+holds the keys of *all* test accounts, so it can decrypt every account's private
+notes. The per-route `address === getTestAccount(accountIndex).address` check is a
+**consistency guard, not authentication** — both values come from the request, so
+any HTTP caller can act as any test account. There is no session/JWT layer in
+`frontend/src/app/api/`. **Do not expose live mode to multiple users or the public
+testnet without adding per-session challenge-signature auth and deriving the
+acting account from the authenticated session (ideally one PXE/keys per browser).**
+
 ## Critical: Use the host `aztec` CLI, not `nargo` directly
 
 This is an Aztec smart contract project. The host CLI is installed at
