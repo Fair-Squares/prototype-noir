@@ -365,6 +365,13 @@ pub contract ProtocolRewards {
             confirmed.contract_address == self.context.this_address(),
             "reward note from wrong contract",
         );
+        // STORAGE-SLOT JUSTIFICATION (L6): we deliberately do not constrain the
+        // proven note's storage_slot. RewardClaimNote is only ever inserted into
+        // the single `reward_notes` PrivateSet (see allocate path), so there is
+        // no second note set a caller could prove a RewardClaimNote from. If a
+        // second RewardClaimNote-typed set is ever added, this path MUST also
+        // assert `confirmed.storage_slot == reward_notes.get_storage_slot()` to
+        // keep claims bound to the rewards set.
 
         // Single-use claim keyed by (note_hash, owner) prevents re-claim of
         // the same allocation.

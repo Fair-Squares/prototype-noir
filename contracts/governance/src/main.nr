@@ -71,6 +71,11 @@ pub contract Governance {
 
         // V2: nullifier per (proposal_id, voter) for secret-ballot private voting.
         vote_claims: Map<Field, Owned<SingleUseClaim<Context>, Context>, Context>,
+
+        // Admin (the deployer) — gates execute_proposal so only an authorized
+        // caller can flip a PASSED proposal to EXECUTED. Appended at the END of
+        // the struct so existing storage slots are not shifted.
+        admin: PublicMutable<AztecAddress, Context>,
     }
 
     #[initializer]
@@ -93,6 +98,8 @@ pub contract Governance {
         self.storage.voting_window_blocks.write(voting_window_blocks);
         self.storage.min_quorum_votes.write(min_quorum_votes);
         self.storage.proposal_count.write(0);
+        // The deployer is the admin authorized to execute passed proposals.
+        self.storage.admin.write(self.msg_sender());
     }
 
     // -- Create a new proposal --------------------------------------------
@@ -260,6 +267,10 @@ pub contract Governance {
 
         assert(yes_votes + no_votes >= quorum, "quorum not reached");
 
+        // Strict-majority rule: a proposal PASSES only with strictly more YES
+        // than NO votes. A tie (yes == no) falls into the `else` branch and
+        // resolves to FAILED -- the proposer must clear, not merely meet, the
+        // opposition. (L33)
         if yes_votes > no_votes {
             self.storage.p_status.at(pid).write(STATUS_PASSED);
         } else {
@@ -272,6 +283,13 @@ pub contract Governance {
 
     #[external("public")]
     fn execute_proposal(proposal_id: u32) {
+        // Only the admin may execute. finalize_proposal is a permissionless
+        // crank (it resolves the on-chain tally deterministically), but
+        // execution is an authorized action: it triggers the downstream FSFT
+        // mint / distribution, so an unauthenticated PASSED->EXECUTED flip must
+        // be impossible.
+        assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
+
         let pid = proposal_id as Field;
 
         let status = self.storage.p_status.at(pid).read();

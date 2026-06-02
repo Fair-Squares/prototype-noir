@@ -203,7 +203,9 @@ pub contract HousingFund {
         // Appended at the END of the struct so existing storage slots (read by
         // the slot-based frontend reader) are not shifted.
         // Cumulative rent income recorded across all properties (lifetime, gross
-        // EUR units). Transparent like the other aggregates; part of fund NAV.
+        // EUR units). Transparent like the other aggregates. NOT part of NAV:
+        // NAV = total_deposits (pooled capital only); rent is surfaced separately
+        // as a claimable yield and never inflates share value.
         total_rent_income: PublicMutable<u64, Context>,
         // Per-property cumulative rent, keyed by property_id (as Field).
         rent_income_by_property: Map<Field, PublicMutable<u64, Context>, Context>,
@@ -216,8 +218,10 @@ pub contract HousingFund {
         eur_token: PublicMutable<AztecAddress, Context>,
         // Rent recorded but not yet opened into a rent-distribution epoch.
         undistributed_rent: PublicMutable<u64, Context>,
-        // Lifetime rent paid out to holders. NAV's rent backing is
-        // total_rent_income - total_rent_claimed (claimed rent has left the fund).
+        // Lifetime rent paid out to holders. Rent still in the fund is
+        // total_rent_income - total_rent_claimed (claimed rent has left the
+        // fund); this is surfaced separately and does NOT back NAV
+        // (NAV = total_deposits, pooled capital only).
         total_rent_claimed: PublicMutable<u64, Context>,
         // Per-rent-epoch snapshots, mirroring the d_* proposal-distribution maps
         // but paid in EUR (yield) instead of minting FSFT (ownership).
@@ -798,6 +802,7 @@ pub contract HousingFund {
     // path keeps hidden.
     #[external("public")]
     fn reinvest_rent(rent_epoch_id: u32, seq: u64) {
+        assert(!self.storage.is_paused.read(), "fund is paused");
         let rid = rent_epoch_id as Field;
         assert(self.storage.r_open.at(rid).read(), "rent distribution is not open");
 
@@ -904,10 +909,12 @@ pub contract HousingFund {
     // Record rent collected for a funded property -- the real cash-flow primitive
     // behind "earn the rent". An authorized keeper (or admin) posts the rent
     // collected per property; it accrues to the fund's transparent rent-income
-    // aggregate, which backs NAV. There is NO simulated yield: rent only enters
+    // aggregate, surfaced separately from NAV (NAV = total_deposits, pooled
+    // capital only). There is NO simulated yield: rent only enters
     // here, posted by an authorized party against a real collection, never
-    // fabricated. Distributing rent to FSFT holders (as claimable EUR yield or
-    // NAV-per-share growth) is layered on top -- see docs/PHASE1_YIELD_AND_RENT.md.
+    // fabricated. Distributing rent to FSFT holders (as claimable EUR yield, or
+    // -- only when reinvested -- as new capital) is layered on top -- see
+    // docs/PHASE1_YIELD_AND_RENT.md.
     #[external("public")]
     fn record_rent(property_id: u32, amount: u64) {
         assert(!self.storage.is_paused.read(), "fund is paused");
@@ -1019,6 +1026,7 @@ pub contract HousingFund {
         supplied_seq: u64,
         supplied_is_small: bool,
     ) {
+        assert(!self.storage.is_paused.read(), "fund is paused");
         let kyc_addr = self.storage.kyc_verifier.read();
         assert(kyc_note_contract == kyc_addr, "kyc note from wrong contract");
         let kyc = KYCVerifier::at(kyc_addr);
@@ -1412,6 +1420,7 @@ pub contract HousingFund {
         supplied_is_small: bool,
         supplied_snapshot_block: u32,
     ) {
+        assert(!self.storage.is_paused.read(), "fund is paused");
         let rid = rent_epoch_id as Field;
         // (a) Rent side: verify epoch + snapshots, enforce ceiling, consume rent.
         assert(self.storage.r_open.at(rid).read(), "rent distribution not open");
@@ -1530,9 +1539,10 @@ pub contract HousingFund {
         self.storage.total_rent_claimed.read()
     }
 
-    // Rent still held by the fund (backs NAV): collected minus paid out. The
-    // frontend NAV uses this, not the lifetime total, so claimed rent that has
-    // left the fund is not double counted.
+    // Rent still held by the fund: collected minus paid out. Surfaced separately
+    // from NAV (NAV = total_deposits, pooled capital only); uses this running
+    // balance, not the lifetime total, so claimed rent that has left the fund is
+    // not double counted.
     #[external("utility")]
     unconstrained fn get_rent_in_fund() -> pub u64 {
         let income = self.storage.total_rent_income.read();
