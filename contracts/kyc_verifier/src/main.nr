@@ -40,6 +40,17 @@ pub contract KYCVerifier {
         admin: PublicMutable<AztecAddress, Context>,
         verifiers: Map<AztecAddress, PublicMutable<bool, Context>, Context>,
         // Legacy public verified flags (kept while downstream contracts depend on them).
+        //
+        // PRIVACY NOTE (M15): these address-keyed PUBLIC maps, together with the
+        // public `is_verified` / `is_investor` views, leak the full set of
+        // KYC-verified / investor addresses. Every public caller of
+        // `is_investor(caller)` — HousingFund.deposit, Governance.create_proposal,
+        // FSFTDex.can_trade, ProtocolRewards.claim — publicly confirms that
+        // caller's KYC status. These maps/views should be treated as
+        // TRANSPARENCY-MODE ONLY; everyday flows should route through the V2
+        // private credential path (issue_credential + hinted-note attestation,
+        // as HousingFund.deposit_private / Governance.cast_vote_private do),
+        // which leaves no public per-address KYC row.
         verified: Map<AztecAddress, PublicMutable<bool, Context>, Context>,
         investor_role: Map<AztecAddress, PublicMutable<bool, Context>, Context>,
         verified_count: PublicMutable<u32, Context>,
@@ -185,6 +196,9 @@ pub contract KYCVerifier {
 
     #[external("public")]
     #[view]
+    // PRIVACY NOTE (M15): transparency-mode-only. Reading this on a public path
+    // publicly confirms the subject's KYC/investor status. Everyday flows should
+    // attest a private KYC credential instead (see V2 private credential flow).
     fn is_investor(user: AztecAddress) -> pub bool {
         self.storage.investor_role.at(user).read()
     }

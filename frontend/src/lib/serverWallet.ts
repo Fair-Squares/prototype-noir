@@ -15,6 +15,25 @@
  *
  * All subsequent calls reuse the cached wallet (module-level singleton).
  *
+ * ─ SECURITY / PRIVACY POSTURE (M16) ──────────────────────────────────────────
+ * This is a SINGLE shared server-side PXE that holds the keys for EVERY
+ * deterministic test account. That has two consequences which are acceptable
+ * for a local demo but MUST NOT be exposed to a multi-user or public testnet
+ * deployment without adding authentication:
+ *
+ *   1. The one PXE can decrypt every account's private notes. There is no
+ *      cryptographic isolation between accounts.
+ *   2. API routes select the acting account purely from request-supplied
+ *      parameters (`accountIndex` / `address`). "The address matches the
+ *      account index" is NOT authentication — any HTTP caller can act as, or
+ *      read the private state of, any account (e.g. `/api/kyc/status`).
+ *
+ * There is intentionally NO session/JWT auth anywhere under `src/app/api/`.
+ * Before any shared/testnet exposure, add per-session challenge–signature auth
+ * and derive the acting account from the authenticated session (ideally one
+ * PXE / key set per browser session rather than this shared singleton).
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
  * Usage in API routes:
  *   import { getServerWallet, getTestAccountWallet } from '@/lib/serverWallet';
  *   const { wallet, address } = await getTestAccount(0); // test0 = admin

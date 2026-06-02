@@ -205,6 +205,23 @@ pub contract ProtocolRewards {
 
     /// Records per-user epoch weights and accrues claimable rewards.
     /// This function can be called once per user per epoch.
+    ///
+    /// PRIVACY NOTE (M13): the per-user accounting written below
+    /// (`user_claimable`, and the per-(user,epoch) weight maps) lives in
+    /// address-keyed PUBLIC maps. Together with `user_total_claimed` /
+    /// `user_last_claimed_epoch` and the per-address public views, this leaks
+    /// the full reward-participation set and each participant's reward history.
+    /// Remediation: move per-user accounting onto the private RewardClaimNote
+    /// path (see allocate_reward_private), keep only the epoch/aggregate totals
+    /// public, and gate any per-address views behind explicit opt-in
+    /// transparency.
+    ///
+    /// PRIVACY NOTE (M14): FSFT-reward eligibility reads the target's PUBLIC
+    /// FSFT balance (`balance_of_public(user)` below). This both (a) excludes
+    /// purely-private holders unless they deanonymize by unshielding, and
+    /// (b) records on-chain that `user` holds FSFT. Remediation: let holders
+    /// attest eligibility privately via a HintedNote ownership proof, the way
+    /// Governance.cast_vote_private attests a hinted credential.
     #[external("public")]
     fn set_user_epoch_weights(
         epoch: u32,
@@ -384,6 +401,14 @@ pub contract ProtocolRewards {
     }
 
     /// Claims all currently accrued rewards for caller.
+    ///
+    /// PRIVACY NOTE (M13/M15): this is the public (transparency-mode) claim
+    /// path. It reads `is_investor(caller)` publicly (M15: publicly confirms the
+    /// caller's KYC status) and reads/writes the address-keyed public maps
+    /// `user_claimable` / `user_total_claimed` / `user_last_claimed_epoch`
+    /// (M13: records the caller in the public reward-participation set and
+    /// updates their public history). The privacy-preserving path is the
+    /// private RewardClaimNote claim flow.
     #[external("public")]
     fn claim() {
         let caller = self.msg_sender();
@@ -410,6 +435,11 @@ pub contract ProtocolRewards {
 
     // -- View functions ----------------------------------------------------
 
+    // PRIVACY NOTE (M13): `get_claimable` and `get_user_stats` are per-address
+    // public views over the per-user accounting maps, exposing each
+    // participant's reward balance and history. These should be gated behind
+    // explicit opt-in transparency once per-user accounting moves to the private
+    // RewardClaimNote path; only epoch/aggregate views would remain public.
     #[external("public")]
     #[view]
     fn get_claimable(user: AztecAddress) -> pub u64 {
