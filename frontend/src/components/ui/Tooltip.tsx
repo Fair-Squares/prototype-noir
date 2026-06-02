@@ -54,7 +54,7 @@ export function Tooltip({ content, children, align = "center", className }: Tool
         role="tooltip"
         id={id}
         className={`absolute top-full z-50 mt-2 w-[min(16rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-card px-3 py-2 text-caption text-text-2 shadow-sm transition-[opacity,transform] duration-150 ${alignClass} ${
-          open ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0"
+          open ? "block translate-y-0 opacity-100" : "hidden -translate-y-1 opacity-0"
         }`}
       >
         {content}

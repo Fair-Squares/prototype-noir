@@ -92,7 +92,7 @@ export default function MobileDrawer() {
   const close = () => setDrawerOpen(false);
 
   return (
-    <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+    <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
       {/* Scrim */}
       <button
         type="button"

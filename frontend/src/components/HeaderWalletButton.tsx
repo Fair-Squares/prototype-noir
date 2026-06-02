@@ -44,7 +44,7 @@ export default function HeaderWalletButton() {
   // ── Loading ───────────────────────────────────────────────────────────────
   if (status === "loading") {
     return (
-      <span className="btn btn-secondary btn-sm" data-loading="true" aria-busy="true">
+      <span className="btn btn-secondary btn-sm min-h-11" data-loading="true" aria-busy="true">
         <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -65,7 +65,7 @@ export default function HeaderWalletButton() {
             aria-expanded={showDropdown}
             aria-haspopup="dialog"
             onClick={() => setShowDropdown((v) => !v)}
-            className="btn btn-primary btn-sm"
+            className="btn btn-primary btn-sm min-h-11"
             style={{ touchAction: "manipulation" }}
           >
             Select account
@@ -124,7 +124,7 @@ export default function HeaderWalletButton() {
       <button
         type="button"
         onClick={() => connect(0)}
-        className="btn btn-primary btn-sm"
+        className="btn btn-primary btn-sm min-h-11"
         style={{ touchAction: "manipulation" }}
       >
         Connect
@@ -143,7 +143,7 @@ export default function HeaderWalletButton() {
         aria-expanded={showDropdown}
         aria-haspopup="dialog"
         onClick={() => setShowDropdown((v) => !v)}
-        className="btn btn-secondary btn-sm"
+        className="btn btn-secondary btn-sm min-h-11"
         style={{ touchAction: "manipulation" }}
       >
         <span aria-hidden="true" className="inline-block h-2 w-2 rounded-full bg-fs-teal" />

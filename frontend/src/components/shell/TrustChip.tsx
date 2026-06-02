@@ -59,7 +59,7 @@ export default function TrustChip() {
         aria-haspopup="dialog"
         aria-label={`Trust and privacy: ${summary.word}. Open details.`}
         onClick={() => setTrustOpen(!trustOpen)}
-        className={`chip ${TONE[summary.state]} cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]`}
+        className={`chip min-h-11 ${TONE[summary.state]} cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]`}
         style={{ touchAction: "manipulation" }}
       >
         <span aria-hidden="true">🛡</span>

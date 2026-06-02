@@ -14,7 +14,7 @@ export default function Brand({ withTagline = false, className }: BrandProps) {
   return (
     <Link
       href="/"
-      className={`flex items-center gap-2.5 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] ${className ?? ""}`}
+      className={`flex min-h-11 items-center gap-2.5 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] ${className ?? ""}`}
       style={{ touchAction: "manipulation" }}
     >
       <span className="grid h-8 w-8 place-items-center rounded-md bg-fs-anthracite text-meta font-semibold text-white">

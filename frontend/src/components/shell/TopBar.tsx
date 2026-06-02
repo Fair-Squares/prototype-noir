@@ -12,7 +12,7 @@ import { useShell } from "./ShellProvider";
 
 function PrimaryTabs({ activeHref }: { activeHref?: string }) {
   return (
-    <nav aria-label="Primary" className="hidden items-center gap-1 md:flex">
+    <nav aria-label="Primary" className="hidden items-center gap-1 lg:flex">
       {PRIMARY_ITEMS.map((item) => {
         const isActive = activeHref === item.href;
         return (
@@ -32,12 +32,12 @@ function PrimaryTabs({ activeHref }: { activeHref?: string }) {
   );
 }
 
-/** Mobile horizontal scroll strip of primary tabs (drawer covers the rest). */
+/** Compact horizontal scroll strip of primary tabs (drawer covers the rest). */
 function MobileTabStrip({ activeHref }: { activeHref?: string }) {
   return (
     <nav
       aria-label="Primary"
-      className="no-scrollbar flex gap-2 overflow-x-auto border-b border-border bg-card/60 px-4 py-2 backdrop-blur md:hidden"
+      className="no-scrollbar flex gap-2 overflow-x-auto border-b border-border bg-card/60 px-4 py-2 backdrop-blur lg:hidden"
     >
       {PRIMARY_ITEMS.map((item) => {
         const isActive = activeHref === item.href;
@@ -80,7 +80,7 @@ export default function TopBar() {
             type="button"
             aria-label="Open navigation"
             onClick={() => setDrawerOpen(true)}
-            className="btn btn-ghost btn-sm min-h-11 min-w-11 md:hidden"
+            className="btn btn-ghost btn-sm min-h-11 min-w-11 lg:hidden"
             style={{ touchAction: "manipulation" }}
           >
             <span aria-hidden="true" className="text-lg leading-none">☰</span>
