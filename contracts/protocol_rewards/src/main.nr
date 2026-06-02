@@ -103,6 +103,49 @@ pub contract ProtocolRewards {
         reward_claim_nullifiers: Map<Field, Owned<SingleUseClaim<Context>, Context>, Context>,
     }
 
+    // ====================================================================
+    // Emission schedule -- single source of the year->bps reward curve and the
+    // per-epoch emission ceiling. checkpoint_epoch (enforcement) and
+    // get_epoch_target (the public view) MUST agree, so both call these pure
+    // helpers instead of inlining the ladder. NOTE: the frontend mirrors this
+    // curve in `frontend/src/lib/simulationStore.ts` (YEAR_SPLITS_BPS); keep the
+    // two in sync -- they cannot share a source across the Noir/TS boundary.
+    // ====================================================================
+
+    #[contract_library_method]
+    fn year_emission_bps(year: u32) -> u64 {
+        if year == 0 {
+            1300
+        } else if year == 1 {
+            1200
+        } else if year == 2 {
+            1100
+        } else if year == 3 {
+            1000
+        } else if year == 4 {
+            1000
+        } else if year == 5 {
+            1000
+        } else if year == 6 {
+            900
+        } else if year == 7 {
+            900
+        } else if year == 8 {
+            800
+        } else {
+            800
+        }
+    }
+
+    // Per-epoch emission ceiling: a year's bps slice of the distribution pool,
+    // spread evenly across its 12 epochs. Integer-floored to match enforcement.
+    #[contract_library_method]
+    fn epoch_emission_target(distribution_pool: u64, epoch: u32) -> u64 {
+        let bps = year_emission_bps(epoch / 12);
+        let yearly = (distribution_pool * bps) / 10000;
+        yearly / 12
+    }
+
     #[initializer]
     #[external("public")]
     fn constructor(
@@ -162,30 +205,7 @@ pub contract ProtocolRewards {
         assert(epoch < self.storage.total_epochs.read(), "invalid epoch");
         assert(emission > 0, "emission must be positive");
 
-        let year = epoch / 12;
-        let bps = if year == 0 {
-            1300
-        } else if year == 1 {
-            1200
-        } else if year == 2 {
-            1100
-        } else if year == 3 {
-            1000
-        } else if year == 4 {
-            1000
-        } else if year == 5 {
-            1000
-        } else if year == 6 {
-            900
-        } else if year == 7 {
-            900
-        } else if year == 8 {
-            800
-        } else {
-            800
-        };
-        let yearly = (self.storage.total_distribution_pool.read() * bps) / 10000;
-        let target = yearly / 12;
+        let target = epoch_emission_target(self.storage.total_distribution_pool.read(), epoch);
         assert(emission <= target, "emission exceeds epoch target");
 
         let distributed = self.storage.total_distributed.read();
@@ -480,30 +500,7 @@ pub contract ProtocolRewards {
     #[external("public")]
     #[view]
     fn get_epoch_target(epoch: u32) -> pub u64 {
-        let year = epoch / 12;
-        let bps = if year == 0 {
-            1300
-        } else if year == 1 {
-            1200
-        } else if year == 2 {
-            1100
-        } else if year == 3 {
-            1000
-        } else if year == 4 {
-            1000
-        } else if year == 5 {
-            1000
-        } else if year == 6 {
-            900
-        } else if year == 7 {
-            900
-        } else if year == 8 {
-            800
-        } else {
-            800
-        };
-        let yearly = (self.storage.total_distribution_pool.read() * bps) / 10000;
-        yearly / 12
+        epoch_emission_target(self.storage.total_distribution_pool.read(), epoch)
     }
 
     #[external("public")]

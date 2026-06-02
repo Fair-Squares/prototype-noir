@@ -31,7 +31,9 @@ const TOTAL_REWARD_EPOCHS = REWARD_YEARS * EPOCHS_PER_YEAR;
 const EPOCH_MS = 30 * 24 * 60 * 60 * 1000; // simplified 30-day monthly epochs
 const REWARD_START_MS = Date.UTC(2026, 0, 1, 0, 0, 0);
 
-// 13,12,11,10,10,10,9,9,8,8 (% of the 8M distribution pool)
+// 13,12,11,10,10,10,9,9,8,8 (% of the 8M distribution pool).
+// SOURCE OF TRUTH: contracts/protocol_rewards/src/main.nr `year_emission_bps`.
+// The Noir/TS boundary prevents a shared source -- keep these two in sync.
 const YEAR_SPLITS_BPS = [1300, 1200, 1100, 1000, 1000, 1000, 900, 900, 800, 800];
 
 function buildEmissionSchedule(): number[] {

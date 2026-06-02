@@ -306,6 +306,16 @@ pub contract HousingFund {
             + small_share(amount, is_small, small_pool, small_total)
     }
 
+    // Available (unencumbered) balance: pooled deposits net of capital that is
+    // out in DeFi or already allocated to executed proposals. Single-sourced so
+    // every guard (deploy_to_defi / reserve_for_property / open_distribution /
+    // withdraw paths) uses the identical subtraction order and saturation
+    // semantics. Pure helper -- caller reads the three aggregates and passes them.
+    #[contract_library_method]
+    fn available_balance(deposits: u64, in_defi: u64, allocated: u64) -> u64 {
+        deposits - in_defi - allocated
+    }
+
     // H1: the per-note withdraw marker (inner nullifier). withdraw_private pushes
     // this; claim/reinvest paths recompute it from the same kernel-verified note
     // and prove its SILOED form was absent at the distribution's snapshot block.
@@ -483,7 +493,7 @@ pub contract HousingFund {
         let deposits = self.storage.total_deposits.read();
         let in_defi = self.storage.total_in_defi.read();
         let allocated = self.storage.total_allocated.read();
-        let available = deposits - in_defi - allocated;
+        let available = available_balance(deposits, in_defi, allocated);
         assert(amount <= available, "insufficient available balance");
 
         let updated_ticket = ticket - amount;
@@ -533,7 +543,7 @@ pub contract HousingFund {
         let deposits = self.storage.total_deposits.read();
         let in_defi = self.storage.total_in_defi.read();
         let allocated = self.storage.total_allocated.read();
-        let available = deposits - in_defi - allocated;
+        let available = available_balance(deposits, in_defi, allocated);
         assert(amount <= available, "insufficient available balance");
 
         self.storage.total_in_defi.write(in_defi + amount);
@@ -580,7 +590,7 @@ pub contract HousingFund {
         let deposits = self.storage.total_deposits.read();
         let in_defi = self.storage.total_in_defi.read();
         let allocated = self.storage.total_allocated.read();
-        let available = deposits - in_defi - allocated;
+        let available = available_balance(deposits, in_defi, allocated);
         assert(amount <= available, "insufficient available balance");
 
         self.storage.total_allocated.write(allocated + amount);
@@ -603,7 +613,7 @@ pub contract HousingFund {
         let deposits = self.storage.total_deposits.read();
         let in_defi = self.storage.total_in_defi.read();
         let allocated = self.storage.total_allocated.read();
-        let available = deposits - in_defi - allocated;
+        let available = available_balance(deposits, in_defi, allocated);
         assert(proposal_amount <= available, "insufficient available balance");
 
         self.storage.total_allocated.write(allocated + proposal_amount);
@@ -1100,7 +1110,7 @@ pub contract HousingFund {
         let deposits = self.storage.total_deposits.read();
         let in_defi = self.storage.total_in_defi.read();
         let allocated = self.storage.total_allocated.read();
-        let available = deposits - in_defi - allocated;
+        let available = available_balance(deposits, in_defi, allocated);
         assert(amount_u64 <= available, "insufficient available balance");
         self.storage.total_deposits.write(deposits - amount_u64);
         // cum_deposits is NOT decremented (monotonic FIFO axis). The withdraw
@@ -1235,6 +1245,15 @@ pub contract HousingFund {
         supplied_fifo_cap: u128,
         supplied_snapshot_block: u32,
     ) {
+        // RENT-CLAIM PROLOGUE (kept byte-for-byte in lockstep with
+        // reinvest_rent_private below): fetch the snapshot header, prove the
+        // DepositNote existed and is caller-owned, reject notes withdrawn by the
+        // snapshot, burn the per-(note,epoch) claim nullifier, and compute the
+        // share. The correctness-sensitive math is already single-sourced via the
+        // pure helpers total_claim / withdraw_marker_nullifier /
+        // compute_confirmed_note_hash_for_nullification; the surrounding context
+        // orchestration cannot be a shared free function (it needs self/context),
+        // so any change here MUST be mirrored in reinvest_rent_private.
         // H1/H3: prove the deposit against the rent-epoch SNAPSHOT block (re-checked
         // in the tail), excluding post-snapshot deposits, and reject notes withdrawn
         // by then via the withdraw-marker non-existence check.
@@ -1351,6 +1370,9 @@ pub contract HousingFund {
         supplied_is_small: bool,
         supplied_snapshot_block: u32,
     ) {
+        // RENT-CLAIM PROLOGUE (mirror of claim_rent_private; keep in lockstep):
+        // the correctness-sensitive math is single-sourced via total_claim /
+        // withdraw_marker_nullifier / compute_confirmed_note_hash_for_nullification.
         // H1/H3: prove the claimed-against deposit at the rent-epoch SNAPSHOT block
         // (re-checked in the tail) and reject notes withdrawn by then. The NEW note
         // minted below is unaffected -- only the rent-bearing source note is bound.
@@ -1497,7 +1519,7 @@ pub contract HousingFund {
         let total = self.storage.total_deposits.read();
         let in_defi = self.storage.total_in_defi.read();
         let allocated = self.storage.total_allocated.read();
-        let available = total - in_defi - allocated;
+        let available = available_balance(total, in_defi, allocated);
         FundStatsView {
             total_deposits: total,
             total_in_defi: in_defi,
