@@ -84,13 +84,12 @@ export function WithdrawPanel({ depositedAmount, disabled = false, onWithdraw }:
           }}
           placeholder="0"
           aria-invalid={error ? true : undefined}
-          className="h-10 w-full rounded-md border border-border-strong bg-surface px-3 text-body text-mono text-text-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)] focus-visible:outline-offset-2 disabled:opacity-50"
+          aria-describedby={error ? `${inputId}-error` : `${inputId}-hint`}
+          className="h-11 w-full rounded-md border border-border-strong bg-surface px-3 text-body text-mono text-text-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)] focus-visible:outline-offset-2 disabled:opacity-50"
         />
       </FormField>
 
-      <div aria-live="polite">
-        {result ? <Alert tone={result.tone}>{result.text}</Alert> : null}
-      </div>
+      {result ? <Alert tone={result.tone}>{result.text}</Alert> : null}
 
       <ActionBar align="start">
         <Button type="submit" variant="secondary" loading={busy} disabled={disabled}>

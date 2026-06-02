@@ -70,6 +70,9 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
   const [voted, setVoted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
+  // Bumped only in deed-changing action success branches so the deed refetch
+  // happens deliberately, not on every transient notice change.
+  const [reloadVersion, setReloadVersion] = useState(0);
 
   const reloadProposal = useCallback(async () => {
     const proposals = await fetchProposals(address ?? undefined, accountIndex);
@@ -90,7 +93,7 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
     fetchProperties()
       .then((deeds) => setDeed(deeds.find((d) => d.proposalId === proposalId) ?? null))
       .catch(() => setDeed(null));
-  }, [proposalId, notice]);
+  }, [proposalId, reloadVersion]);
 
   useEffect(() => {
     if (!address) {
@@ -150,6 +153,7 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
         tone: "success",
         text: "Voting finalised. If approved, execute it next to open the distribution.",
       });
+      setReloadVersion((v) => v + 1);
       await reloadProposal();
     } finally {
       setIsFinalizing(false);
@@ -166,6 +170,7 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
         return;
       }
       setNotice({ tone: "success", text: "Request executed and distribution opened." });
+      setReloadVersion((v) => v + 1);
       await reloadProposal();
     } finally {
       setIsExecuting(false);
@@ -186,6 +191,7 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
         return;
       }
       setNotice({ tone: "success", text: "Distribution claimed." });
+      setReloadVersion((v) => v + 1);
       await reloadProposal();
     } finally {
       setIsClaiming(false);

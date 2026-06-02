@@ -44,7 +44,7 @@ export function KpiCard({
         <span className="text-label">{label}</span>
         {hint ? <InfoDot label={label} content={hint} /> : null}
       </div>
-      <p className={`text-kpi ${VALUE_TONE[tone]}`}>{value}</p>
+      <p className={`text-kpi break-words min-w-0 ${VALUE_TONE[tone]}`}>{value}</p>
       {sub ? <p className="text-caption mt-1.5 text-text-2">{sub}</p> : null}
     </div>
   );

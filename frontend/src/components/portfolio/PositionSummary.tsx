@@ -36,8 +36,9 @@ export function PositionSummary({
           />
         </div>
         <p className="text-display text-text-1">{formatEUR(totalPositionValue)}</p>
-        <p className="text-caption text-text-2">
-          Fund shares {formatEUR(fsftMarketValue)} + cash {formatEUR(portfolio.eurBalance)}
+        <p className="text-caption flex flex-wrap items-baseline gap-x-2 text-text-2">
+          <span>Fund shares {formatEUR(fsftMarketValue)}</span>
+          <span>+ cash {formatEUR(portfolio.eurBalance)}</span>
         </p>
       </div>
 

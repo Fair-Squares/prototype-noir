@@ -26,26 +26,35 @@ export default function RuntimeModeChip({
   withHint = false,
   hintAlign = "right",
 }: RuntimeModeChipProps) {
-  const isSimulation = useSimulationMode();
+  const mode = useSimulationMode();
+  const isSimulation = mode === "simulation";
 
-  const chip = isSimulation ? (
-    <span className={`chip chip-sim ${className}`.trim()} aria-label="Runtime mode: simulation">
-      Simulation
-    </span>
-  ) : (
-    <span
-      className={`chip chip-neutral ${className}`.trim()}
-      aria-label="Runtime mode: live, local network"
-    >
-      Live · local network
-    </span>
-  );
+  const chip =
+    mode === "unknown" ? (
+      <span className={`chip chip-neutral ${className}`.trim()} aria-label="Runtime mode: unknown">
+        Mode unknown
+      </span>
+    ) : isSimulation ? (
+      <span className={`chip chip-sim ${className}`.trim()} aria-label="Runtime mode: simulation">
+        Simulation
+      </span>
+    ) : (
+      <span
+        className={`chip chip-neutral ${className}`.trim()}
+        aria-label="Runtime mode: live, local network"
+      >
+        Live · local network
+      </span>
+    );
 
   if (!withHint) return chip;
 
-  const hint = isSimulation
-    ? "Simulation: no real funds move. Figures are read from a local network so you can explore the flow safely."
-    : "Live: connected to a local Aztec network. On-chain reads and writes use real test accounts.";
+  const hint =
+    mode === "unknown"
+      ? "Mode unknown: the runtime could not be determined yet. Reads will resolve once the network responds."
+      : isSimulation
+        ? "Simulation: no real funds move. Figures are read from a local network so you can explore the flow safely."
+        : "Live: connected to a local Aztec network. On-chain reads and writes use real test accounts.";
 
   return (
     <Tooltip content={hint} align={hintAlign}>

@@ -85,7 +85,7 @@ export function DataTable<Row>({
   return (
     <div className={className}>
       {/* Desktop / tablet: real table */}
-      <div className="hidden overflow-x-auto sm:block">
+      <div className="hidden overflow-x-auto lg:block">
         <table className="w-full border-collapse text-left">
           {caption ? <caption className="sr-only">{caption}</caption> : null}
           <thead>
@@ -122,17 +122,14 @@ export function DataTable<Row>({
       </div>
 
       {/* Mobile: stacked label/value cards */}
-      <ul className="flex flex-col gap-3 sm:hidden">
+      <ul className="flex flex-col gap-3 lg:hidden">
         {rows.map((row, i) => (
           <li key={key(row, i)} className="surface-muted p-4">
             <dl className="flex flex-col gap-2">
               {mobileCols.map((col) => (
-                <div
-                  key={col.key}
-                  className="flex items-baseline justify-between gap-3"
-                >
+                <div key={col.key} className="flex flex-col gap-0.5">
                   <dt className="text-label flex-shrink-0">{col.header}</dt>
-                  <dd className="text-body min-w-0 text-right text-text-1">
+                  <dd className="text-body text-text-1">
                     {cellValue(col, row, i)}
                   </dd>
                 </div>

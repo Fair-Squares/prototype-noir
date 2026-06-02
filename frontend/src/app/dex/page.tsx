@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActionBar,
   Alert,
@@ -61,6 +61,7 @@ export default function DexPage() {
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -87,9 +88,18 @@ export default function DexPage() {
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
+
   const notify = (type: "success" | "error", text: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
     setMsg({ type, text });
-    if (type === "success") setTimeout(() => setMsg(null), 8000);
+    if (type === "success") {
+      toastTimer.current = setTimeout(() => setMsg(null), 8000);
+    }
   };
 
   const placeOrder = async ({ side, amount, limitPriceEur }: { side: "buy" | "sell"; amount: number; limitPriceEur?: number }) => {
@@ -170,9 +180,7 @@ export default function DexPage() {
         </Alert>
       ) : null}
 
-      <div aria-live="polite">
-        {msg ? <Alert tone={msg.type === "success" ? "success" : "danger"}>{msg.text}</Alert> : null}
-      </div>
+      {msg ? <Alert tone={msg.type === "success" ? "success" : "danger"}>{msg.text}</Alert> : null}
 
       <KpiGrid cols={3}>
         {loading && !orderbook ? (
@@ -184,7 +192,7 @@ export default function DexPage() {
         ) : orderbook ? (
           <>
             <KpiCard label="NAV reference price" value={`€${orderbook.priceReferenceEur.toFixed(4)}`} sub={`Per ${fundSymbol}, from net asset value`} tone="accent" hint="Trades anchor to the fund's net asset value per token, not an open-market quote." />
-            <KpiCard label="Allowed price band" value={`€${orderbook.priceBandMinEur.toFixed(4)}-€${orderbook.priceBandMaxEur.toFixed(4)}`} sub="Indicative NAV guardrail" />
+            <KpiCard label="Allowed price band" value={`€${orderbook.priceBandMinEur.toFixed(4)}`} sub={`to €${orderbook.priceBandMaxEur.toFixed(4)} · indicative NAV guardrail`} />
             <KpiCard label="Max order lifetime" value={chainParams ? formatTtl(chainParams.dex.maxTtlBlocks, chainParams.dex.maxTtlSecondsEstimate) : "-"} sub="After expiry an order can no longer settle" />
           </>
         ) : null}

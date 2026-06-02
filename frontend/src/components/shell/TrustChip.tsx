@@ -63,7 +63,7 @@ export default function TrustChip() {
         style={{ touchAction: "manipulation" }}
       >
         <span aria-hidden="true">🛡</span>
-        <span>{summary.word}</span>
+        <span className="hidden sm:inline">{summary.word}</span>
         <span aria-hidden="true" className="opacity-60">
           ▾
         </span>

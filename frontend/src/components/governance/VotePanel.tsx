@@ -74,7 +74,7 @@ export function VotePanel({
       <p className="text-caption">
         Your ballot is private — the contract records that you voted, never how.
       </p>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <Button onClick={() => onVote(true)} loading={isVoting} disabled={isVoting}>
           {isVoting ? "Recording…" : "Vote in favour"}
         </Button>

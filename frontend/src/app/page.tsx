@@ -240,7 +240,7 @@ export default function OverviewPage() {
       {/* Raw protocol / parameter detail — opt-in, kept out of the calm flow */}
       {stats || chain ? (
         <AdvancedDetails summary="Protocol parameters & raw figures">
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
             {stats ? (
               <>
                 <RawRow label="Total deposits" value={formatEUR(stats.totalDeposits)} />

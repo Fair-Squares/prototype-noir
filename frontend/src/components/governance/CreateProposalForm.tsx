@@ -88,7 +88,8 @@ export function CreateProposalForm({ onCreate, onCancel }: CreateProposalFormPro
           onChange={(event) => setTitle(event.target.value)}
           disabled={saving}
           aria-invalid={errors.title ? true : undefined}
-          className="w-full rounded-md border border-border-strong bg-card px-3 py-2 text-body text-text-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] disabled:opacity-50"
+          aria-describedby={errors.title ? "proposal-title-error" : "proposal-title-hint"}
+          className="h-11 w-full rounded-md border border-border-strong bg-card px-3 text-body text-text-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] disabled:opacity-50"
         />
       </FormField>
 
@@ -108,7 +109,8 @@ export function CreateProposalForm({ onCreate, onCancel }: CreateProposalFormPro
           onChange={(event) => setAmount(event.target.value)}
           disabled={saving}
           aria-invalid={errors.amount ? true : undefined}
-          className="w-full rounded-md border border-border-strong bg-card px-3 py-2 text-body text-mono text-text-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] disabled:opacity-50"
+          aria-describedby={errors.amount ? "proposal-amount-error" : undefined}
+          className="h-11 w-full rounded-md border border-border-strong bg-card px-3 text-body text-mono text-text-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] disabled:opacity-50"
         />
       </FormField>
 
