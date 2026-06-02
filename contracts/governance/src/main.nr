@@ -197,6 +197,15 @@ pub contract Governance {
             self.storage.p_status.at(pid).read() == STATUS_ACTIVE,
             "proposal is not active",
         );
+        // A proposal stays ACTIVE until someone manually finalizes it, so the
+        // STATUS_ACTIVE gate alone would let a voter wait for the observable
+        // yes/no split and then cast a decisive vote after the window closed.
+        // Reject any tally past the deadline (finalize requires block >= deadline,
+        // so the voting window is exactly [created, deadline)).
+        assert(
+            self.context.block_number() < self.storage.p_deadline_block.at(pid).read(),
+            "voting window closed",
+        );
 
         if vote_yes {
             let current = self.storage.p_yes_votes.at(pid).read();

@@ -289,10 +289,11 @@ pub contract ProtocolRewards {
         assert(amount > 0, "amount must be positive");
         assert(!recipient.is_zero(), "invalid recipient");
 
-        // Combined admin + epoch_open check in the enqueued public tail.
-        // Without the epoch check, an admin could allocate rewards to a
-        // closed epoch which a later claim flow would treat as valid.
-        self.enqueue_self._assert_admin_and_epoch_open(epoch, self.msg_sender());
+        // Combined admin + epoch_open + pool-cap check in the enqueued public
+        // tail. Without the pool check, an admin could mint arbitrary protocol
+        // tokens via private reward notes (the vendored Token has no supply cap),
+        // bypassing the 8M pool that only checkpoint_epoch enforces.
+        self.enqueue_self._assert_admin_and_epoch_open(epoch, self.msg_sender(), amount as u64);
 
         let note = RewardClaimNote::new(recipient, amount, epoch);
         self.storage.reward_notes.at(recipient).insert(note).deliver(
@@ -302,10 +303,19 @@ pub contract ProtocolRewards {
 
     #[external("public")]
     #[only_self]
-    fn _assert_admin_and_epoch_open(epoch: u32, caller: AztecAddress) {
+    fn _assert_admin_and_epoch_open(epoch: u32, caller: AztecAddress, amount: u64) {
         assert_eq(caller, self.storage.admin.read(), "not admin");
         let eid = epoch as Field;
         assert(self.storage.epoch_open.at(eid).read(), "epoch not open");
+
+        // Fixed-supply guard: a private allocation consumes the distribution pool
+        // exactly like checkpoint_epoch's public emission, so it must fit under the
+        // 8M ceiling and advance total_distributed. claim_reward_private then mints
+        // against this, keeping total_claimed <= total_distributed <= pool.
+        let distributed = self.storage.total_distributed.read();
+        let pool = self.storage.total_distribution_pool.read();
+        assert(distributed + amount <= pool, "distribution pool exceeded");
+        self.storage.total_distributed.write(distributed + amount);
     }
 
     // -- V2: private claim of a RewardClaimNote --------------------------------
@@ -365,6 +375,12 @@ pub contract ProtocolRewards {
         );
         let total = self.storage.total_claimed.read();
         self.storage.total_claimed.write(total + amount);
+        // Solvency invariant: claims can never exceed what was distributed into
+        // the pool (allocations bump total_distributed; checkpoints bump it too).
+        assert(
+            self.storage.total_claimed.read() <= self.storage.total_distributed.read(),
+            "claimed exceeds distributed",
+        );
     }
 
     /// Claims all currently accrued rewards for caller.
