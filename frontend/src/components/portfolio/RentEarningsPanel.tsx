@@ -81,7 +81,7 @@ export function RentEarningsPanel({
         </p>
       ) : null}
 
-      <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-border pt-3">
+      <dl className="mt-4 grid grid-cols-1 gap-3 border-t border-border pt-3 sm:grid-cols-3">
         <div className="flex flex-col gap-0.5">
           <dt className="text-label">Earned to date</dt>
           <dd className="text-body text-mono text-text-1">{formatEUR(earned)}</dd>

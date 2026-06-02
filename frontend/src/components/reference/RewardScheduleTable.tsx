@@ -45,9 +45,9 @@ export function RewardScheduleTable({ overview }: { overview: RewardsOverview })
         rowKey={(r) => r.year}
         caption="FSP yearly emission schedule"
       />
-      <div className="mt-3 flex items-baseline justify-between border-t border-border pt-3">
+      <div className="mt-3 flex flex-col gap-1 border-t border-border pt-3 sm:flex-row sm:items-baseline sm:justify-between">
         <span className="text-label">Total over {overview.token.years} years</span>
-        <span className="text-mono text-body text-text-1">
+        <span className="text-mono text-body break-words text-text-1">
           {totalPercent.toLocaleString()}% · {totalTokens.toLocaleString()} FSP
         </span>
       </div>

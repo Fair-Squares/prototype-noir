@@ -20,7 +20,7 @@ const ALIGN: Record<NonNullable<ActionBarProps["align"]>, string> = {
 export function ActionBar({ children, align = "end", className }: ActionBarProps) {
   return (
     <div
-      className={`flex flex-wrap items-center gap-2 ${ALIGN[align]} ${className ?? ""}`}
+      className={`flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center ${ALIGN[align]} [&_.btn]:w-full sm:[&_.btn]:w-auto ${className ?? ""}`}
     >
       {children}
     </div>

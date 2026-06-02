@@ -59,9 +59,9 @@ export function TradeBalances({
 
       <dl className="space-y-3">
         {rows.map((row) => (
-          <div key={row.label} className="flex items-baseline justify-between gap-3">
+          <div key={row.label} className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
             <dt className="text-caption text-text-2">{row.label}</dt>
-            <dd className="min-w-0 text-right">
+            <dd className="min-w-0 sm:text-right">
               <span className="text-body tabular-nums text-text-1">{row.value}</span>
               {row.sub ? <span className="text-caption block text-text-3">{row.sub}</span> : null}
             </dd>

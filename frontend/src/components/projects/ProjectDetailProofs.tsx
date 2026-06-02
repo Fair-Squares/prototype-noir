@@ -133,8 +133,21 @@ function FieldTable({ caption, fields }: { caption: string; fields: Field[] }) {
   return (
     <div className="mt-4">
       <p className="text-label">{caption}</p>
-      {/* Table on >=sm; stacks to label/value rows on mobile via overflow. */}
-      <div className="mt-2 overflow-x-auto">
+      <dl className="mt-2 flex flex-col gap-2 sm:hidden">
+        {fields.map((field) => (
+          <div key={field.label} className="surface-muted p-3">
+            <dt className="text-label">{field.label}</dt>
+            <dd
+              className={`mt-1 min-w-0 text-text-1 ${
+                field.mono ? "text-caption text-mono break-all" : "text-body break-words"
+              }`}
+            >
+              {field.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <div className="mt-2 hidden overflow-x-auto sm:block">
         <table className="w-full border-collapse text-left">
           <tbody>
             {fields.map((field) => (

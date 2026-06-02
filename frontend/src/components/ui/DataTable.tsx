@@ -129,7 +129,7 @@ export function DataTable<Row>({
               {mobileCols.map((col) => (
                 <div key={col.key} className="flex flex-col gap-0.5">
                   <dt className="text-label flex-shrink-0">{col.header}</dt>
-                  <dd className="text-body text-text-1">
+                  <dd className="text-body min-w-0 break-words text-text-1">
                     {cellValue(col, row, i)}
                   </dd>
                 </div>

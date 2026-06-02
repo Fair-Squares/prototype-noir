@@ -90,7 +90,7 @@ export function OverviewNextStep({
 
   return (
     <section className="surface p-5" aria-labelledby="next-step-heading">
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <div className="mb-4 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <h2 id="next-step-heading" className="text-heading text-text-1">
           Your next step
         </h2>

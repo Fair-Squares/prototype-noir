@@ -62,7 +62,7 @@ button, a, input, [role="button"] {
 h1, .text-display {
   font-size: 1.75rem;
   line-height: 1.2;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   font-weight: 600;
 }
 
@@ -306,14 +306,14 @@ h3 {
   font-size: 1.75rem;
   line-height: 1.1;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   font-variant-numeric: tabular-nums;
 }
 .text-kpi-sm {
   font-size: 1.25rem;
   line-height: 1.15;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   font-variant-numeric: tabular-nums;
 }
 .text-label {

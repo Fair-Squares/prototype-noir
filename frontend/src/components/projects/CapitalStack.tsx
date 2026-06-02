@@ -52,7 +52,7 @@ export function CapitalStack({
       <ul className="flex flex-col divide-y divide-border">
         {tranches.map((t) => (
           <li key={t.key} className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0">
-            <div className="flex items-baseline justify-between gap-3">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
               <span className="inline-flex items-center gap-2 min-w-0">
                 <span
                   aria-hidden="true"
@@ -60,7 +60,7 @@ export function CapitalStack({
                   style={{ background: TRANCHE_COLOR[t.kind] }}
                 />
                 <span
-                  className={`text-body truncate ${
+                  className={`text-body break-words sm:truncate ${
                     t.isFairSquares ? "font-semibold text-text-1" : "text-text-1"
                   }`}
                 >
@@ -85,7 +85,7 @@ export function CapitalStack({
         ))}
       </ul>
 
-      <div className="flex items-baseline justify-between gap-3 border-t border-border pt-3">
+      <div className="flex flex-col gap-1 border-t border-border pt-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
         <span className="text-label">Total project budget</span>
         <span className="text-mono text-text-1">{formatEUR(totalEur)}</span>
       </div>

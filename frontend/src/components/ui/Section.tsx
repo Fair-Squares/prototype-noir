@@ -14,7 +14,7 @@ export interface SectionProps {
 }
 
 const PADDING: Record<NonNullable<SectionProps["padding"]>, string> = {
-  normal: "p-5",
+  normal: "p-4 sm:p-5",
   tight: "p-4",
   none: "",
 };
@@ -45,7 +45,7 @@ export function Section({
             ) : null}
           </div>
           {actions ? (
-            <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
+            <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end [&_.btn]:w-full sm:[&_.btn]:w-auto">
               {actions}
             </div>
           ) : null}

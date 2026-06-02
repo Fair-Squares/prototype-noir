@@ -217,11 +217,9 @@ export default function PortfolioPage() {
                 {claimingRewards ? "Claiming…" : "Claim rewards"}
               </Button>
             ) : null}
-            <span className="hidden sm:contents">
-              <Link href="/dex" className="btn btn-ghost">
-                Trade shares
-              </Link>
-            </span>
+            <Link href="/dex" className="btn btn-ghost">
+              Trade shares
+            </Link>
           </>
         }
       />

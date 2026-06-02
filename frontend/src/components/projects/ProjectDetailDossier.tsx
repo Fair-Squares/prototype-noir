@@ -165,10 +165,10 @@ export function ProjectDetailDossier({
             return (
               <li
                 key={m.key}
-                className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                className="flex flex-col items-start gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
               >
                 <span className="min-w-0">
-                  <span className="text-body block truncate text-text-1">{m.label}</span>
+                  <span className="text-body block break-words text-text-1 sm:truncate">{m.label}</span>
                   <span className="text-caption text-text-3">{m.when}</span>
                 </span>
                 <StatusChip status={meta.kind} label={meta.label} />

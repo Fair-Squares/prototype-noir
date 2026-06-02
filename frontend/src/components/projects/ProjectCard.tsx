@@ -94,7 +94,7 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
       {/* Pre-funding: show the committee maths. Post-funding: show payout flow. */}
       {row.distributionOpened ? (
         <div className="border-t border-border pt-4">
-          <div className="flex items-baseline justify-between gap-3">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
             <span className="text-label inline-flex items-center gap-1">
               Distribution to depositors
               <InfoDot

@@ -38,7 +38,7 @@ export function ProjectDetailDistribution({
 
       {opened ? (
         <section className="surface p-5">
-          <div className="flex items-baseline justify-between gap-3">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
             <h2 className="text-heading inline-flex items-center gap-1 text-text-1">
               Distribution to depositors
               <InfoDot

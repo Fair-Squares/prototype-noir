@@ -116,25 +116,25 @@ export function ProjectDetailGovernance({
               <p className="text-caption text-text-2">{eligibility.reason}</p>
             ) : null}
             <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
                 <dt className="text-caption text-text-2">Investor role</dt>
                 <dd className="text-meta text-text-1">
                   {eligibility.investorRole ? "Yes" : "No"}
                 </dd>
               </div>
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
                 <dt className="text-caption text-text-2">Deposit ticket</dt>
                 <dd className="text-meta text-text-1">
                   {eligibility.hasDepositTicket ? "Yes" : "No"}
                 </dd>
               </div>
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
                 <dt className="text-caption text-text-2">Fund Shares exposure</dt>
                 <dd className="text-meta text-text-1">
                   {eligibility.hasFsftExposure ? "Yes" : "No"}
                 </dd>
               </div>
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
                 <dt className="text-caption text-text-2">Shares attested</dt>
                 <dd className="text-meta text-text-1">
                   {eligibility.hasFsftVotingAttestation ? "Yes" : "No"}
@@ -145,7 +145,7 @@ export function ProjectDetailGovernance({
         )}
       </section>
 
-      <Link href={`/governance/${proposal.id}`} className="btn btn-primary btn-sm">
+      <Link href={`/governance/${proposal.id}`} className="btn btn-primary btn-sm w-full sm:w-auto">
         {isActive && !window.closed ? "Review & vote in the memo" : "Open governance memo"}
       </Link>
     </div>

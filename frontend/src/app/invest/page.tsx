@@ -346,7 +346,7 @@ function InvestPageInner() {
           {/* Step 4: Amount */}
           {manualStep === 3 ? (
             <div className="space-y-4">
-              <div className="surface-muted flex items-baseline justify-between gap-3 p-4">
+              <div className="surface-muted flex flex-col gap-1 p-4 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
                 <span className="text-label">Available cash</span>
                 <span className="text-mono text-text-1">{formatEURDecimals(eurBalance)}</span>
               </div>
@@ -501,23 +501,23 @@ function InvestPageInner() {
             <AdvancedDetails summary="Transaction details">
               <dl className="divide-y divide-border">
                 {result.eurTransferTxHash ? (
-                  <div className="flex min-w-0 items-baseline justify-between gap-3 py-3">
+                  <div className="flex min-w-0 flex-col gap-1 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
                     <dt className="text-caption text-text-2">
                       EUR transfer
                       {result.eurTransferBlockNumber != null
                         ? ` · block ${result.eurTransferBlockNumber}`
                         : ""}
                     </dt>
-                    <dd className="text-mono min-w-0 truncate text-right text-text-1">
+                    <dd className="text-mono min-w-0 break-all text-text-1 sm:truncate sm:text-right">
                       {shortHash(result.eurTransferTxHash)}
                     </dd>
                   </div>
                 ) : null}
-                <div className="flex min-w-0 items-baseline justify-between gap-3 py-3">
+                <div className="flex min-w-0 flex-col gap-1 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
                   <dt className="text-caption text-text-2">
                     Private deposit{result.status ? ` · ${result.status}` : ""}
                   </dt>
-                  <dd className="text-mono min-w-0 truncate text-right text-text-1">
+                  <dd className="text-mono min-w-0 break-all text-text-1 sm:truncate sm:text-right">
                     {shortHash(result.txHash)}
                   </dd>
                 </div>

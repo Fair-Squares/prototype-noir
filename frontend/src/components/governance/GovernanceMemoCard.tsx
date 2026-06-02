@@ -40,7 +40,7 @@ export function GovernanceMemoCard({
 
   return (
     <article className="surface flex flex-col gap-4 p-5">
-      <header className="flex items-start justify-between gap-3">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="text-label">Funding request</p>
           <h3 className="text-heading mt-0.5 text-text-1">
@@ -58,7 +58,7 @@ export function GovernanceMemoCard({
         </p>
       </div>
 
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border pt-4">
+      <dl className="grid grid-cols-1 gap-x-4 gap-y-3 border-t border-border pt-4 sm:grid-cols-2">
         <div>
           <dt className="text-label">Quorum</dt>
           <dd className="text-body mt-0.5 text-mono text-text-1">
@@ -79,7 +79,7 @@ export function GovernanceMemoCard({
         </div>
       </dl>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+      <div className="flex flex-col items-stretch gap-3 border-t border-border pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <p className="text-caption min-w-0">
           {!isConnected
             ? "Connect a wallet to check your voting standing."
@@ -91,7 +91,7 @@ export function GovernanceMemoCard({
         </p>
         <Link
           href={href}
-          className="btn btn-secondary btn-sm flex-shrink-0"
+          className="btn btn-secondary btn-sm w-full flex-shrink-0 sm:w-auto"
           aria-label={`Open ${proposalLabel(proposal)}`}
         >
           {votingOpen && canVote ? "Review & vote" : "View memo"}

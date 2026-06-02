@@ -68,14 +68,14 @@ export function InvestQuote({ amountEur, eurBalance, navPerFsftEur }: InvestQuot
         {rows.map((row) => (
           <div
             key={row.label}
-            className="flex items-baseline justify-between gap-3 px-4 py-3"
+            className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3"
           >
             <dt className="text-caption flex items-center gap-1.5 text-text-2">
               <span>{row.label}</span>
               {row.info ? <InfoDot label={`About ${row.label}`} content={row.info} /> : null}
             </dt>
             <dd
-              className={`text-num min-w-0 break-words text-right ${
+              className={`text-num min-w-0 break-words sm:text-right ${
                 row.tone === "accent"
                   ? "text-fs-teal-dark font-semibold"
                   : "text-text-1"
