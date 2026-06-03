@@ -113,12 +113,29 @@ Use the wrapper:
 
 By default the script uses the host `aztec` CLI: each contract runs
 `aztec test`, which handles compile + TXE + oracle resolver
-internally. No docker required.
+internally. No docker required. The full suite is **66 tests** across the
+5 V2 contracts (kyc_verifier 7, housing_fund 24, governance 10,
+protocol_rewards 17, fsft_dex 8) and runs in CI on every push/PR
+(`.github/workflows/tests.yml`).
+
+The script compiles each contract **before** staging cross-contract
+dependency artifacts. This ordering matters: the `aztec compile` / `aztec
+test` wrapper skips compilation when `target/` already holds a `.json`
+newer than every source (see `needs_recompile` in the `@aztec/aztec`
+CLI), and a staged dependency artifact looks exactly like that — so
+staging first would make the wrapper skip building the main contract and
+TXE could not find `<pkg>-<Contract>.json`. New cross-contract tests must
+register their dep in `stage_cross_contract_deps` (the vendored AIP-20
+`Token` is a workspace member, so its artifact is staged from
+`contracts/vendor/aztec-standards/target`, not the member dir).
 
 Opt-in legacy docker path: `FS_AZTEC_TEST_DOCKER=1 ./scripts/aztec-test.sh`
 spawns TXE inside the pinned `aztecprotocol/aztec:4.3.0` image and runs
 `nargo test --oracle-resolver http://127.0.0.1:8080`. Slower (~65 s for
-the full suite) but useful for parity checks with CI.
+the full suite) but useful for parity checks with CI. NOTE: the docker
+path's inline staging only covers `housing_fund`'s KYCVerifier; the new
+governance / protocol_rewards / fsft_dex cross-contract tests are staged
+only on the host path, so run those via the default (host) path.
 
 If you see `Contract's public bytecode has not been transpiled` from
 TXE, the offending artifact was produced by raw `nargo compile` instead
@@ -127,13 +144,49 @@ recompiles when sources change).
 
 ## Adding more `aztec test` coverage
 
-Pattern lives in `noir-projects/noir-contracts/contracts/test/public_immutable_contract/src/main.nr` in the aztec-packages clone: a `mod tests { ... }` block inside the same file with `TestEnvironment::new()` + `env.deploy(...)` + `env.call_public(...)` / `env.call_private(...)`. Host nargo runs tests in ~5 s per contract. The order to add:
+Pattern lives in each contract's `src/test.nr`: a `use crate::Contract;` +
+`TestEnvironment::new()` + `env.deploy(...)` + `env.call_public(...)` /
+`env.call_private(...)` / `env.view_public(...)` / `env.execute_utility(...)`.
+`housing_fund/src/test.nr` is the richest reference (cross-contract deploy of a
+real KYCVerifier, public deposit→rent→reinvest E2E). Host nargo runs tests in
+~5 s per contract.
 
-1. KYCVerifier — issue → owner-can-prove-existence happy path; revoke → existence still proves but `is_credential_revoked` flips true.
-2. HousingFund — deposit_private → DepositNote present in caller's set; total_deposits aggregate bumps.
-3. Governance — cast_vote_private happy path; double-vote rejected (SingleUseClaim).
-4. ProtocolRewards — allocate_reward_private → RewardClaimNote present; claim_reward_private consumes and re-claim rejected.
-5. FSFTDex — place_order_private → commitment OPEN; cancel_order_private flips to CANCELLED.
+**Coverage status (public-path E2Es landed; private-note E2Es still deferred):**
+
+1. ✅ KYCVerifier — issue/revoke happy paths + commitment parity (7 tests).
+2. ✅ HousingFund — rent ingestion, ROR, public reinvest E2E (24 tests).
+3. ✅ Governance — proposal-create lifecycle + finalize/execute guards (10 tests).
+   `cast_vote_private` happy path / double-vote (SingleUseClaim) is the remaining
+   PRIVATE E2E — no public entrypoint writes the yes/no tally, so it needs hinted
+   KYC + deposit notes.
+4. ✅ ProtocolRewards — checkpoint → set_user_epoch_weights (40/40/20 split, real
+   FSFT Token) → public `claim` mints, plus emission-schedule + guard tests
+   (17 tests). `allocate_reward_private` / `claim_reward_private` (hinted reward
+   note + re-claim rejection) is the remaining PRIVATE E2E.
+5. ✅ FSFTDex — risk-policy guards, orderbook snapshot (real HousingFund),
+   can_trade (real KYCVerifier) (8 tests). `place_order` → match → `cancel_order`
+   / `claim` is the remaining PRIVATE E2E (hinted KYC note + token escrow +
+   authwit).
+
+## Frontend unit tests (Vitest)
+
+Pure logic modules under `frontend/src/lib` are unit-tested with Vitest (the
+only test runner; no DOM/Aztec node needed):
+
+```bash
+cd frontend && npm test        # vitest run (also in CI)
+cd frontend && npm run test:watch
+```
+
+Config: `frontend/vitest.config.ts` (node env, `@/` alias mirrors tsconfig);
+tests live in `frontend/src/lib/__tests__/`. Current coverage: `proposalLifecycle`
+(status/voting-window/quorum/"Voting ended"), `projectDossier` (slug resolution,
+`getProjectDossier` returns `null` when unauthored, `aggregateImpact`,
+`modelledRorRent` = the €500K@3%→€1,250/mo example), and an emission **parity
+guard** (`rewardsEmissionParity`) asserting `simulationStore` mirrors the
+on-chain `protocol_rewards` curve (8M pool / 120 epochs / 13-12-11-10… bps /
+40-40-20 split) — keep it green alongside the Noir
+`test_epoch_target_follows_emission_schedule` when either side changes.
 
 ## Economic model: rent, return & NAV (canonical)
 
