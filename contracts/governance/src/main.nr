@@ -72,7 +72,7 @@ pub contract Governance {
         // V2: nullifier per (proposal_id, voter) for secret-ballot private voting.
         vote_claims: Map<Field, Owned<SingleUseClaim<Context>, Context>, Context>,
 
-        // Admin (the deployer) — gates execute_proposal so only an authorized
+        // Admin (the deployer) -- gates execute_proposal so only an authorized
         // caller can flip a PASSED proposal to EXECUTED. Appended at the END of
         // the struct so existing storage slots are not shifted.
         admin: PublicMutable<AztecAddress, Context>,
@@ -181,7 +181,7 @@ pub contract Governance {
 
         // Compute the credential's revocation commitment for the public tail.
         //
-        // PRIVACY NOTE (M12 — known linkage): this commitment is the constant
+        // PRIVACY NOTE (M12 -- known linkage): this commitment is the constant
         // handle `poseidon2([owner, nonce])`, the same value HousingFund's
         // deposit_private tail publishes. An on-chain observer can therefore
         // cluster a user's deposits and votes by matching this field. See the

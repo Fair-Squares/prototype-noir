@@ -57,6 +57,7 @@ _stage_dep() { # _stage_dep <main_pkg> <dep_pkg> <ContractName>
 stage_cross_contract_deps() {
   case "$1" in
     housing_fund) _stage_dep housing_fund kyc_verifier KYCVerifier ;;
+    governance)   _stage_dep governance kyc_verifier KYCVerifier ;;
   esac
 }
 

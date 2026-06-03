@@ -44,8 +44,8 @@ pub contract KYCVerifier {
         // PRIVACY NOTE (M15): these address-keyed PUBLIC maps, together with the
         // public `is_verified` / `is_investor` views, leak the full set of
         // KYC-verified / investor addresses. Every public caller of
-        // `is_investor(caller)` — HousingFund.deposit, Governance.create_proposal,
-        // FSFTDex.can_trade, ProtocolRewards.claim — publicly confirms that
+        // `is_investor(caller)` -- HousingFund.deposit, Governance.create_proposal,
+        // FSFTDex.can_trade, ProtocolRewards.claim -- publicly confirms that
         // caller's KYC status. These maps/views should be treated as
         // TRANSPARENCY-MODE ONLY; everyday flows should route through the V2
         // private credential path (issue_credential + hinted-note attestation,

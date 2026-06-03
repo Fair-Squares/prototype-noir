@@ -62,7 +62,7 @@ unconstrained fn test_revoke_credential_flips_view() {
 // these ever diverge an off-chain revocation would silently fail to bind.
 #[test]
 unconstrained fn test_commitment_parity_matches_in_circuit_hash() {
-    let (env, kyc_addr, _admin) = setup();
+    let (mut env, kyc_addr, _admin) = setup();
     let alice = env.create_light_account();
     let nonce = Field::from(11);
 
@@ -77,7 +77,7 @@ unconstrained fn test_commitment_parity_matches_in_circuit_hash() {
 // revocation can never collaterally revoke an unrelated credential.
 #[test]
 unconstrained fn test_commitment_is_nonce_sensitive() {
-    let (env, kyc_addr, _admin) = setup();
+    let (mut env, kyc_addr, _admin) = setup();
     let alice = env.create_light_account();
 
     let c1 = env.execute_utility(

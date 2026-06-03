@@ -999,15 +999,15 @@ pub contract HousingFund {
         // Compute the credential's revocation commitment from the note's packed
         // fields so the public tail can reject revoked credentials.
         //
-        // PRIVACY NOTE (M12 — known linkage): this commitment is the constant
+        // PRIVACY NOTE (M12 -- known linkage): this commitment is the constant
         // handle `poseidon2([owner, nonce])`. The identical value is also
         // published by Governance.cast_vote_private's public tail, so an
         // on-chain observer can cluster the same user's deposits and votes by
         // matching the commitment field (the owner/nonce pre-image stays
         // private, but the equality of the published field is enough to link).
-        // Fully closing this requires checking revocation privately — migrate
+        // Fully closing this requires checking revocation privately -- migrate
         // KYCVerifier.revocations to DelayedPublicMutable (verify the pattern
-        // against aztec-packages v4.3 first) — or binding a per-action salt
+        // against aztec-packages v4.3 first) -- or binding a per-action salt
         // `poseidon2([owner, nonce, action_domain])` AND having the verifier
         // register a revocation entry per action domain. Documented here until
         // that migration lands.
