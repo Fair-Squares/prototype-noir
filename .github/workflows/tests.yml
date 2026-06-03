@@ -1,0 +1,77 @@
+name: tests
+
+# Runs the Noir/Aztec contract test suite and the frontend unit tests on every
+# push to a main/working branch and on pull requests. Keeps test coverage from
+# silently regressing (previously nothing ran on push/PR).
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    name: Noir / Aztec contract tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # The Aztec 4.3.0 host CLI installer requires Node >= 24.12.0.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      # Speeds up reruns: the bb verification-key cache and the nargo git-dep
+      # cache are the slow parts of `aztec test`.
+      - name: Cache bb VK + nargo deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bb
+            ~/nargo
+          key: aztec-4.3.0-${{ runner.os }}-${{ hashFiles('contracts/**/Nargo.toml') }}
+          restore-keys: |
+            aztec-4.3.0-${{ runner.os }}-
+
+      - name: Install Aztec toolchain (4.3.0)
+        run: |
+          curl -sL https://install.aztec.network/4.3.0 -o /tmp/aztec-install.sh
+          VERSION=4.3.0 NON_INTERACTIVE=1 bash /tmp/aztec-install.sh
+          echo "$HOME/.aztec/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.aztec/current/bin" >> "$GITHUB_PATH"
+
+      - name: Verify toolchain
+        run: aztec --version
+
+      - name: Run contract test suite
+        run: ./scripts/aztec-test.sh
+
+  frontend:
+    name: Frontend unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests (vitest)
+        run: npm test
+
+      - name: Type-check
+        run: npm run typecheck

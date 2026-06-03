@@ -87,3 +87,58 @@ unconstrained fn test_create_proposal_rejects_non_investor() {
     // stranger was never registered as a KYC investor.
     env.call_public(stranger, Governance::at(gov).create_proposal(Field::from(7), 500));
 }
+
+#[test]
+unconstrained fn test_min_quorum_votes_set() {
+    let (env, addr, _admin) = setup();
+    assert_eq(env.execute_utility(Governance::at(addr).get_min_quorum_votes()), 2);
+}
+
+#[test]
+unconstrained fn test_two_proposals_increment_ids() {
+    let (mut env, gov, _admin, proposer) = setup_with_investor();
+    env.call_public(proposer, Governance::at(gov).create_proposal(Field::from(1), 100));
+    env.call_public(proposer, Governance::at(gov).create_proposal(Field::from(2), 200));
+    assert_eq(env.execute_utility(Governance::at(gov).get_proposal_count()), 2);
+    // The two proposals are distinct rows keyed by their sequential id.
+    assert_eq(env.execute_utility(Governance::at(gov).get_proposal(0)).amount, 100);
+    assert_eq(env.execute_utility(Governance::at(gov).get_proposal(1)).amount, 200);
+}
+
+#[test]
+unconstrained fn test_public_proposal_views_match() {
+    let (mut env, gov, _admin, proposer) = setup_with_investor();
+    env.call_public(proposer, Governance::at(gov).create_proposal(Field::from(9), 750));
+    // The public (#[view]) accessors agree with the utility ProposalView.
+    assert_eq(env.view_public(Governance::at(gov).get_proposal_status_public(0)), 0); // ACTIVE
+    assert_eq(env.view_public(Governance::at(gov).get_proposal_amount_public(0)), 750);
+}
+
+// -- finalize / execute guards ------------------------------------------------
+// The yes/no tally only moves via the private cast_vote_private path (hinted KYC
+// + deposit notes), so the PASSED/FAILED outcomes remain a deferred private
+// E2E. These cover the public-path guards that gate finalize and execute.
+
+#[test(should_fail_with = "voting window still open")]
+unconstrained fn test_finalize_before_deadline_fails() {
+    let (mut env, gov, _admin, proposer) = setup_with_investor();
+    env.call_public(proposer, Governance::at(gov).create_proposal(Field::from(42), 1000));
+    // The 300-block voting window has not elapsed (only a handful of blocks have
+    // been mined), so finalize must reject.
+    env.call_public(proposer, Governance::at(gov).finalize_proposal(0));
+}
+
+#[test(should_fail_with = "not admin")]
+unconstrained fn test_execute_proposal_requires_admin() {
+    let (mut env, gov, _admin, _proposer) = setup_with_investor();
+    let stranger = env.create_light_account();
+    env.call_public(stranger, Governance::at(gov).execute_proposal(0));
+}
+
+#[test(should_fail_with = "proposal must be in PASSED state")]
+unconstrained fn test_execute_proposal_rejects_non_passed() {
+    let (mut env, gov, admin, proposer) = setup_with_investor();
+    env.call_public(proposer, Governance::at(gov).create_proposal(Field::from(42), 1000));
+    // Proposal 0 is ACTIVE, not PASSED, so the admin cannot execute it yet.
+    env.call_public(admin, Governance::at(gov).execute_proposal(0));
+}
