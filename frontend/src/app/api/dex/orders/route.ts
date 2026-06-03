@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
+import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simGetDexOrderbook, simPlaceDexOrder } from "@/lib/simulationStore";
 import { requireAztecTxHash } from "@/lib/txHash";
 import { simResult } from "@/lib/aztecSim";
@@ -32,14 +32,8 @@ export async function GET(request: NextRequest) {
   const address = searchParams.get("address") ?? undefined;
   const accountIndex = Number(searchParams.get("accountIndex") ?? "0");
 
-  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
-    return NextResponse.json(simGetDexOrderbook(address));
-  }
   if (!isLiveModeEnabled()) {
-    return NextResponse.json(
-      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
-      { status: 503 }
-    );
+    return NextResponse.json(simGetDexOrderbook(address));
   }
 
   try {
@@ -115,18 +109,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "address, side and amount are required" }, { status: 400 });
   }
 
-  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
+  if (!isLiveModeEnabled()) {
     const result = simPlaceDexOrder(address, side, Number(amount), limitPriceEur ? Number(limitPriceEur) : undefined);
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ success: true, order: result.order, message: "Order placed", source: "simulation" });
   }
-  if (!isLiveModeEnabled()) {
-    return NextResponse.json(
-      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
-      { status: 503 }
-    );
-  }
 
+  // Tracks any public->private shield self-transfer that commits as a separate
+  // tx before place_order, so the catch can tell the caller the shield landed
+  // even when placement reverts. Declared here so it's in scope for the catch.
+  let shieldedAmount = 0n;
   try {
     const dexAddr = process.env.NEXT_PUBLIC_FSFT_DEX_ADDRESS ?? "";
     const kycAddr = process.env.NEXT_PUBLIC_KYC_VERIFIER_ADDRESS ?? "";
@@ -220,13 +212,19 @@ export async function POST(request: NextRequest) {
     // public balance first — a self public->private transfer that doesn't leak
     // the order — so buying "just works" from any EUR balance. (A SELL escrows
     // private FSFT, which the seller already holds, so no shielding is needed.)
+    // Track whether a shield self-transfer ran: it's a separate tx that commits
+    // before place_order. If placement later reverts, the shielded EUR stays in
+    // the buyer's PRIVATE balance (a recoverable self-transfer, not a loss), but
+    // the caller should be told their public->private move did land so they
+    // aren't surprised by the balance shift.
     if (sideCode === 0) {
       const privateEur = BigInt(
         toNum(simResult(await token.methods.balance_of_private(from).simulate({ from })))
       );
       if (privateEur < escrowAmount) {
+        shieldedAmount = escrowAmount - privateEur;
         await token.methods
-          .transfer_public_to_private(from, from, escrowAmount - privateEur, 0)
+          .transfer_public_to_private(from, from, shieldedAmount, 0)
           .send({ from });
       }
     }
@@ -277,6 +275,23 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[dex/orders POST]", msg);
+    // If a shield self-transfer already committed before placement failed, the
+    // EUR moved from the buyer's public to private balance (recoverable, not
+    // lost). Surface that so the UI can explain the balance shift.
+    if (shieldedAmount > 0n) {
+      return NextResponse.json(
+        {
+          error: msg,
+          shielded: {
+            amount: Number(shieldedAmount),
+            notice:
+              "A separate public->private EUR transfer committed before the order failed. " +
+              "Those funds are now in your private EUR balance (recoverable); no EUR was lost.",
+          },
+        },
+        { status: 500 }
+      );
+    }
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

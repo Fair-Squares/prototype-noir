@@ -250,6 +250,13 @@ pub contract FSFTDex {
         }
 
         // Ownership receipt -- the only person<->order link, kept in the caller's PXE.
+        // INVARIANT: the OrderOwnerNote is intentionally NOT nullified on
+        // claim/cancel/fill. Replay is harmless today because claim zeroes the
+        // per-owner_tag claimable balance (a second claim sees 0) and cancel
+        // flips the order to CANCELLED (a second cancel reverts "not
+        // cancellable"). Any future PARTIAL-claim path must restore this
+        // anti-replay guarantee itself (e.g. nullify the note, or track
+        // per-(note, action) progress) before relying on the note being single-use.
         let note = OrderOwnerNote::new(caller, secret_owner_key, supplied_seq);
         self.storage.order_owner_notes.at(caller).insert(note).deliver(
             MessageDelivery.ONCHAIN_CONSTRAINED,
@@ -323,7 +330,9 @@ pub contract FSFTDex {
 
         // Bounded on-chain match against the caller-referenced resting orders.
         // Every candidate is VALIDATED (crossing exact price + opposite side +
-        // active + not expired + strictly older = time priority + not self-cross).
+        // active + not expired + strictly older = time priority). Self-cross is
+        // not (and cannot be) prevented in the anonymous model -- see the note at
+        // the per-maker checks below.
         let mut remaining = amount;
         for i in 0..MAX_FILLS {
             if (i as u32) < match_count {
@@ -341,7 +350,13 @@ pub contract FSFTDex {
                 assert(m < seq, "maker not older");
                 assert(now < m_expiry, "maker expired");
                 assert(m_price == price_bps, "exact price only");
-                assert(m_tag != owner_tag, "self-cross");
+                // No self-cross guard: in the anonymous model each order draws a
+                // fresh `secret_owner_key`, so `owner_tag = poseidon2([secret,
+                // seq])` differs between any two orders -- even two from the same
+                // trader. A `m_tag != owner_tag` check therefore always passes and
+                // cannot actually stop a user matching their own orders. Self-cross
+                // is unpreventable here (and economically a no-op: the trader pays
+                // both legs), so we don't pretend to block it.
 
                 let fill = if remaining < m_remaining { remaining } else { m_remaining };
                 if fill > 0 {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
+import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simGetKYCProfile, simGetVotingEligibility } from "@/lib/simulationStore";
 import { simResult } from "@/lib/aztecSim";
 
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
   }
 
   // ── Simulation mode ──────────────────────────────────────────────────────
-  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
+  if (!isLiveModeEnabled()) {
     const profile = simGetKYCProfile(address);
     const eligibility = simGetVotingEligibility(address);
     return NextResponse.json({
@@ -47,12 +47,6 @@ export async function GET(request: NextRequest) {
       rewardsEligible: profile.isInvestor && (eligibility.hasDepositTicket || eligibility.hasFsftExposure),
       source: "simulation",
     });
-  }
-  if (!isLiveModeEnabled()) {
-    return NextResponse.json(
-      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
-      { status: 503 }
-    );
   }
 
   // ── Live mode: call is_verified() utility function on KYCVerifier ────────

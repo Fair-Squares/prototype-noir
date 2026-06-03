@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
+import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simSetKYCVerified } from "@/lib/simulationStore";
 import { requireAztecTxHash } from "@/lib/txHash";
 
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Simulation mode ──────────────────────────────────────────────────────
-  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
+  if (!isLiveModeEnabled()) {
     simSetKYCVerified(userAddress);
     return NextResponse.json({
       success: true,
@@ -41,12 +41,6 @@ export async function POST(request: NextRequest) {
       isInvestor: true,
       roles: ["investor"],
     });
-  }
-  if (!isLiveModeEnabled()) {
-    return NextResponse.json(
-      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
-      { status: 503 }
-    );
   }
 
   // ── Live mode: call KYCVerifier.verify(userAddress) as admin ─────────────

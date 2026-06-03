@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
+import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simResult } from "@/lib/aztecSim";
 
 // Lists the real-estate deed NFTs (AIP-721) the housing fund holds. The fund
@@ -7,14 +7,8 @@ import { simResult } from "@/lib/aztecSim";
 // opens, so we enumerate proposals and keep the ones whose deed is owned by the
 // fund. Valuation/amount comes from the fund's per-proposal distribution state.
 export async function GET() {
-  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
-    return NextResponse.json({ properties: [], source: "simulation" });
-  }
   if (!isLiveModeEnabled()) {
-    return NextResponse.json(
-      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
-      { status: 503 }
-    );
+    return NextResponse.json({ properties: [], source: "simulation" });
   }
 
   try {

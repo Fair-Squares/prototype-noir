@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
+import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simRecordRent } from "@/lib/simulationStore";
 import { getAztecTxMeta } from "@/lib/txHash";
 
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Simulation mode ──────────────────────────────────────────────────────
-  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
+  if (!isLiveModeEnabled()) {
     const result = simRecordRent(pid, amt);
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({
@@ -32,12 +32,6 @@ export async function POST(request: NextRequest) {
       message: `Recorded €${amt.toLocaleString()} rent for property ${pid} (simulation)`,
       txHash: `sim_rent_${Date.now()}`,
     });
-  }
-  if (!isLiveModeEnabled()) {
-    return NextResponse.json(
-      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
-      { status: 503 }
-    );
   }
 
   // ── Live mode: call HousingFund.record_rent via the server wallet ─────────

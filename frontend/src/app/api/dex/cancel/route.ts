@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
+import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simCancelDexOrder } from "@/lib/simulationStore";
 import { requireAztecTxHash } from "@/lib/txHash";
 
@@ -16,16 +16,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "address and orderId (seq) are required" }, { status: 400 });
   }
 
-  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
+  if (!isLiveModeEnabled()) {
     const result = simCancelDexOrder(address, Number(orderId));
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ success: true, message: "Order cancelled", source: "simulation" });
-  }
-  if (!isLiveModeEnabled()) {
-    return NextResponse.json(
-      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
-      { status: 503 }
-    );
   }
 
   try {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isLiveModeEnabled, isVercelSimulationMode } from "@/lib/aztecLive";
+import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simAttestFsftForVoting, simGetVotingEligibility } from "@/lib/simulationStore";
 import { simResult } from "@/lib/aztecSim";
 
@@ -12,14 +12,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "address required" }, { status: 400 });
   }
 
-  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
-    return NextResponse.json({ ...simGetVotingEligibility(address), source: "simulation" });
-  }
   if (!isLiveModeEnabled()) {
-    return NextResponse.json(
-      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
-      { status: 503 }
-    );
+    return NextResponse.json({ ...simGetVotingEligibility(address), source: "simulation" });
   }
 
   try {
@@ -122,7 +116,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unsupported action" }, { status: 400 });
   }
 
-  if (!isLiveModeEnabled() && isVercelSimulationMode()) {
+  if (!isLiveModeEnabled()) {
     const result = simAttestFsftForVoting(address);
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({
@@ -131,12 +125,6 @@ export async function POST(request: NextRequest) {
       privateFsftProofMode: "aztec-private-proven",
       source: "simulation",
     });
-  }
-  if (!isLiveModeEnabled()) {
-    return NextResponse.json(
-      { error: "Live mode is required locally. Set AZTEC_LIVE=true (simulation is Vercel-only)." },
-      { status: 503 }
-    );
   }
 
   try {

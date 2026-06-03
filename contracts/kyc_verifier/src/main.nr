@@ -44,8 +44,8 @@ pub contract KYCVerifier {
         // PRIVACY NOTE (M15): these address-keyed PUBLIC maps, together with the
         // public `is_verified` / `is_investor` views, leak the full set of
         // KYC-verified / investor addresses. Every public caller of
-        // `is_investor(caller)` — HousingFund.deposit, Governance.create_proposal,
-        // FSFTDex.can_trade, ProtocolRewards.claim — publicly confirms that
+        // `is_investor(caller)` -- HousingFund.deposit, Governance.create_proposal,
+        // FSFTDex.can_trade, ProtocolRewards.claim -- publicly confirms that
         // caller's KYC status. These maps/views should be treated as
         // TRANSPARENCY-MODE ONLY; everyday flows should route through the V2
         // private credential path (issue_credential + hinted-note attestation,
@@ -154,6 +154,13 @@ pub contract KYCVerifier {
     /// Utility: deterministic commitment for a (owner, nonce) pair. The verifier
     /// records this off-chain at issuance so it can later revoke without
     /// touching the recipient's private note set.
+    ///
+    /// AUTHORITY (L30): this is an UNCONSTRAINED helper for off-chain callers
+    /// only -- its result is NOT trusted by any constrained path. The
+    /// authoritative commitment is the one recomputed IN-CIRCUIT from a proven
+    /// KYC note's packed fields (`poseidon2([note.owner, note.nonce])`) by the
+    /// consuming contracts (HousingFund/Governance/FSFTDex tails). Never feed
+    /// this function's output into a revocation check expecting it to be bound.
     #[external("utility")]
     unconstrained fn compute_revocation_commitment(
         owner: AztecAddress,

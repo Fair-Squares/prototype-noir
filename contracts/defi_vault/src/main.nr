@@ -14,6 +14,13 @@ use aztec::macros::aztec;
 ///
 /// `yield_rate_bps` is advertised/expected-rate metadata only; it is never used
 /// to compute or accrue any yield.
+///
+/// DEPLOY STATUS (L34): this contract is deployed and wired (bootstrap deploys
+/// it and sets it on HousingFund), but it is NOT invoked on any live
+/// deposit/claim/rent path -- no production flow calls `deposit`/`accrue_yield`
+/// today. It exists as the source-of-truth seam for a future real yield-source
+/// adapter. Treat it as dormant scaffolding until an adapter is wired via
+/// `set_yield_source`; gate it out of the default deploy if that never lands.
 #[aztec]
 pub contract DeFiVault {
     use aztec::{
