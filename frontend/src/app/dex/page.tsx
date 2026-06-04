@@ -59,6 +59,8 @@ export default function DexPage() {
   // Per-order in-flight action (keyed by seq) so each row's buttons spin alone.
   const [busySeq, setBusySeq] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  // Two-step confirm for the destructive "cancel order" action.
+  const [confirmCancelSeq, setConfirmCancelSeq] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -299,9 +301,42 @@ export default function DexPage() {
                       </Button>
                     ) : null}
                     {o.cancellable ? (
-                      <Button variant="danger" size="sm" loading={rowBusy} disabled={rowBusy} onClick={() => cancelOrder(o.seq)}>
-                        Cancel order
-                      </Button>
+                      confirmCancelSeq === o.seq ? (
+                        <>
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            loading={rowBusy}
+                            disabled={rowBusy}
+                            onClick={() => {
+                              setConfirmCancelSeq(null);
+                              cancelOrder(o.seq);
+                            }}
+                          >
+                            Confirm cancel
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={rowBusy}
+                            onClick={() => setConfirmCancelSeq(null)}
+                          >
+                            Keep order
+                          </Button>
+                          <span className="text-caption text-text-3">
+                            Cancelling frees your unfilled escrow back to claimable.
+                          </span>
+                        </>
+                      ) : (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={rowBusy}
+                          onClick={() => setConfirmCancelSeq(o.seq)}
+                        >
+                          Cancel order
+                        </Button>
+                      )
                     ) : null}
                     {!hasEur && !hasFsft && !o.cancellable ? (
                       <span className="text-caption text-text-3">Nothing to do — fully settled.</span>

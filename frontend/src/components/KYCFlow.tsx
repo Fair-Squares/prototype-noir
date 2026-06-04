@@ -9,6 +9,17 @@ const DEV_MODE =
   process.env.NEXT_PUBLIC_DEV_MODE === "true" ||
   process.env.NEXT_PUBLIC_SIMULATION === "true";
 
+type VerifyPhase = "idle" | "requesting" | "waiting" | "registering";
+
+// User-facing status for each step of the flow. Empty for "idle" (the Start
+// button speaks for itself); the raw phase name stays in the dev-only readout.
+const PHASE_STATUS: Record<VerifyPhase, string> = {
+  idle: "",
+  requesting: "Preparing your verification…",
+  waiting: "Waiting for your proof — complete it in your identity app, then return here.",
+  registering: "Recording your verified status privately…",
+};
+
 interface KYCFlowProps {
   userAddress: string;
   isVerified: boolean;
@@ -19,7 +30,7 @@ interface KYCFlowProps {
 export default function KYCFlow({ userAddress, isVerified, isInvestor, onVerified }: KYCFlowProps) {
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [phase, setPhase] = useState<"idle" | "requesting" | "waiting" | "registering">("idle");
+  const [phase, setPhase] = useState<VerifyPhase>("idle");
   const [error, setError] = useState<string | null>(null);
 
   const completeRegistration = async (devMode = false) => {
@@ -146,9 +157,11 @@ export default function KYCFlow({ userAddress, isVerified, isInvestor, onVerifie
           <Button variant="secondary" onClick={handleDevSkip} disabled={loading}>
             Dev skip
           </Button>
-        ) : (
-          <span className="text-caption text-text-3">Phase: {phase}</span>
-        )}
+        ) : PHASE_STATUS[phase] ? (
+          <span className="text-caption text-text-3" aria-live="polite">
+            {PHASE_STATUS[phase]}
+          </span>
+        ) : null}
       </ActionBar>
 
       {DEV_MODE && (
