@@ -106,6 +106,43 @@ export default function RewardsPage() {
         </Alert>
       ) : null}
 
+      {/* Plain-language framing before any FSP/epoch terminology: what the
+          program rewards and how the three kinds of participation are weighted. */}
+      {overview ? (
+        <Section title="A participation program, not yield">
+          <p className="text-body max-w-2xl text-text-2">
+            A fixed pool of {symbol} recognises how you take part in Fair Squares —
+            it is not interest or trading yield. Your share is weighted across three
+            kinds of participation:
+          </p>
+          <dl className="mt-4 grid gap-3 sm:grid-cols-3">
+            <WeightCard
+              pct={overview.weighting.deposit}
+              label="Keeping a deposit"
+              note="Capital you commit to the fund"
+            />
+            <WeightCard
+              pct={overview.weighting.fsft}
+              label="Holding Fund Shares"
+              note="The FSFT a deposit gives you"
+            />
+            <WeightCard
+              pct={overview.weighting.governance}
+              label="Voting"
+              note="Taking part in funding decisions"
+            />
+          </dl>
+          <p className="text-caption mt-4 text-text-3">
+            Released on a fixed schedule across {overview.token.totalEpochs} epochs;
+            claiming happens in your account. Full mechanics in{" "}
+            <Link href="/explain" className="text-fs-teal-dark underline">
+              How it works
+            </Link>
+            .
+          </p>
+        </Section>
+      ) : null}
+
       {loading && !overview ? (
         <KpiGrid cols={4}>
           <SkeletonKpi />
@@ -207,19 +244,19 @@ export default function RewardsPage() {
         </Section>
       ) : null}
 
-      {overview ? (
-        <Section padding="tight">
-          <p className="text-meta text-text-3">
-            How rewards are weighted: {overview.weighting.deposit}% for deposits,{" "}
-            {overview.weighting.fsft}% for property tokens,{" "}
-            {overview.weighting.governance}% for governance. Full mechanics are in{" "}
-            <Link href="/explain" className="text-fs-teal-dark underline">
-              Explain
-            </Link>
-            .
-          </p>
-        </Section>
-      ) : null}
+    </div>
+  );
+}
+
+/** A single participation-weight tile: the % big, then plain-language meaning. */
+function WeightCard({ pct, label, note }: { pct: number; label: string; note: string }) {
+  return (
+    <div className="surface-muted p-4">
+      <dt className="text-kpi-sm text-text-1">{pct}%</dt>
+      <dd className="mt-1">
+        <span className="text-body font-semibold text-text-1">{label}</span>
+        <span className="text-caption mt-0.5 block text-text-3">{note}</span>
+      </dd>
     </div>
   );
 }

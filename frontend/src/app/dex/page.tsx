@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActionBar,
+  AdvancedDetails,
   Alert,
   Button,
   DataTable,
@@ -200,14 +201,21 @@ export default function DexPage() {
         ) : null}
       </KpiGrid>
 
-      <Alert tone="info" title="How secondary trades work here">
-        The order book below is <strong>public</strong>, but <strong>who</strong> posted each order is not -
-        orders carry no owner on chain. Matching is <strong>automatic, on-chain</strong>: when you place an
-        order that crosses a resting one at the same price, it settles in the same transaction (no bot, no
-        waiting). Settlement is over <strong>private balances</strong> - to <strong>buy</strong> {fundSymbol} you
-        must shield {eurSymbol} into your private balance first; to <strong>sell</strong> you need private {fundSymbol}.
-        Proceeds accrue to your order and you <strong>claim</strong> them from <strong>Your orders</strong> below.
-      </Alert>
+      <AdvancedDetails summary="How secondary trading works">
+        <p className="text-body text-text-2">
+          The order book below is <strong>public</strong>, but <strong>who</strong> posted each order is not —
+          orders carry no owner on chain. Matching is <strong>automatic, on-chain</strong>: when you place an
+          order that crosses a resting one at the same price, it settles in the same transaction (no bot, no
+          waiting). Settlement is over <strong>private balances</strong> — to <strong>buy</strong> {fundSymbol} you
+          must shield {eurSymbol} into your private balance first; to <strong>sell</strong> you need private {fundSymbol}.
+          Proceeds accrue to your order and you <strong>claim</strong> them from <strong>Your orders</strong> below.
+        </p>
+      </AdvancedDetails>
+
+      <p className="text-caption text-text-3">
+        Liquidity here can be thin — an order only matches when another member crosses your price, so it may rest
+        unfilled. The reference price is the last issuance price, not a live market quote.
+      </p>
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <Section title="Place an order" description={`Buy or sell ${fundSymbol}. If it crosses a resting order at the same price it matches on-chain immediately; otherwise it rests in the book.`}>
