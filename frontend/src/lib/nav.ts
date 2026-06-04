@@ -28,14 +28,17 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Portal",
     items: [
-      { num: "01", label: "Overview",     href: "/",           blurb: "Fund position at a glance",      tier: "primary" },
-      { num: "02", label: "Portfolio",    href: "/portfolio",  blurb: "Your balances and rewards",      tier: "primary" },
-      { num: "03", label: "Projects",     href: "/fund",       blurb: "Housing fund and properties",    tier: "primary" },
-      { num: "04", label: "Invest",       href: "/invest",     blurb: "Deposit and withdraw",           tier: "primary" },
-      { num: "05", label: "Governance",   href: "/governance", blurb: "Proposals and voting",           tier: "primary" },
-      { num: "06", label: "Trade",        href: "/dex",        blurb: "Shares and EUR orderbook",       tier: "more-account" },
-      { num: "07", label: "Verification", href: "/kyc",        blurb: "Identity and investor status",   tier: "more-account" },
-      { num: "08", label: "Rewards",      href: "/rewards",    blurb: "Participation rewards",          tier: "more-account" },
+      // Primary nav is intentionally minimal (CLAUDE.md → "Navigation target"):
+      // Home · Projects · Portfolio. Everything else lives under "More", and
+      // Invest is contextual — started from a project, not a top-level tab.
+      { num: "01", label: "Home",         href: "/",           blurb: "Featured project and your next step", tier: "primary" },
+      { num: "02", label: "Projects",     href: "/fund",       blurb: "Housing projects and homes",          tier: "primary" },
+      { num: "03", label: "Portfolio",    href: "/portfolio",  blurb: "Your position, income and claims",    tier: "primary" },
+      { num: "04", label: "Invest",       href: "/invest",     blurb: "Deposit and withdraw",                tier: "more-account" },
+      { num: "05", label: "Governance",   href: "/governance", blurb: "Proposals and voting",                tier: "more-account" },
+      { num: "06", label: "Trade",        href: "/dex",        blurb: "Shares and EUR orderbook",            tier: "more-account" },
+      { num: "07", label: "Rewards",      href: "/rewards",    blurb: "Participation rewards",               tier: "more-account" },
+      { num: "08", label: "Verification", href: "/kyc",        blurb: "Identity and investor status",        tier: "more-account" },
     ],
   },
   {

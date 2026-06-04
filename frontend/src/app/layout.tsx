@@ -8,6 +8,7 @@ import { ShellProvider } from "@/components/shell/ShellProvider";
 import SkipLink from "@/components/shell/SkipLink";
 import TopBar from "@/components/shell/TopBar";
 import MobileDrawer from "@/components/shell/MobileDrawer";
+import BottomNav from "@/components/shell/BottomNav";
 
 // Body — DM Sans, the geometric-humanist companion to Nexa (per the Fair Squares
 // design system). Variable font, self-hosted via next/font — no render-blocking
@@ -43,9 +44,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ProofSignalsProvider>
             <ShellProvider>
               <SkipLink />
-              <div className="flex min-h-screen flex-col">
+              {/* Bottom padding on mobile clears the fixed bottom nav. */}
+              <div className="flex min-h-screen flex-col pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
                 <TopBar />
                 <MobileDrawer />
+                <BottomNav />
 
                 {/* Single, full-width content column — no left or right rail. */}
                 <main

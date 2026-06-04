@@ -5,14 +5,14 @@ import { useEffect, useState } from "react";
 import {
   AdvancedDetails,
   Alert,
-  Button,
+  KpiCard,
+  KpiGrid,
   Section,
+  SkeletonKpi,
   SkeletonRow,
-  StatusChip,
 } from "@/components/ui";
 import {
   FundHealthKpis,
-  FundHealthKpisSkeleton,
   FundParticipationKpis,
 } from "@/components/overview/FundHealthKpis";
 import { FundingRequestsPreview } from "@/components/overview/FundingRequestsPreview";
@@ -23,6 +23,8 @@ import {
 } from "@/components/overview/OverviewNextStep";
 import { ProjectsPreview } from "@/components/overview/ProjectsPreview";
 import { ImpactStrip } from "@/components/overview/ImpactStrip";
+import { FeaturedProject } from "@/components/overview/FeaturedProject";
+import { getProjectDossier } from "@/lib/projectDossier";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   fetchChainParams,
@@ -41,7 +43,7 @@ import {
 } from "@/lib/contracts";
 
 export default function OverviewPage() {
-  const { activeAccount, isConnected, isConnecting, connect } = useWallet();
+  const { activeAccount, isConnected } = useWallet();
   const address = activeAccount?.address ?? null;
 
   // ── System (public) data — independent of any wallet ─────────────────────
@@ -117,31 +119,13 @@ export default function OverviewPage() {
   const isSimulation = stats != null && stats.source !== "live";
   const liveRequests = proposals.filter((p) => p.status === 0).length;
 
-  return (
-    <div className="space-y-6">
-      {/* Header — housing-finance framing, no marketing hero */}
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 max-w-2xl">
-          <p className="text-label mb-1.5">Overview</p>
-          <h1 className="text-display text-text-1">Fair Squares housing fund</h1>
-          <p className="text-body mt-2 text-text-2">
-            A private fund that pools capital to acquire affordable homes.
-            Members vote to approve each acquisition; capital waiting to be
-            deployed can be parked in a yield source (no yield adapter is active
-            yet), and every position is held and verified privately on Aztec.
-          </p>
-        </div>
-        <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
-          {isConnected ? (
-            <StatusChip status="verified" label={activeAccount?.alias ?? "Connected"} />
-          ) : (
-            <Button onClick={() => connect()} loading={isConnecting}>
-              {isConnecting ? "Connecting…" : "Connect account"}
-            </Button>
-          )}
-        </div>
-      </header>
+  // The one featured project (the seeded Maashaven dossier). Resolves by
+  // proposal id / title-slug; null until proposals load or if none is authored.
+  const featured = proposals.find((p) => getProjectDossier(p) !== null) ?? null;
+  const featuredDossier = featured ? getProjectDossier(featured) : null;
 
+  return (
+    <div className="space-y-8">
       {isSimulation ? (
         <Alert tone="info" title="Simulation data">
           These figures come from the in-memory simulation, not a live chain.
@@ -161,25 +145,80 @@ export default function OverviewPage() {
         </Alert>
       ) : null}
 
-      {/* Affordable-housing impact — lead with homes/affordability, not tokens */}
-      {!loading && !error ? <ImpactStrip proposals={proposals} /> : null}
+      {/* LEAD — connected: the investor's position + single next action;
+          disconnected: the housing mission in one sentence. */}
+      {isConnected ? (
+        <>
+          <header className="max-w-2xl">
+            <p className="text-label mb-1.5">Your fund</p>
+            <h1 className="text-display text-text-1">
+              {activeAccount?.alias ? `Welcome back, ${activeAccount.alias}` : "Welcome back"}
+            </h1>
+            <p className="text-body mt-2 text-text-2">
+              Your position and the single next action are below. The featured
+              project and full fund metrics follow.
+            </p>
+          </header>
+          <OverviewNextStep step={nextStep} portfolio={portfolio} />
+        </>
+      ) : (
+        <header className="max-w-2xl">
+          <p className="text-label mb-1.5">Community-owned affordable housing</p>
+          <h1 className="text-display text-text-1">
+            Help finance affordable homes, earn a fair return
+          </h1>
+          <p className="text-body mt-2 text-text-2">
+            Fair Squares pools capital from many savers to acquire and protect
+            affordable homes — you receive Fund Shares, earn a capped return on
+            rent, and members decide what the fund buys.
+          </p>
+        </header>
+      )}
 
-      {/* Fund health: how much capital is available vs deployed */}
-      <section className="space-y-3" aria-label="Fund health">
+      {/* FEATURED PROJECT — the housing-first hero (the product). */}
+      {!loading && featured && featuredDossier ? (
+        <FeaturedProject
+          proposal={featured}
+          dossier={featuredDossier}
+          ctaPrimary={!isConnected}
+        />
+      ) : null}
+
+      {/* Three headline fund figures — all real on-chain reads. The full set
+          (impact, participation, raw parameters) lives behind the disclosure. */}
+      <section aria-label="Fund at a glance">
         {loading || !stats ? (
-          <FundHealthKpisSkeleton />
+          <KpiGrid cols={3}>
+            <SkeletonKpi />
+            <SkeletonKpi />
+            <SkeletonKpi />
+          </KpiGrid>
         ) : (
-          <>
-            <FundHealthKpis stats={stats} />
-            <FundParticipationKpis stats={stats} />
-          </>
+          <KpiGrid cols={3}>
+            <KpiCard
+              label="Fund value (NAV)"
+              value={stats.navEur != null ? formatEUR(stats.navEur) : "—"}
+              tone="accent"
+              sub="Capital backing every share"
+              hint="Net asset value — the pooled capital (deposit principal, and property once marked) backing every Fund Share. Rent is a separate claimable earnings stream and does not inflate NAV; no DeFi yield is included."
+            />
+            <KpiCard
+              label="Available to deploy"
+              value={formatEUR(stats.available)}
+              sub={stats.available > 0 ? "Ready for new acquisitions" : "Fully committed"}
+              hint="Capital in the fund not yet parked in a yield source or committed to a home — what new acquisitions can draw on."
+            />
+            <KpiCard
+              label="Committed to homes"
+              value={formatEUR(stats.totalAllocated)}
+              sub="Acquisitions funded"
+              hint="Capital committed to acquiring property through approved funding requests."
+            />
+          </KpiGrid>
         )}
       </section>
 
-      {/* What is verified + how fresh the data is */}
-      <DataHealthRail stats={stats} kyc={kyc} isConnected={isConnected} />
-
-      {/* Live funding requests — the deal-room preview, links to Governance */}
+      {/* Live funding requests — the deal-room preview, links to Governance. */}
       <Section
         title="Live funding requests"
         description={
@@ -206,18 +245,7 @@ export default function OverviewPage() {
         )}
       </Section>
 
-      {/* Your next step — single primary action from real wallet/KYC/portfolio */}
-      <OverviewNextStep
-        step={nextStep}
-        portfolio={portfolio}
-        connectAction={
-          nextStep === "connect"
-            ? { onConnect: () => connect(), busy: isConnecting }
-            : undefined
-        }
-      />
-
-      {/* Homes the fund already owns — links to the projects deal room */}
+      {/* Homes the fund already owns — links to the projects deal room. */}
       <Section
         title="Homes acquired"
         description="Property deeds the fund holds after an approved acquisition."
@@ -237,56 +265,70 @@ export default function OverviewPage() {
         )}
       </Section>
 
-      {/* Raw protocol / parameter detail — opt-in, kept out of the calm flow */}
+      {/* All fund metrics — impact, fund health, participation, verification,
+          and raw protocol parameters. Opt-in, kept out of the calm primary flow. */}
       {stats || chain ? (
-        <AdvancedDetails summary="Protocol parameters & raw figures">
-          <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+        <AdvancedDetails summary="All fund metrics">
+          <div className="space-y-6">
+            {!loading && !error ? <ImpactStrip proposals={proposals} /> : null}
+
             {stats ? (
-              <>
-                <RawRow label="Total deposits" value={formatEUR(stats.totalDeposits)} />
-                {stats.parkedAllocationBps != null ? (
-                  <RawRow
-                    label="Parked allocation"
-                    value={`${(stats.parkedAllocationBps / 100).toFixed(2)}%`}
-                  />
-                ) : null}
-                {stats.tokenPriceBps != null ? (
-                  <RawRow
-                    label="Token price"
-                    value={`${(stats.tokenPriceBps / 100).toFixed(2)}%`}
-                  />
-                ) : null}
-                <RawRow label="Data source" value={stats.source ?? "unknown"} />
-              </>
+              <div className="space-y-3">
+                <FundHealthKpis stats={stats} />
+                <FundParticipationKpis stats={stats} />
+              </div>
             ) : null}
-            {chain ? (
-              <>
-                <RawRow
-                  label="Governance quorum"
-                  value={`${chain.governance.minQuorumVotes.toLocaleString()} votes`}
-                />
-                <RawRow
-                  label="Voting window"
-                  value={`${chain.governance.votingWindowBlocks.toLocaleString()} blocks`}
-                />
-                <RawRow
-                  label="Trade price band"
-                  value={`±${(chain.dex.priceBandBps / 100).toFixed(2)}%`}
-                />
-                <RawRow
-                  label="Block production"
-                  value={chain.timing.blockProductionMode}
-                />
-              </>
-            ) : null}
-          </dl>
-          <p className="text-caption mt-4 text-text-3">
-            See{" "}
-            <Link href="/reference" className="text-fs-teal-dark hover:underline">
-              Reference
-            </Link>{" "}
-            for the full parameter set, contract addresses, and verifier keys.
-          </p>
+
+            <DataHealthRail stats={stats} kyc={kyc} isConnected={isConnected} />
+
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+              {stats ? (
+                <>
+                  <RawRow label="Total deposits" value={formatEUR(stats.totalDeposits)} />
+                  {stats.parkedAllocationBps != null ? (
+                    <RawRow
+                      label="Parked allocation"
+                      value={`${(stats.parkedAllocationBps / 100).toFixed(2)}%`}
+                    />
+                  ) : null}
+                  {stats.tokenPriceBps != null ? (
+                    <RawRow
+                      label="Token price"
+                      value={`${(stats.tokenPriceBps / 100).toFixed(2)}%`}
+                    />
+                  ) : null}
+                  <RawRow label="Data source" value={stats.source ?? "unknown"} />
+                </>
+              ) : null}
+              {chain ? (
+                <>
+                  <RawRow
+                    label="Governance quorum"
+                    value={`${chain.governance.minQuorumVotes.toLocaleString()} votes`}
+                  />
+                  <RawRow
+                    label="Voting window"
+                    value={`${chain.governance.votingWindowBlocks.toLocaleString()} blocks`}
+                  />
+                  <RawRow
+                    label="Trade price band"
+                    value={`±${(chain.dex.priceBandBps / 100).toFixed(2)}%`}
+                  />
+                  <RawRow
+                    label="Block production"
+                    value={chain.timing.blockProductionMode}
+                  />
+                </>
+              ) : null}
+            </dl>
+            <p className="text-caption text-text-3">
+              See{" "}
+              <Link href="/reference" className="text-fs-teal-dark hover:underline">
+                Reference
+              </Link>{" "}
+              for the full parameter set, contract addresses, and verifier keys.
+            </p>
+          </div>
         </AdvancedDetails>
       ) : null}
     </div>
