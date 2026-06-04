@@ -7,6 +7,7 @@ import { ShellProvider } from "@/components/shell/ShellProvider";
 import SkipLink from "@/components/shell/SkipLink";
 import TopBar from "@/components/shell/TopBar";
 import MobileDrawer from "@/components/shell/MobileDrawer";
+import { BlockTicker } from "@/components/shell/BlockTicker";
 
 // Self-hosted via next/font — no render-blocking external request, no CLS.
 const jakarta = Plus_Jakarta_Sans({
@@ -44,6 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <footer className="border-t border-border bg-card/60 px-4 py-3 backdrop-blur lg:px-8">
                   <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 text-text-3">
                     <span className="text-tag">Fair Squares · Aztec 4.3.0 · Noir</span>
+                    <BlockTicker />
                     <span className="text-tag flex items-center gap-2">
                       <span className="opacity-70">Public project:</span>
                       <a

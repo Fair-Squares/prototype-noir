@@ -100,6 +100,19 @@ export async function GET(request: NextRequest) {
     ]);
     const requestedAddress = address ? AztecAddress.fromString(address) : null;
 
+    // Live private deposits are invisible to the public-record claimable path
+    // below (get_my_deposit_record_count is 0 for deposit_private holders), so
+    // flag whether the connected account holds ANY private deposit note. The UI
+    // uses this to show a "claim to receive your private share" prompt instead
+    // of a misleading €0 claimable. Read once — it is the same across proposals.
+    let hasPrivateDeposits = false;
+    if (requestedAddress) {
+      const privateNotes = simResult<{ len: bigint }>(
+        await hfContract.methods.get_my_deposit_notes(requestedAddress, 0).simulate({ from })
+      );
+      hasPrivateDeposits = BigInt(privateNotes.len) > 0n;
+    }
+
     const proposals = await Promise.all(
       Array.from({ length: count }, async (_, id) => {
         const [proposal, distribution] = await Promise.all([
@@ -220,6 +233,7 @@ export async function GET(request: NextRequest) {
           distributionClaimed,
           hasClaimed,
           claimableAmount,
+          hasPrivateDeposits,
         };
       })
     );

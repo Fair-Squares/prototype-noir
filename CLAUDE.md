@@ -260,10 +260,19 @@ on-chain, for privacy). `rentClaimable = earned − withdrawn − reinvested`.
   in-memory store (`simClaimRent` / `simReinvestRent`); `/portfolio` shows the
   earned/withdrawn/reinvested/claimable breakdown with both buttons.
 - **Live: Withdraw + Reinvest are both wired** — `claim_rent_private` and
-  `reinvest_rent_private` (each needs a keeper-opened rent epoch). Both are
-  **single-note** (claim against the caller's first deposit note — the repo's
-  `claim_distribution` posture; multi-note is a uniform follow-up) and **untested
-  against a live stack** here (the demo runs in sim). Artifacts in
+  `reinvest_rent_private` (each needs a keeper-opened rent epoch). Withdraw
+  (`claim_rent_private`) and the governance **distribution claim**
+  (`claim_distribution_private`) now **enumerate all the caller's deposit notes**
+  (loop over `get_my_deposit_notes`, skipping already-claimed / zero-share /
+  post-snapshot notes via the per-note error guards) so a multi-note depositor
+  claims their full share — claiming only the first note used to strand the rest
+  (the "still unclaimed" remainder). **Reinvest (`reinvest_rent_private`) is still
+  single-note** (claims the caller's first deposit note — a uniform follow-up).
+  The live paths are exercised in the docker stack (the default demo runs in
+  sim). Note: the governance proposals route reads per-account claimable from
+  **public** deposit records, which are empty for `deposit_private` holders, so
+  the live UI uses a `hasPrivateDeposits` flag to show "claim to receive your
+  private share" instead of a misleading €0. Artifacts in
   `frontend/src/artifacts/` are **gitignored / build-generated** (codegen output,
   tracked via `codegenCache.json`) — there is no committed artifact to refresh; the
   deploy/bootstrap build regenerates them from the contracts (the contract-hash

@@ -190,6 +190,11 @@ export interface Proposal {
   distributionClaimed?: number;
   claimableAmount?: number;
   hasClaimed?: boolean;
+  /** Live mode: the connected account holds ≥1 PRIVATE deposit note. Private
+   * amounts aren't publicly readable, so claimableAmount (from public records)
+   * is not a reliable "you have nothing" signal — the UI shows a claim prompt
+   * instead of a misleading €0. */
+  hasPrivateDeposits?: boolean;
 }
 
 export interface GovernanceEligibility {

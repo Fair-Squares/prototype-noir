@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simClaimDistribution } from "@/lib/simulationStore";
-import { requireAztecTxHash } from "@/lib/txHash";
+import { getAztecTxOutcome } from "@/lib/txHash";
 import { simResult, isDuplicateNullifierError } from "@/lib/aztecSim";
 
 export async function POST(request: NextRequest) {
@@ -62,13 +62,6 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
-    // NOTE: claim is per-DepositNote. We claim against the first note only;
-    // an account with multiple private deposit notes would need to call
-    // claim_distribution_private once per note (one nullifier per
-    // (note_hash, proposal_id)). Enumerating + claiming all notes is a
-    // follow-up beyond this ABI-wiring change.
-    const hintedDepositNote = depositsResult.storage[0];
-
     const status = simResult<{
       open: boolean;
       amount: bigint;
@@ -96,17 +89,63 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "NEXT_PUBLIC_FUND_TOKEN_ADDRESS not set" }, { status: 500 });
     }
 
-    const receipt = await hfContract.methods
-      .claim_distribution_private(
-        Number(proposalId),
-        hintedDepositNote,
-        AztecAddress.fromString(fundTokenAddr),
-        suppliedSmallPool,
-        suppliedSmallTotal,
-        suppliedFifoCap,
-        suppliedSnapshotBlock,
-      )
-      .send({ from: actorAddress });
+    // Multi-note: claim_distribution_private acts per (note, proposal) — the
+    // claim nullifier is keyed by (note_hash, proposal_id), so a holder with
+    // several private deposit notes must claim EACH note to receive their full
+    // share (claiming only the first note strands the rest — the cause of the
+    // "still unclaimed" remainder). Loop over all the caller's notes, mirroring
+    // fund/rent/claim. A note already claimed reverts with a duplicate nullifier,
+    // and a note with no share reverts/zeroes — both are skipped so the others
+    // still claim. The contract's fail-closed ceiling keeps the total <= pool.
+    const fundToken = AztecAddress.fromString(fundTokenAddr);
+    let claimedNotes = 0;
+    let lastTx: string | null = null;
+    for (let i = 0; i < Number(depositsResult.len); i++) {
+      try {
+        const receipt = await hfContract.methods
+          .claim_distribution_private(
+            Number(proposalId),
+            depositsResult.storage[i],
+            fundToken,
+            suppliedSmallPool,
+            suppliedSmallTotal,
+            suppliedFifoCap,
+            suppliedSnapshotBlock,
+          )
+          .send({ from: actorAddress });
+        const outcome = getAztecTxOutcome(receipt);
+        // A per-note public-tail revert (already claimed elsewhere, or the pool
+        // ceiling reached) just means this note can't add to the claim — skip it.
+        if (outcome.reverted) continue;
+        lastTx = outcome.txHash;
+        claimedNotes++;
+      } catch (err: unknown) {
+        const m = err instanceof Error ? err.message : String(err);
+        // Skip notes that can't contribute to THIS claim and keep going:
+        //  - already claimed (duplicate nullifier),
+        //  - zero share for this note,
+        //  - deposited AFTER the distribution snapshot, so the note isn't in the
+        //    tree at the anchor block ("note hash ... not found ... at anchor block").
+        if (
+          isDuplicateNullifierError(m) ||
+          /share is zero|zero share/i.test(m) ||
+          /not found in the note hash tree|note hash .*not found/i.test(m)
+        ) {
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    if (claimedNotes === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Nothing to claim — your deposit notes for this proposal are already claimed or have no share.",
+        },
+        { status: 409 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
@@ -114,8 +153,9 @@ export async function POST(request: NextRequest) {
       // returned by the tx, so we cannot report an exact amount here without
       // a separate private preview. Report null rather than a fabricated value.
       claimedAmount: null,
-      txHash: requireAztecTxHash(receipt),
-      message: "Distribution claimed privately",
+      notesClaimed: claimedNotes,
+      txHash: lastTx,
+      message: `Distribution claimed privately (${claimedNotes} deposit note${claimedNotes === 1 ? "" : "s"})`,
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);

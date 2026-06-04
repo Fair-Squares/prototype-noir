@@ -29,6 +29,11 @@ export function DistributionTab({
   const remaining = Math.max(0, total - claimed);
   const claimable = proposal.claimableAmount ?? 0;
   const hasClaimed = Boolean(proposal.hasClaimed);
+  // Live private depositors have no public record, so `claimable` reads 0 even
+  // when they have a share. Don't show that misleading €0 — explain the share is
+  // private and let them claim. (False in sim / for public records, where the
+  // claimable figure is real.)
+  const privateClaim = Boolean(proposal.hasPrivateDeposits);
 
   if (!opened) {
     return (
@@ -86,10 +91,26 @@ export function DistributionTab({
           <div className="space-y-4">
             <div className="surface-muted p-4">
               <p className="text-label">Your claimable share</p>
-              <p className="text-kpi mt-1 text-text-1">{formatEUR(claimable)}</p>
-              <p className="text-caption mt-1">
-                The exact amount is determined privately in-circuit at claim time.
-              </p>
+              {privateClaim ? (
+                <>
+                  <p className="text-body mt-1 font-semibold text-text-1">
+                    Computed privately when you claim
+                  </p>
+                  <p className="text-caption mt-1">
+                    Your deposits are private, so your exact share isn&rsquo;t shown here — it&rsquo;s
+                    calculated in-circuit at claim time, and claiming sweeps every one of your
+                    deposit notes.
+                    {remaining > 0 ? ` ${formatEUR(remaining)} of the pool is still unclaimed.` : ""}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-kpi mt-1 text-text-1">{formatEUR(claimable)}</p>
+                  <p className="text-caption mt-1">
+                    The exact amount is determined privately in-circuit at claim time.
+                  </p>
+                </>
+              )}
             </div>
             <Button onClick={onClaim} loading={isClaiming} disabled={isClaiming || remaining === 0}>
               {isClaiming ? "Claiming…" : "Claim distribution"}
