@@ -557,10 +557,13 @@ Illustrations: hand-drawn housing line-art, ONE per view max, as a hero/section
   anchor (e.g. housing-fund.png on the Overview hero). Never wall-to-wall.
 ```
 
-> **Navigation target (being rolled out).** The intended IA is a minimal primary
-> nav — **Home · Projects · Portfolio · More** — with Governance, Trade, Rewards,
-> Verification, Reference and How-it-works under More, and **Invest contextual**
-> (started from a project, not a top-level tab) + a compact mobile bottom nav.
-> *Status:* `lib/nav.ts` still ships the older 5-tab primary nav (Overview,
-> Portfolio, Projects, Invest, Governance); the reduction + Home rebuild land in the
-> next frontend pass. Update this note to "done" when `lib/nav.ts` is retiered.
+> **Navigation (done).** Primary nav is the minimal **Home · Projects · Portfolio**
+> + a **More** disclosure (`lib/nav.ts`: Governance, Trade, Rewards, Verification,
+> Reference, How-it-works are `more-account`/`more-reference`). **Invest is
+> contextual** — reached from a project or the Home next-step CTA, not a top-level
+> tab. Mobile uses one pattern: a fixed compact **bottom nav** (`shell/BottomNav.tsx`,
+> Home/Projects/Portfolio/More) + the `MobileDrawer` for More — the old hamburger +
+> clipped tab strip are gone. **Home** (`app/page.tsx`) leads with a featured project
+> (`overview/FeaturedProject.tsx`, the Maashaven dossier) for disconnected visitors
+> and the investor's position/next-step when connected; ≤3 real headline KPIs, the
+> rest behind an "All fund metrics" disclosure.
