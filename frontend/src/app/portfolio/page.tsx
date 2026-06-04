@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
+  AdvancedDetails,
   Alert,
   Button,
   EmptyState,
+  KpiCard,
+  KpiGrid,
   PageHeader,
   Section,
   SkeletonKpi,
@@ -41,7 +44,7 @@ import {
 const EMPTY_KYC: KYCProfile = { verified: false, isInvestor: false, roles: [] };
 
 export default function PortfolioPage() {
-  const { activeAccount } = useWallet();
+  const { activeAccount, connect, isConnecting } = useWallet();
   const address = activeAccount?.address ?? null;
   const accountIndex = activeAccount?.index ?? 0;
 
@@ -208,19 +211,16 @@ export default function PortfolioPage() {
         title="Portfolio"
         description="What you own in the housing fund, what it is worth, what is verified, and what you can do next."
         actions={
-          <>
-            <Link href="/invest" className="btn btn-primary">
-              Invest
-            </Link>
-            {address && rewardsClaimable > 0 && canClaimRewards ? (
-              <Button variant="secondary" onClick={handleClaimRewards} loading={claimingRewards}>
-                {claimingRewards ? "Claiming…" : "Claim rewards"}
-              </Button>
-            ) : null}
-            <Link href="/dex" className="btn btn-ghost">
-              Trade shares
-            </Link>
-          </>
+          address ? (
+            <>
+              <Link href="/invest" className="btn btn-primary">
+                Add to position
+              </Link>
+              <Link href="/dex" className="btn btn-ghost">
+                Trade shares
+              </Link>
+            </>
+          ) : null
         }
       />
 
@@ -234,10 +234,32 @@ export default function PortfolioPage() {
 
       {!address ? (
         <Section>
-          <EmptyState
-            title="Connect your wallet"
-            description="Use the account button in the top bar to see your holdings, what they are worth, and what you can claim."
-          />
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 max-w-md">
+              <h2 className="text-heading text-text-1">Connect to see your portfolio</h2>
+              <p className="text-caption mt-1 text-text-2">
+                Once connected you&apos;ll see your position value, fund shares, rent
+                earnings, participation rewards, and anything you can claim or
+                withdraw — read privately from your own account.
+              </p>
+            </div>
+            <Button
+              className="flex-shrink-0"
+              onClick={() => connect()}
+              loading={isConnecting}
+            >
+              {isConnecting ? "Connecting…" : "Connect account"}
+            </Button>
+          </div>
+          <div className="mt-5">
+            <p className="text-label mb-2">What you&apos;ll see</p>
+            <KpiGrid cols={4}>
+              <KpiCard label="Position value" value="—" sub="Your stake (NAV)" />
+              <KpiCard label="Fund shares" value="—" sub="FSFT you hold" />
+              <KpiCard label="Rent earnings" value="—" sub="Claim or reinvest" />
+              <KpiCard label="Rewards" value="—" sub="FSP participation" />
+            </KpiGrid>
+          </div>
         </Section>
       ) : loading && !portfolio ? (
         <div className="space-y-6">
@@ -250,12 +272,44 @@ export default function PortfolioPage() {
         </div>
       ) : portfolio ? (
         <>
+          {/* 1 · Money you can act on now — rent and claimable distributions
+              lead, shown only when there is actually something to claim. */}
+          {(portfolio.balance ?? 0) > 0 || (portfolio.rentEarned ?? 0) > 0 ? (
+            <RentEarningsPanel
+              earned={portfolio.rentEarned ?? portfolio.estimatedYield}
+              claimable={portfolio.rentClaimable ?? portfolio.estimatedYield}
+              withdrawn={portfolio.rentWithdrawn ?? 0}
+              reinvested={portfolio.rentReinvested ?? 0}
+              claiming={claimingRent}
+              reinvesting={reinvestingRent}
+              reinvestAvailable={true}
+              onWithdraw={handleWithdrawRent}
+              onReinvest={handleReinvestRent}
+            />
+          ) : null}
+
+          {claimableProposals.length > 0 ? (
+            <Section
+              title="Claimable by project"
+              description="Distributions you can claim from housing proposals you backed."
+            >
+              <ClaimableByProposal
+                proposals={claimableProposals}
+                claimingId={claimingProposalId}
+                onClaim={handleClaimProposal}
+                disabled={loading}
+              />
+            </Section>
+          ) : null}
+
+          {/* 2 · Total position */}
           <PositionSummary
             portfolio={portfolio}
             rewardsClaimable={rewardsClaimable}
             rewardsSymbol={rewardsSymbol}
           />
 
+          {/* 3 · Holdings + readiness */}
           <div className="grid gap-6 lg:grid-cols-3">
             <Section
               title="Holdings"
@@ -272,20 +326,7 @@ export default function PortfolioPage() {
             <ReadinessSummary kyc={kyc} portfolio={portfolio} />
           </div>
 
-          {(portfolio.balance ?? 0) > 0 || (portfolio.rentEarned ?? 0) > 0 ? (
-            <RentEarningsPanel
-              earned={portfolio.rentEarned ?? portfolio.estimatedYield}
-              claimable={portfolio.rentClaimable ?? portfolio.estimatedYield}
-              withdrawn={portfolio.rentWithdrawn ?? 0}
-              reinvested={portfolio.rentReinvested ?? 0}
-              claiming={claimingRent}
-              reinvesting={reinvestingRent}
-              reinvestAvailable={true}
-              onWithdraw={handleWithdrawRent}
-              onReinvest={handleReinvestRent}
-            />
-          ) : null}
-
+          {/* 4 · Participation rewards (claim stays in the portfolio) */}
           <RewardsPanel
             rewardsSymbol={rewardsSymbol}
             rewardsClaimable={rewardsClaimable}
@@ -297,18 +338,7 @@ export default function PortfolioPage() {
             onRunCheck={handleAttestRewards}
           />
 
-          <Section
-            title="Claimable by project"
-            description="Distributions you can claim from housing proposals you backed."
-          >
-            <ClaimableByProposal
-              proposals={claimableProposals}
-              claimingId={claimingProposalId}
-              onClaim={handleClaimProposal}
-              disabled={loading}
-            />
-          </Section>
-
+          {/* 5 · Withdraw + history */}
           <Section
             title="Withdraw capital"
             description="Move deposited capital back to your wallet."
@@ -319,12 +349,6 @@ export default function PortfolioPage() {
             />
           </Section>
 
-          <FaucetPanel
-            address={address}
-            accountIndex={accountIndex}
-            onDripped={() => loadAccountData(address)}
-          />
-
           <Section
             title="Transaction history"
             description="A record of your deposits, withdrawals, claims, and trades."
@@ -334,6 +358,15 @@ export default function PortfolioPage() {
               description="The protocol does not yet expose a per-account event feed. Your live balances and claimable amounts above always reflect on-chain state."
             />
           </Section>
+
+          {/* 6 · Demo tools — dev/test affordances, out of the everyday flow. */}
+          <AdvancedDetails summary="Demo tools">
+            <FaucetPanel
+              address={address}
+              accountIndex={accountIndex}
+              onDripped={() => loadAccountData(address)}
+            />
+          </AdvancedDetails>
         </>
       ) : null}
     </div>
