@@ -96,6 +96,14 @@ pub contract HousingFund {
         pub small_pool: u128,
         pub fifo_cap: u128,
         pub claimed_total: u128,
+        // Block at which the distribution snapshot was taken (set when the
+        // distribution opens). A PRIVATE claimer must supply this as
+        // `supplied_snapshot_block` to claim_distribution_private (the private
+        // circuit cannot read public storage, so it is supplied here and
+        // re-verified against the stored snapshot block in the public tail).
+        // For the rent-epoch variant (get_rent_distribution_status) this is the
+        // rent epoch's r_snapshot_block.
+        pub snapshot_block: u32,
     }
 
     // The public deposit/allocation cursors a PXE caller must read to supply the
@@ -1630,6 +1638,7 @@ pub contract HousingFund {
             small_pool: self.storage.r_small_pool.at(rid).read(),
             fifo_cap: self.storage.r_fifo_cap.at(rid).read(),
             claimed_total: self.storage.r_claimed_total.at(rid).read(),
+            snapshot_block: self.storage.r_snapshot_block.at(rid).read(),
         }
     }
 
@@ -1758,6 +1767,7 @@ pub contract HousingFund {
             small_pool: self.storage.d_small_pool.at(pid).read(),
             fifo_cap: self.storage.d_fifo_cap.at(pid).read(),
             claimed_total: self.storage.d_claimed_total.at(pid).read(),
+            snapshot_block: self.storage.d_snapshot_block.at(pid).read(),
         }
     }
 

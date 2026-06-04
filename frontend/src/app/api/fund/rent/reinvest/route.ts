@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
       small_total: bigint;
       small_pool: bigint;
       fifo_cap: bigint;
+      snapshot_block: bigint;
     }>(await hfContract.methods.get_rent_distribution_status(epoch).simulate({ from: actorAddress }));
     if (!status.open) {
       return NextResponse.json(
@@ -100,6 +101,9 @@ export async function POST(request: NextRequest) {
     const smallPool = BigInt(status.small_pool);
     const smallTotal = BigInt(status.small_total);
     const fifoCap = BigInt(status.fifo_cap);
+    // u32 on-chain; reinvest_rent_private binds the claimed note to this
+    // rent-epoch snapshot block (re-verified against r_snapshot_block in the tail).
+    const suppliedSnapshotBlock = Number(status.snapshot_block);
     const share =
       fifoShare(noteCumBefore, noteAmount, fifoCap) + smallShare(noteAmount, noteIsSmall, smallPool, smallTotal);
     if (share <= 0n) {
@@ -122,6 +126,7 @@ export async function POST(request: NextRequest) {
         BigInt(cursor.cum_deposits),
         BigInt(cursor.deposit_seq),
         newIsSmall,
+        suppliedSnapshotBlock,
       )
       .send({ from: actorAddress });
 

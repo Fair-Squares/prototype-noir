@@ -76,7 +76,7 @@ services:
           exec npm run dev
         fi
         echo "[frontend] PRODUCTION mode — building (one-time ~60s), then serving pre-compiled routes"
-        npm run build
+        npm run build || { echo "[frontend] BUILD FAILED — aborting (see error above)"; exit 1; }
         exec npm run start
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]

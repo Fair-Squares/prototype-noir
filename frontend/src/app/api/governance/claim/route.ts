@@ -46,9 +46,12 @@ export async function POST(request: NextRequest) {
 
     // V2 path: claim_distribution_private needs a hinted DepositNote the
     // caller already owns plus the per-proposal allocation snapshots
-    // (small_pool, small_total, fifo_cap) which the public tail re-verifies
-    // against storage. The claimable share is computed in-circuit from the
-    // kernel-verified note + these snapshots via the FIFO/small-pool scheme.
+    // (small_pool, small_total, fifo_cap) AND the snapshot block — all of which
+    // the public tail re-verifies against storage. The private circuit cannot
+    // read public storage, so it binds the note to the snapshot block via
+    // get_block_header_at(supplied_snapshot_block). The claimable share is
+    // computed in-circuit from the kernel-verified note + these snapshots via
+    // the FIFO/small-pool scheme.
     const depositsResult = simResult<{
       len: bigint;
       storage: unknown[];
@@ -74,6 +77,7 @@ export async function POST(request: NextRequest) {
       small_pool: bigint;
       fifo_cap: bigint;
       claimed_total: bigint;
+      snapshot_block: bigint;
     }>(await hfContract.methods.get_distribution_status(Number(proposalId)).simulate({ from: actorAddress }));
     if (!status.open) {
       return NextResponse.json({ error: "Distribution not open for this proposal" }, { status: 400 });
@@ -84,6 +88,8 @@ export async function POST(request: NextRequest) {
     const suppliedSmallPool = BigInt(status.small_pool);
     const suppliedSmallTotal = BigInt(status.small_total);
     const suppliedFifoCap = BigInt(status.fifo_cap);
+    // u32 on-chain; the claim circuit binds the note to this block header.
+    const suppliedSnapshotBlock = Number(status.snapshot_block);
 
     const fundTokenAddr = process.env.NEXT_PUBLIC_FUND_TOKEN_ADDRESS ?? "";
     if (!fundTokenAddr) {
@@ -98,6 +104,7 @@ export async function POST(request: NextRequest) {
         suppliedSmallPool,
         suppliedSmallTotal,
         suppliedFifoCap,
+        suppliedSnapshotBlock,
       )
       .send({ from: actorAddress });
 
