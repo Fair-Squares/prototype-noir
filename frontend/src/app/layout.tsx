@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { DM_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { WalletProvider } from "@/contexts/WalletContext";
 import { ProofSignalsProvider } from "@/contexts/ProofSignalsContext";
@@ -7,25 +8,37 @@ import { ShellProvider } from "@/components/shell/ShellProvider";
 import SkipLink from "@/components/shell/SkipLink";
 import TopBar from "@/components/shell/TopBar";
 import MobileDrawer from "@/components/shell/MobileDrawer";
-import { BlockTicker } from "@/components/shell/BlockTicker";
 
-// Self-hosted via next/font — no render-blocking external request, no CLS.
-const jakarta = Plus_Jakarta_Sans({
+// Body — DM Sans, the geometric-humanist companion to Nexa (per the Fair Squares
+// design system). Variable font, self-hosted via next/font — no render-blocking
+// request, no CLS. Exposes the full weight range through one CSS var.
+const dmSans = DM_Sans({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
   display: "swap",
-  variable: "--font-jakarta",
+  variable: "--font-dm",
+});
+
+// Display / wordmark / big numbers — Nexa (the brand face), self-hosted from the
+// supplied OTFs: Heavy (700–800) + Black (900). See "Fair Squares brand & design
+// system" in CLAUDE.md.
+const nexa = localFont({
+  src: [
+    { path: "../fonts/NexaHeavy.otf", weight: "700 800", style: "normal" },
+    { path: "../fonts/NexaBlack.otf", weight: "900", style: "normal" },
+  ],
+  display: "swap",
+  variable: "--font-nexa",
 });
 
 export const metadata: Metadata = {
   title: "Fair Squares · Investor Portal",
-  description: "Aztec / Noir investor portal for the Fair Squares affordable-housing protocol.",
+  description: "Community-owned affordable housing — fund shares, governance, and rent earnings.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={jakarta.variable}>
-      <body className="fs-site-bg min-h-screen overflow-x-hidden text-text-1">
+    <html lang="en" className={`${dmSans.variable} ${nexa.variable}`}>
+      <body className="min-h-screen overflow-x-hidden text-text-1">
         <WalletProvider>
           <ProofSignalsProvider>
             <ShellProvider>
@@ -42,10 +55,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   {children}
                 </main>
 
-                <footer className="border-t border-border bg-card/60 px-4 py-3 backdrop-blur lg:px-8">
+                {/* Calm footer — brand + the public marketing site. Raw chain
+                    state (block height) and the Aztec/Noir build stamp live in
+                    Reference, not in persistent chrome. */}
+                <footer className="border-t border-border bg-card/60 px-4 py-3 lg:px-8">
                   <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 text-text-3">
-                    <span className="text-tag">Fair Squares · Aztec 4.3.0 · Noir</span>
-                    <BlockTicker />
+                    <span className="text-tag">Fair Squares — people, not profit</span>
                     <span className="text-tag flex items-center gap-2">
                       <span className="opacity-70">Public project:</span>
                       <a

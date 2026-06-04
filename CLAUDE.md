@@ -406,3 +406,161 @@ types), and for a full build use the env-gated `distDir`:
 `NEXT_DIST_DIR=.next-verify npx next build` then `rm -rf .next-verify`. (Building
 with `NEXT_DIST_DIR` set rewrites `next-env.d.ts`/`tsconfig.json` to point at the
 verify dir — `git checkout` those two afterward.)
+
+## User-facing product rules (truth, hierarchy, first-use simplicity)
+
+The frontend is a **product a non-crypto person understands in 60 seconds**, not a
+protocol demo. These rules are binding for every frontend change; they extend (do
+not replace) **The honesty rule** in *Project dossier & the demo layer* above.
+
+### Truth before polish (hard rules)
+
+```
+- Never label a value with a source it doesn't have. "Last issuance price",
+  "last sale price", and contract fallbacks are NOT "NAV".
+- Copy may only claim behavior active in the live system. Idle capital "can be
+  parked in a yield source (adapter not active yet)" — never "earns yield"
+  (no real yield adapter is active; defi_vault accrues zero).
+- Private aggregates that can't be counted publicly render with an honest label
+  ("Publicly registered investors", "Private / not publicly countable"), never a
+  bare 0 implying nobody is in the fund.
+- Local/test runtime is "Demo network · no real funds", never "Live".
+- Every modelled value uses <ModelledChip>; every untagged value is backed by the
+  exact on-chain/API meaning shown in its label.
+```
+
+### Canonical lifecycle vocabulary — reuse everywhere, never the raw enum words
+
+```
+GOVERNANCE (a proposal):   Voting open → Voting ended → Approved → Rejected → Funded
+PROJECT / PAYOUT (post-Funded):              Funded → Distributing → Fully claimed
+Held = an on-chain deed with no distribution opened yet.
+```
+
+Source of truth: `lib/proposalLifecycle.ts` `displayStatus()` ALWAYS returns the
+canonical governance label (so no caller falls back to a divergent `StatusChip`
+default like "Executed"); `components/projects/ProjectStatusChip.tsx` adds the
+payout states. Never render a proposal/project status without going through these.
+A Vitest guard (`proposalLifecycle.test.ts` → "canonical governance vocabulary")
+fails if `displayStatus` ever emits a raw enum word — keep it green.
+
+### First-use simplicity
+
+```
+- Design for someone who has never used crypto or investment software.
+- One purpose, one next action, ≤3 headline facts per screen.
+- Plain language before protocol terms: "Fund Shares (FSFT)" before FSFT;
+  "participation rewards" before FSP. Introduce an acronym only when the user
+  needs it to complete an action.
+- Don't expose the whole architecture through nav. Advanced features live in
+  contextual links, More, and progressive disclosure (AdvancedDetails).
+- Never repeat an explanation across cards on a screen — link to one canonical
+  place (/explain) instead.
+- Introductory copy is one sentence; explanatory paragraphs are ≤2 lines before
+  disclosure.
+- First-time journey: understand the housing project → inspect terms & risks →
+  invest → manage the position.
+- 60-second test: a user can say what's funded, what they receive, the primary
+  risk, and the next action.
+```
+
+### Product hierarchy
+
+- Lead with one concrete affordable-housing project and the financing gap it closes.
+- Disconnected visitor → lead with project story, impact, trust, one next action.
+- Connected investor → lead with their position, claimable actions, one next action.
+- **Exactly one primary CTA per screen/state**; secondary actions must not compete.
+- Never delete working functionality to simplify — move technical/protocol/demo/
+  infrequent features into `AdvancedDetails`, **More**, Reference, or a dedicated route.
+- Dev accounts, faucets, raw phases, contract versions, block heights, and debug
+  controls never appear in the default user-facing flow.
+
+### Route contracts (one job + one primary action each)
+
+```
+/             project/impact overview + personalized next step; ≤3 headline KPIs before disclosure.
+/fund         project lifecycle & financing needs; human identity first, on-chain ID second.
+/fund/[id]    canonical project dossier & permanent record.
+/portfolio    investor source of truth; actionable money first, then holdings/readiness/history.
+/invest       one guided deposit flow; each unmet gate links to its resolution.
+/governance   decision queue only: decision, deadline, quorum, eligibility, action.
+/governance/[id]  ballot, threshold, outcome, execution; link to the dossier, don't duplicate it.
+/kyc          verification requirements, expected time, privacy assurance, readiness.
+/rewards      participation program, separated from rent income and investment return.
+/dex          advanced secondary liquidity; pricing/liquidity risk shown; mechanics collapsed.
+/explain      canonical glossary with stable anchors; other routes deep-link terms here.
+/reference    technical truth/debug surface; human-readable values first, raw protocol detail second.
+```
+
+### Consistency, interaction & mobile
+
+- One canonical project lifecycle + one governance lifecycle; reuse labels, colors,
+  state-aware copy everywhere. Human time/status first; raw block numbers are
+  secondary/advanced.
+- "Fund Shares (FSFT)" for ownership; "FSP participation rewards" for rewards.
+- Connect/verify prompts include the action **inline** — never "go elsewhere".
+- Destructive actions require confirmation or an undo window.
+- Forms: semantic labels, `name`, suitable `autocomplete`, inline errors, focus the
+  first invalid field.
+- Mobile: **one** primary-nav pattern (a compact bottom nav + More drawer) — never a
+  hamburger plus a clipped duplicate tab strip. Important KPI groups may use compact
+  2-column tiles. Tabs need a visible overflow affordance; steppers stay compact;
+  touch targets ≥44px.
+
+### User-facing definition of done (verify before merging a frontend change)
+
+```
+1. A non-crypto user can say what is funded, what gap is closed, what they own, and
+   what they can do next.
+2. No live/modelled/private value is mislabeled.
+3. Each route has one clear job and one primary action.
+4. Protocol mechanics remain available without dominating the primary flow.
+5. Disconnected, loading, empty, error, connected, and mobile states are all intentional.
+```
+
+## Fair Squares brand & design system (canonical)
+
+The app implements the official **Fair Squares design-system bundle** (Claude Design
+handoff). Brand tokens live in `frontend/src/app/globals.css`; the re-skin keeps the
+shared class names (`.surface`, `.btn-*`, `.text-*`, `.chip-*`) and changes their
+definitions, so pages inherit the brand without per-page edits. Assets in
+`frontend/public/brand/` (logos, marks, `illustrations/*.png`); Nexa OTFs in
+`frontend/src/fonts/`, wired via `next/font/local`.
+
+```
+Palette (exact bundle hexes — supersede the old near-values):
+  ink/anthracite #231E23 · teal #39A6A3 · magenta #BF1363 · mint #DEEEEA
+  paper #FFFFFF · off-white #F7F9F8.  Full teal/magenta/ink 50–900 scales in @theme.
+  Usage ~70% white/off-white · 15% anthracite · 10% teal · 5% magenta.
+  Teal = everyday accent + PRIMARY CTA fill (.btn-primary). Magenta = ONE highlight
+  per view (.btn-highlight, active nav underline). Anthracite = text + dark surfaces.
+  Illustration-only hues (lime/olive/yellow) NEVER in core UI.
+
+Type: Nexa (Heavy 700–800 / Black 900) for display + section headings + the wordmark;
+  DM Sans (variable) for body. Data KPIs (.text-kpi) stay DM Sans TABULAR — Nexa has
+  no tabular figures and would misalign columns. Mono only for code/addresses.
+  Eyebrows (.text-label) are tiny uppercase TEAL.
+
+Shape: rounded 16px cards (.surface) with a soft low-opacity anthracite shadow;
+  10px inputs; 999px pill buttons; hairline borders. NO gradients, NO glassmorphism,
+  NO blueprint-grid/console texture (the old .fs-site-bg/.proto-stamp are removed).
+  Mint section bands (.band-mint / .surface-mint) segment the page instead.
+
+Voice: sentence case everywhere; warm, plain-spoken, mission-driven; "people, not
+  profit"; "we" for Fair Squares, "you" for the reader; no emoji; no crypto hype.
+
+Icons: the app stays ICON-LIGHT. The bundle defaults to Lucide (CDN) but this repo
+  forbids new icon/UI libraries — that is a deliberate, documented deviation. Do NOT
+  add Lucide or any icon library.
+
+Illustrations: hand-drawn housing line-art, ONE per view max, as a hero/section
+  anchor (e.g. housing-fund.png on the Overview hero). Never wall-to-wall.
+```
+
+> **Navigation target (being rolled out).** The intended IA is a minimal primary
+> nav — **Home · Projects · Portfolio · More** — with Governance, Trade, Rewards,
+> Verification, Reference and How-it-works under More, and **Invest contextual**
+> (started from a project, not a top-level tab) + a compact mobile bottom nav.
+> *Status:* `lib/nav.ts` still ships the older 5-tab primary nav (Overview,
+> Portfolio, Projects, Invest, Governance); the reduction + Home rebuild land in the
+> next frontend pass. Update this note to "done" when `lib/nav.ts` is retiered.

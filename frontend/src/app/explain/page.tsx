@@ -33,8 +33,8 @@ const FLOW: Step[] = [
   },
   {
     n: "04",
-    title: "Capital is deployed, the rest earns yield",
-    body: "Approved acquisitions are funded; capital still waiting to be deployed earns yield in the meantime. Members hold their position, can trade it, keep voting, and claim rewards.",
+    title: "Capital is deployed; the rest waits to be put to work",
+    body: "Approved acquisitions are funded; capital still waiting to be deployed can be parked in a yield source (no yield adapter is active yet). Members hold their position, can trade it, keep voting, and claim rewards.",
   },
 ];
 
@@ -56,7 +56,7 @@ const GLOSSARY: Glossary[] = [
   },
   {
     term: "Fund value",
-    body: "What the fund is worth: deployed capital plus capital still waiting to be invested, including any yield earned while it waits.",
+    body: "What the fund is worth: deployed capital plus capital still waiting to be invested (some of which may be parked in a yield source — though no yield is actually earned yet).",
   },
   {
     term: "Share price",

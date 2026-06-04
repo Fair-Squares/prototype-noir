@@ -191,8 +191,8 @@ export default function DexPage() {
           </>
         ) : orderbook ? (
           <>
-            <KpiCard label="NAV reference price" value={`€${orderbook.priceReferenceEur.toFixed(4)}`} sub={`Per ${fundSymbol}, from net asset value`} tone="accent" hint="Trades anchor to the fund's net asset value per token, not an open-market quote." />
-            <KpiCard label="Allowed price band" value={`€${orderbook.priceBandMinEur.toFixed(4)}`} sub={`to €${orderbook.priceBandMaxEur.toFixed(4)} · indicative NAV guardrail`} />
+            <KpiCard label="Last issuance reference price" value={`€${orderbook.priceReferenceEur.toFixed(4)}`} sub={`Per ${fundSymbol}, from the most recent asset distribution`} tone="accent" hint="The reference used to bound orders. It is the token price recorded at the most recent asset distribution — NOT current NAV per share, and not an open-market quote." />
+            <KpiCard label="Allowed price band" value={`€${orderbook.priceBandMinEur.toFixed(4)}`} sub={`to €${orderbook.priceBandMaxEur.toFixed(4)} · indicative reference guardrail`} />
             <KpiCard label="Max order lifetime" value={chainParams ? formatTtl(chainParams.dex.maxTtlBlocks, chainParams.dex.maxTtlSecondsEstimate) : "-"} sub="After expiry an order can no longer settle" />
           </>
         ) : null}

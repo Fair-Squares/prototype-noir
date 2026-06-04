@@ -28,6 +28,7 @@ import {
 import { ParamTable, type ParamRow } from "@/components/reference/ParamTable";
 import { ProtocolFormulas } from "@/components/reference/ProtocolFormulas";
 import { RewardScheduleTable } from "@/components/reference/RewardScheduleTable";
+import { BlockTicker } from "@/components/shell/BlockTicker";
 
 // NEXT_PUBLIC_* values are inlined at build time, so they are readable here in
 // the client bundle. An unset key resolves to "" and renders as "Not deployed"
@@ -307,6 +308,16 @@ function ReferencePageInner() {
       <Tabs tabs={TABS} value={activeTab} onValueChange={setTab} aria-label="Reference sections">
         {activeTab === "chain" ? (
           <div className="space-y-6">
+            <Section
+              title="Live chain state"
+              description="Current network and block height. Raw build/version detail lives here, out of the everyday UI."
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3 text-text-3">
+                <BlockTicker />
+                <span className="text-tag">Aztec 4.3.0 · Noir</span>
+              </div>
+            </Section>
+
             <Section title="Chain timing" description="L1/L2 block cadence and transaction inclusion.">
               {loading ? (
                 <LoadingSkeleton lines={5} />

@@ -59,10 +59,10 @@ export function FundParticipationKpis({ stats }: { stats: FundStats }) {
   return (
     <KpiGrid cols={2}>
       <KpiCard
-        label="Verified investors"
+        label="Publicly registered investors"
         value={stats.investorCount.toLocaleString()}
-        sub="Members in the fund"
-        hint="Distinct verified members holding a position in the fund."
+        sub="Public deposits only"
+        hint="Counts members who deposited on the PUBLIC path. Private deposits intentionally don't register publicly, so total membership can't be counted on-chain — this is a floor, not the full count."
       />
       <KpiCard
         label="Fund shares (FSFT)"

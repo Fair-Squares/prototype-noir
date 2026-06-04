@@ -126,9 +126,9 @@ export default function OverviewPage() {
           <h1 className="text-display text-text-1">Fair Squares housing fund</h1>
           <p className="text-body mt-2 text-text-2">
             A private fund that pools capital to acquire affordable homes.
-            Members vote to approve each acquisition; idle capital earns yield
-            while it waits, and every position is held and verified privately
-            on Aztec.
+            Members vote to approve each acquisition; capital waiting to be
+            deployed can be parked in a yield source (no yield adapter is active
+            yet), and every position is held and verified privately on Aztec.
           </p>
         </div>
         <div className="flex flex-shrink-0 flex-wrap items-center gap-2">

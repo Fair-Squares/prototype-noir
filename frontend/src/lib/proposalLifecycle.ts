@@ -64,9 +64,25 @@ export function isVotingEnded(proposal: Proposal): boolean {
   return proposal.status === 0 && votingWindowFor(proposal).closed;
 }
 
-export function displayStatus(proposal: Proposal): { kind: StatusKind; label?: string } {
+// CANONICAL governance lifecycle vocabulary — reused everywhere (CLAUDE.md
+// "User-facing product rules"). Never the raw on-chain enum words
+// (Active/Passed/Failed/Executed): a first-time user reads these.
+//   Voting open → Voting ended → Approved → Rejected → Funded
+const GOVERNANCE_LABEL: Record<number, string> = {
+  0: "Voting open",
+  1: "Approved",
+  2: "Rejected",
+  3: "Funded",
+};
+
+/** Canonical {kind, label} for a proposal. `label` is ALWAYS set so callers
+ *  never fall back to a divergent default (e.g. "Executed" instead of "Funded"). */
+export function displayStatus(proposal: Proposal): { kind: StatusKind; label: string } {
   if (isVotingEnded(proposal)) return { kind: "pending", label: "Voting ended" };
-  return { kind: statusKindFor(proposal.status) };
+  return {
+    kind: statusKindFor(proposal.status),
+    label: GOVERNANCE_LABEL[proposal.status] ?? "Pending",
+  };
 }
 
 export interface Quorum {

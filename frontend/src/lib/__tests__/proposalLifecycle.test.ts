@@ -80,13 +80,43 @@ describe("isVotingEnded / displayStatus", () => {
   it("does not flag an ACTIVE proposal still inside its window", () => {
     const p = mkProposal({ status: 0, deadlineBlock: 50, currentBlock: 10 });
     expect(isVotingEnded(p)).toBe(false);
-    expect(displayStatus(p)).toEqual({ kind: "active" });
+    expect(displayStatus(p)).toEqual({ kind: "active", label: "Voting open" });
   });
 
   it("does not flag an already-resolved proposal as 'voting ended'", () => {
     const p = mkProposal({ status: 1, deadlineBlock: 50, currentBlock: 60 });
     expect(isVotingEnded(p)).toBe(false);
-    expect(displayStatus(p)).toEqual({ kind: "passed" });
+    expect(displayStatus(p)).toEqual({ kind: "passed", label: "Approved" });
+  });
+});
+
+// Guard: every governance status must render with the ONE canonical, human
+// vocabulary (CLAUDE.md "User-facing product rules"). Never the raw on-chain enum
+// words (Active/Passed/Failed/Executed) — a first-time user reads these, and the
+// same proposal must not read differently across routes.
+describe("canonical governance vocabulary", () => {
+  const CANONICAL = new Set([
+    "Voting open",
+    "Voting ended",
+    "Approved",
+    "Rejected",
+    "Funded",
+  ]);
+  const RAW_ENUM = new Set(["Active", "Passed", "Failed", "Executed", "Pending"]);
+
+  it("displayStatus always returns a label from the canonical set, never a raw enum word", () => {
+    const cases: Proposal[] = [
+      mkProposal({ status: 0, deadlineBlock: 50, currentBlock: 10 }), // Voting open
+      mkProposal({ status: 0, deadlineBlock: 50, currentBlock: 60 }), // Voting ended
+      mkProposal({ status: 1 }), // Approved
+      mkProposal({ status: 2 }), // Rejected
+      mkProposal({ status: 3 }), // Funded
+    ];
+    for (const p of cases) {
+      const { label } = displayStatus(p);
+      expect(CANONICAL.has(label)).toBe(true);
+      expect(RAW_ENUM.has(label)).toBe(false);
+    }
   });
 });
 

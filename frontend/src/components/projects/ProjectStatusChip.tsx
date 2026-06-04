@@ -25,19 +25,10 @@ export function projectStatus(row: ProjectRow): { status: StatusKind; label: str
     return { status: "open", label: "Distributing" };
   }
 
-  // Reuse the governance board's lifecycle mapping verbatim.
+  // Reuse the governance board's canonical lifecycle label verbatim
+  // (Voting open / Voting ended / Approved / Rejected / Funded).
   const gov = displayStatus(row.proposal);
-  const FALLBACK_LABEL: Record<string, string> = {
-    active: "Voting open",
-    passed: "Approved",
-    failed: "Rejected",
-    executed: "Funded",
-    pending: "Voting ended",
-  };
-  return {
-    status: gov.kind,
-    label: gov.label ?? FALLBACK_LABEL[gov.kind] ?? gov.kind,
-  };
+  return { status: gov.kind, label: gov.label };
 }
 
 export function ProjectStatusChip({ row }: { row: ProjectRow }) {

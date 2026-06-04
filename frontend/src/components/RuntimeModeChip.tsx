@@ -41,9 +41,9 @@ export default function RuntimeModeChip({
     ) : (
       <span
         className={`chip chip-neutral ${className}`.trim()}
-        aria-label="Runtime mode: live, local network"
+        aria-label="Runtime mode: demo network, no real funds"
       >
-        Live · local network
+        Demo network · no real funds
       </span>
     );
 
@@ -54,7 +54,7 @@ export default function RuntimeModeChip({
       ? "Mode unknown: the runtime could not be determined yet. Reads will resolve once the network responds."
       : isSimulation
         ? "Simulation: no real funds move. Figures are read from a local network so you can explore the flow safely."
-        : "Live: connected to a local Aztec network. On-chain reads and writes use real test accounts.";
+        : "Demo network: connected to an Aztec test network with test accounts — no real funds move.";
 
   return (
     <Tooltip content={hint} align={hintAlign}>
