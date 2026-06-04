@@ -85,6 +85,23 @@ export function displayStatus(proposal: Proposal): { kind: StatusKind; label: st
   };
 }
 
+/** Plain-language meaning of a funding request's capital ask, for its current
+ *  lifecycle state. Never says "if approved" for a home that is already funded,
+ *  acquired, or whose proposal was rejected. Shared by the Projects board and the
+ *  Governance memo so the same request reads identically in both places. */
+export function fundingCaption(p: {
+  status: number;
+  distributionOpened?: boolean;
+  hasDeed?: boolean;
+}): string {
+  if (p.status === 2) return "Requested capital — this proposal was rejected.";
+  if (p.status === 3 || p.distributionOpened || p.hasDeed)
+    return "Capital the fund committed to acquire this home.";
+  if (p.status === 1)
+    return "Approved — capital is committed when the acquisition executes.";
+  return "Capital the fund commits to acquire this home if the committee approves.";
+}
+
 export interface Quorum {
   required: number;
   total: number;

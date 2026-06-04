@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Button, InfoDot, ModelledChip, StatusChip } from "@/components/ui";
 import {
+  fundingCaption,
   proposalLabel,
   quorumFor,
   votingWindowFor,
@@ -9,17 +10,6 @@ import { formatEUR } from "@/lib/contracts";
 import { getProjectDossier } from "@/lib/projectDossier";
 import { ProjectStatusChip } from "./ProjectStatusChip";
 import { distributionClaimedFraction, type ProjectRow } from "./ProjectRow";
-
-/** What the requested capital means, in plain language, for this lifecycle state.
- *  Never says "if approved" for a home that is already funded. */
-function capitalCaption(row: ProjectRow): string {
-  if (row.status === 2) return "Requested capital — this proposal was rejected.";
-  if (row.status === 3 || row.distributionOpened || row.hasDeed)
-    return "Capital the fund committed to acquire this home.";
-  if (row.status === 1)
-    return "Approved — capital is committed when the acquisition executes.";
-  return "Capital the fund commits to acquire this home if the committee approves.";
-}
 
 export interface ProjectCardProps {
   row: ProjectRow;
@@ -119,7 +109,7 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
 
       <div>
         <p className="text-kpi-sm text-text-1">{formatEUR(row.requestedAmount)}</p>
-        <p className="text-caption mt-1 text-text-2">{capitalCaption(row)}</p>
+        <p className="text-caption mt-1 text-text-2">{fundingCaption(row)}</p>
       </div>
 
       {/* Pre-funding: show the committee maths. Post-funding: show payout flow. */}

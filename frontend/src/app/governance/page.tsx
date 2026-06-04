@@ -25,6 +25,16 @@ import {
   type Proposal,
 } from "@/lib/contracts";
 
+/** Decision queue order: proposals that still need a committee action surface
+ *  first (open voting / voting-ended-awaiting-finalise, then approved-awaiting-
+ *  execution), then funded, then rejected. Newest-first within each band. */
+function decisionRank(p: Proposal): number {
+  if (p.status === 0) return 0; // open, or voting ended awaiting finalisation
+  if (p.status === 1) return 1; // approved, awaiting execution
+  if (p.status === 3 || p.distributionOpened) return 2; // funded
+  return 3; // rejected
+}
+
 export default function GovernancePage() {
   const { activeAccount } = useWallet();
   const address = activeAccount?.address ?? null;
@@ -90,6 +100,12 @@ export default function GovernancePage() {
 
   const canCreate = Boolean(address && kycProfile.isInvestor);
   const canVote = Boolean(eligibility?.canVote);
+
+  // Decision queue: actionable proposals first, newest-first within each band.
+  const sortedProposals = useMemo(
+    () => [...proposals].sort((a, b) => decisionRank(a) - decisionRank(b) || b.id - a.id),
+    [proposals]
+  );
 
   const handleCreate = async (input: {
     title: string;
@@ -220,7 +236,7 @@ export default function GovernancePage() {
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {proposals.map((proposal) => (
+            {sortedProposals.map((proposal) => (
               <GovernanceMemoCard
                 key={proposal.id}
                 proposal={proposal}
