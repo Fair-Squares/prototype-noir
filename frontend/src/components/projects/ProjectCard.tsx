@@ -1,13 +1,25 @@
 import Link from "next/link";
-import { Button, InfoDot, StatusChip } from "@/components/ui";
+import { Button, InfoDot, ModelledChip, StatusChip } from "@/components/ui";
 import {
   proposalLabel,
   quorumFor,
   votingWindowFor,
 } from "@/lib/proposalLifecycle";
 import { formatEUR } from "@/lib/contracts";
+import { getProjectDossier } from "@/lib/projectDossier";
 import { ProjectStatusChip } from "./ProjectStatusChip";
 import { distributionClaimedFraction, type ProjectRow } from "./ProjectRow";
+
+/** What the requested capital means, in plain language, for this lifecycle state.
+ *  Never says "if approved" for a home that is already funded. */
+function capitalCaption(row: ProjectRow): string {
+  if (row.status === 2) return "Requested capital — this proposal was rejected.";
+  if (row.status === 3 || row.distributionOpened || row.hasDeed)
+    return "Capital the fund committed to acquire this home.";
+  if (row.status === 1)
+    return "Approved — capital is committed when the acquisition executes.";
+  return "Capital the fund commits to acquire this home if the committee approves.";
+}
 
 export interface ProjectCardProps {
   row: ProjectRow;
@@ -57,6 +69,12 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
     !row.hasClaimed &&
     (row.claimableAmount ?? 0) > 0;
 
+  // Lead with the project's human identity (name / location / homes / covenant)
+  // from the modelled dossier when one is authored; fall back to the on-chain
+  // proposal label otherwise. The dossier facts carry a ModelledChip.
+  const dossier = getProjectDossier(row.proposal);
+  const displayName = dossier?.name ?? proposalLabel(row.proposal);
+
   // A short, honest note about the reader's own standing. Null when the
   // claimable amount itself is the message (rendered below as its own line).
   const positionNote: string | null = !connected
@@ -73,8 +91,23 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
     <article className="surface flex flex-col gap-4 p-5">
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-label">Funding request</p>
-          <h3 className="text-heading mt-0.5 text-text-1">{proposalLabel(row.proposal)}</h3>
+          {dossier ? (
+            <>
+              <span className="text-label inline-flex items-center gap-2">
+                Project <ModelledChip />
+              </span>
+              <h3 className="text-heading mt-0.5 text-text-1">{displayName}</h3>
+              <p className="text-caption mt-0.5 text-text-2">
+                {dossier.location} · {dossier.impact.homesEnabled} affordable homes ·{" "}
+                {dossier.covenant.lockYears}-yr covenant
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-label">Funding request</p>
+              <h3 className="text-heading mt-0.5 text-text-1">{displayName}</h3>
+            </>
+          )}
           {row.hasDeed ? (
             <p className="text-caption mt-0.5 text-text-2">
               Acquired · property deed held by the fund
@@ -86,9 +119,7 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
 
       <div>
         <p className="text-kpi-sm text-text-1">{formatEUR(row.requestedAmount)}</p>
-        <p className="text-caption mt-1 text-text-2">
-          Capital the fund commits to acquire this home if the committee approves.
-        </p>
+        <p className="text-caption mt-1 text-text-2">{capitalCaption(row)}</p>
       </div>
 
       {/* Pre-funding: show the committee maths. Post-funding: show payout flow. */}
@@ -165,31 +196,62 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
           ) : null}
         </div>
 
+        {/* Exactly one primary action, chosen by the project's current state:
+            claim a payout, vote while open, else open the project record. */}
         <div className="flex flex-wrap items-center gap-2">
           {canClaim ? (
-            <Button
-              size="sm"
-              variant="primary"
-              loading={claiming}
-              onClick={() => onClaim(row.id)}
-            >
-              {claiming ? "Claiming…" : "Claim share"}
-            </Button>
-          ) : null}
-          <Link
-            href={`/fund/${row.id}`}
-            className="btn btn-secondary btn-sm"
-            aria-label={`Open the investment memo for ${proposalLabel(row.proposal)}`}
-          >
-            View memo
-          </Link>
-          <Link
-            href={`/governance/${row.id}`}
-            className="btn btn-ghost btn-sm"
-            aria-label={`Open the governance memo for ${proposalLabel(row.proposal)}`}
-          >
-            {votingOpen ? "Review & vote" : "Governance memo"}
-          </Link>
+            <>
+              <Button
+                size="sm"
+                variant="primary"
+                loading={claiming}
+                onClick={() => onClaim(row.id)}
+              >
+                {claiming ? "Claiming…" : "Claim share"}
+              </Button>
+              <Link
+                href={`/fund/${row.id}`}
+                className="btn btn-secondary btn-sm"
+                aria-label={`Open the project record for ${displayName}`}
+              >
+                View project
+              </Link>
+            </>
+          ) : votingOpen ? (
+            <>
+              <Link
+                href={`/governance/${row.id}`}
+                className="btn btn-primary btn-sm"
+                aria-label={`Review and vote on ${displayName}`}
+              >
+                Review &amp; vote
+              </Link>
+              <Link
+                href={`/fund/${row.id}`}
+                className="btn btn-secondary btn-sm"
+                aria-label={`Open the project record for ${displayName}`}
+              >
+                View project
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link
+                href={`/fund/${row.id}`}
+                className="btn btn-primary btn-sm"
+                aria-label={`Open the project record for ${displayName}`}
+              >
+                View project
+              </Link>
+              <Link
+                href={`/governance/${row.id}`}
+                className="btn btn-ghost btn-sm"
+                aria-label={`Open the governance memo for ${displayName}`}
+              >
+                Governance memo
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </article>
