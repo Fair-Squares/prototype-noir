@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBlockNumber } from "@/lib/aztecClient";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
-import { getAztecTxHash } from "@/lib/txHash";
-import { simResult } from "@/lib/aztecSim";
+import { getAztecTxHash, getAztecTxOutcome } from "@/lib/txHash";
+import { simResult, humanizeContractError } from "@/lib/aztecSim";
 import {
   simGetProposals,
   simCreateProposal,
@@ -330,7 +330,16 @@ export async function POST(request: NextRequest) {
       const receipt = await govContract.methods
         .finalize_proposal(Number(proposalId))
         .send({ from: AztecAddress.fromString(actor.address) });
-      return NextResponse.json({ success: true, txHash: getAztecTxHash(receipt) });
+      const outcome = getAztecTxOutcome(receipt);
+      if (outcome.reverted) {
+        const mapped = humanizeContractError(outcome.error ?? "");
+        if (mapped) return NextResponse.json({ error: mapped.message }, { status: mapped.status });
+        return NextResponse.json(
+          { error: `Finalisation reverted: ${outcome.error ?? "see contract assertion."}` },
+          { status: 409 }
+        );
+      }
+      return NextResponse.json({ success: true, txHash: outcome.txHash });
     }
 
     if (action === "execute") {
@@ -342,14 +351,30 @@ export async function POST(request: NextRequest) {
       const executeReceipt = await govContract.methods
         .execute_proposal(Number(proposalId))
         .send({ from: AztecAddress.fromString(actor.address) });
+      const executeOutcome = getAztecTxOutcome(executeReceipt);
+      if (executeOutcome.reverted) {
+        const mapped = humanizeContractError(executeOutcome.error ?? "");
+        if (mapped) return NextResponse.json({ error: mapped.message }, { status: mapped.status });
+        return NextResponse.json(
+          { error: `Execution reverted: ${executeOutcome.error ?? "see contract assertion."}` },
+          { status: 409 }
+        );
+      }
       const openReceipt = await hfContract.methods
         .open_distribution(Number(proposalId))
         .send({ from: AztecAddress.fromString(actor.address) });
+      const openOutcome = getAztecTxOutcome(openReceipt);
+      if (openOutcome.reverted) {
+        return NextResponse.json(
+          { error: `Distribution could not be opened: ${openOutcome.error ?? "the open_distribution tail reverted."}` },
+          { status: 409 }
+        );
+      }
 
       return NextResponse.json({
         success: true,
-        txHash: getAztecTxHash(executeReceipt),
-        openDistributionTxHash: getAztecTxHash(openReceipt),
+        txHash: executeOutcome.txHash,
+        openDistributionTxHash: openOutcome.txHash,
         message: "Proposal executed and distribution opened",
       });
     }
@@ -358,6 +383,11 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[governance/proposals]", msg);
+    // finalize/execute assertions (quorum, voting window, status) throw at
+    // simulation time — map them to clear copy instead of leaking the raw Noir
+    // assertion (e.g. "Assertion failed: quorum not reached ...").
+    const mapped = humanizeContractError(msg);
+    if (mapped) return NextResponse.json({ error: mapped.message }, { status: mapped.status });
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simCastVote } from "@/lib/simulationStore";
-import { requireAztecTxHash } from "@/lib/txHash";
-import { simResult, isDuplicateNullifierError } from "@/lib/aztecSim";
+import { getAztecTxOutcome } from "@/lib/txHash";
+import { simResult, isDuplicateNullifierError, humanizeContractError } from "@/lib/aztecSim";
 
 export async function POST(request: NextRequest) {
   const { address, accountIndex = 0, proposalId, voteYes } = await request.json();
@@ -91,10 +91,24 @@ export async function POST(request: NextRequest) {
       .cast_vote_private(Number(proposalId), Boolean(voteYes), hintedKycNote, hintedDepositNote)
       .send({ from: accountAddress });
 
+    // A vote can pass private simulation (window open then) yet REVERT once mined
+    // because the public tally tail (_tally_vote_private) re-checks the deadline
+    // and the chain advanced past it. send() resolves either way, so inspect the
+    // receipt — never report a reverted ballot as recorded.
+    const outcome = getAztecTxOutcome(receipt);
+    if (outcome.reverted) {
+      const mapped = humanizeContractError(outcome.error ?? "");
+      if (mapped) return NextResponse.json({ error: mapped.message }, { status: mapped.status });
+      return NextResponse.json(
+        { error: `Your ballot was not tallied: ${outcome.error ?? "the on-chain tally reverted."}` },
+        { status: 409 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       message: `Private vote on proposal #${proposalId} recorded`,
-      txHash: requireAztecTxHash(receipt),
+      txHash: outcome.txHash,
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -105,6 +119,10 @@ export async function POST(request: NextRequest) {
         { status: 409 }
       );
     }
+    // The vote may also fail at SIMULATION time (e.g. voting already closed when
+    // the user clicks) — surface a clear reason rather than the raw assertion.
+    const mapped = humanizeContractError(msg);
+    if (mapped) return NextResponse.json({ error: mapped.message }, { status: mapped.status });
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

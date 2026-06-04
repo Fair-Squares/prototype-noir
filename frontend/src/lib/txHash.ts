@@ -49,3 +49,40 @@ export function getAztecTxMeta(receipt: unknown): AztecTxMeta {
     status,
   };
 }
+
+export interface AztecTxOutcome extends AztecTxMeta {
+  /** True when the tx was mined but its (public) execution reverted. */
+  reverted: boolean;
+  /** Revert/error description from the receipt, if any. */
+  error: string | null;
+}
+
+/**
+ * Like getAztecTxMeta but also reports whether a MINED tx reverted. A default
+ * `.send({ from })` awaits inclusion and resolves even when the public tail
+ * reverts post-mining (e.g. an enqueued tally hitting "voting window closed").
+ * `TxReceipt.status` only carries finalization state, so the revert lives in
+ * `executionResult` ("reverted") / `error`. Callers MUST inspect this instead
+ * of assuming a resolved send() succeeded — otherwise a reverted tx is reported
+ * as success (see CLAUDE.md error-handling rules).
+ */
+export function getAztecTxOutcome(receipt: unknown): AztecTxOutcome {
+  const meta = getAztecTxMeta(receipt);
+  const top = receipt && typeof receipt === "object" ? (receipt as Record<string, unknown>) : {};
+  const inner =
+    (top.receipt as Record<string, unknown> | undefined) ??
+    (top.txReceipt as Record<string, unknown> | undefined) ??
+    top;
+  // executionResult is the authoritative field ("success" | "reverted"); fall
+  // back to a hasExecutionReverted() method if the receipt is a live instance.
+  const execResult = inner.executionResult;
+  const revertedByField = typeof execResult === "string" && execResult.toLowerCase() === "reverted";
+  const maybeFn = (inner as { hasExecutionReverted?: () => boolean }).hasExecutionReverted;
+  const revertedByMethod = typeof maybeFn === "function" ? Boolean(maybeFn.call(inner)) : false;
+  const errRaw = inner.error;
+  return {
+    ...meta,
+    reverted: revertedByField || revertedByMethod,
+    error: errRaw === undefined || errRaw === null ? null : String(errRaw),
+  };
+}

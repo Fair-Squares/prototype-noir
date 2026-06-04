@@ -58,6 +58,13 @@ services:
       # per-route on-demand compile that `next dev` pays. Set FRONTEND_DEV=1 only
       # when you are EDITING the frontend and want hot reload (slower to use).
       - FRONTEND_DEV=${FRONTEND_DEV:-}
+      # The server-side EmbeddedWallet runs an in-process PXE that executes jobs
+      # one-at-a-time. A page that fires many parallel reads makes it log a
+      # benign "PXE is already processing N jobs" WARN per queued read — it is
+      # NOT an error or a leak (when the frontend gets no requests the PXE is
+      # silent). Quiet just that module so the noise doesn't look like a fault;
+      # raise FRONTEND_LOG_LEVEL to "info" to see it again when debugging.
+      - LOG_LEVEL=${FRONTEND_LOG_LEVEL:-info;error:embedded-wallet:pxe}
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -201,10 +208,15 @@ services:
       # the cli-wallet's ClientIVC proving (~4 s/tx across ~22 bootstrap txs).
       - PXE_PROVER_ENABLED=${PXE_PROVER_ENABLED:-false}
       - PXE_PROVER=${PXE_PROVER:-none}
-      # Short governance voting window for the local demo: 5 blocks. Blocks are
+      # Governance voting window for the local demo: 12 blocks. Blocks are
       # produced on-demand (only when there are txs), so the window advances
-      # with on-chain activity rather than wall-clock time.
-      - GOVERNANCE_VOTING_WINDOW_BLOCKS=${GOVERNANCE_VOTING_WINDOW_BLOCKS:-5}
+      # with on-chain activity rather than wall-clock time. 5 was too tight for
+      # interactive voting — clicking through the UI + proof-gen can mine several
+      # blocks, closing the window before a ballot lands (its public tally tail
+      # then reverts "voting window closed"). 12 gives headroom while staying
+      # small enough that seed-fsft.sh can still advance past the deadline to
+      # finalise (see MAX_ADVANCE in scripts/seed-fsft.sh — keep it >= this).
+      - GOVERNANCE_VOTING_WINDOW_BLOCKS=${GOVERNANCE_VOTING_WINDOW_BLOCKS:-12}
       # cli-wallet sets maxFeesPerGas = currentMinFees * (1 + MIN_FEE_PADDING).
       # Too low (default 0.5) -> fee spikes break deploys. Too high (1000) ->
       # wallet pre-reservation exceeds account fee-juice balance and we get

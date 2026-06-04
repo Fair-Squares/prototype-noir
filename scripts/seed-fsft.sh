@@ -16,7 +16,9 @@
 #   FRONTEND_URL   [http://localhost:3000]
 #   DEPOSIT_EACH   [20000]  EUR each account deposits into the fund
 #   PROPOSAL_AMOUNT[60000]  FSFT pool the executed proposal distributes
-#   MAX_ADVANCE    [12]     max filler txs to push the chain past the deadline
+#   MAX_ADVANCE    [20]     max filler txs to push the chain past the deadline
+#                           (keep >= GOVERNANCE_VOTING_WINDOW_BLOCKS in
+#                           docker-compose.yml, currently 12, or finalize fails)
 
 set -euo pipefail
 
@@ -35,7 +37,7 @@ FRONTEND_URL="${FRONTEND_URL:-http://localhost:3000}"
 DEPOSIT_EACH="${DEPOSIT_EACH:-10000}"
 PROPOSAL_AMOUNT="${PROPOSAL_AMOUNT:-20000}"
 PROPOSAL_TITLE="${PROPOSAL_TITLE:-Maashaven Wonen — Rotterdam}"
-MAX_ADVANCE="${MAX_ADVANCE:-12}"
+MAX_ADVANCE="${MAX_ADVANCE:-20}"
 # Capped-return params: rent = ROR × acquisition value. 300 bps (3%) of a
 # 500,000 home → 15,000/yr → 1,250/mo (the canonical example), so the dossier
 # shows a REAL on-chain ROR and get_expected_monthly_rent matches the doc.

@@ -19,10 +19,11 @@ interface QuoteRow {
 }
 
 /**
- * Read-only quote — the trust moment before submit. Shows the deposit amount,
- * the NAV per share, the estimated FSFT shares issued (deposit ÷ NAV when a NAV
- * is published, otherwise "Set at distribution"), and the cash that remains
- * after the deposit. Pure presentational — figures only, no inputs.
+ * Read-only quote — the trust moment before submit. Shows the deposit amount
+ * (recorded as principal/NAV immediately), the NAV per share, the PROJECTED
+ * FSFT shares (deposit ÷ NAV — minted later at acquisition, not at deposit),
+ * and the cash that remains after the deposit. Pure presentational — figures
+ * only, no inputs.
  *
  * No capped-return or fee rows: there is no contract source for them, so they
  * are omitted rather than invented.
@@ -38,7 +39,7 @@ export function InvestQuote({ amountEur, eurBalance, navPerFsftEur }: InvestQuot
       label: "You deposit",
       value: formatEURDecimals(amountEur),
       tone: "accent",
-      info: "The EUR moved from your wallet into the housing fund toward financing affordable homes.",
+      info: "Your EUR moves into the housing fund now and is recorded as your principal — your claim on the fund's value (NAV). This happens immediately; it is not yet converted to shares.",
     },
     {
       label: "NAV per share",
@@ -46,15 +47,15 @@ export function InvestQuote({ amountEur, eurBalance, navPerFsftEur }: InvestQuot
       info: "Net Asset Value per FSFT — the fund's published value of one share.",
     },
     {
-      label: "FSFT issued (estimate)",
+      label: "FSFT shares (projected)",
       value:
         estimatedFsft != null
           ? `~ ${estimatedFsft.toLocaleString("en-EU", {
               minimumFractionDigits: 2,
               maximumFractionDigits: 4,
             })} FSFT`
-          : "Set at distribution",
-      info: "FSFT are your ownership shares in the fund. The exact amount is issued when the fund distributes, at the fund's rate at that time.",
+          : "Issued at acquisition",
+      info: "FSFT are ownership shares. They are NOT issued when you deposit — they are minted later, when the fund acquires a home through a governance vote, at the fund's NAV rate then. This figure is a projection at today's rate, not an amount issued now.",
     },
     {
       label: "Cash after deposit",
@@ -87,13 +88,15 @@ export function InvestQuote({ amountEur, eurBalance, navPerFsftEur }: InvestQuot
         ))}
       </dl>
 
-      {!hasNav ? (
-        <p className="text-caption text-text-3">
-          No net asset value has been published yet, so shares cannot be
-          estimated in advance. The amount of FSFT you receive is settled at the
-          fund&rsquo;s rate when the fund distributes.
-        </p>
-      ) : null}
+      <p className="text-caption text-text-3">
+        Your euros are recorded as principal (your NAV claim) as soon as you
+        deposit. Ownership shares (FSFT) are issued later — when the fund next
+        acquires a property through a governance vote — at the fund&rsquo;s NAV
+        rate then.{" "}
+        {!hasNav
+          ? "No net asset value has been published yet, so the share figure can't be estimated in advance."
+          : "The projection above uses today's rate; the exact amount is set at that acquisition."}
+      </p>
     </div>
   );
 }

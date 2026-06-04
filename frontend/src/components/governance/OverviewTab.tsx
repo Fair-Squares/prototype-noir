@@ -155,18 +155,29 @@ export function OverviewTab({
       </Section>
 
       {votingEnded ? (
-        <Section
-          title="Finalise the vote"
-          description={
-            wouldPass
-              ? "Voting has closed with quorum met and the majority in favour. Finalise to record the result on-chain (approved) — then you can execute it to open the distribution and depositors can claim."
-              : "Voting has closed, but quorum or majority was not reached. Finalising will record this request as not passed."
-          }
-        >
-          <Button onClick={onFinalize} loading={isFinalizing}>
-            {isFinalizing ? "Finalising…" : wouldPass ? "Finalise — approve request" : "Finalise — close voting"}
-          </Button>
-        </Section>
+        quorum.reached ? (
+          <Section
+            title="Finalise the vote"
+            description={
+              wouldPass
+                ? "Voting has closed with quorum met and the majority in favour. Finalise to record the result on-chain (approved) — then you can execute it to open the distribution and depositors can claim."
+                : "Voting has closed with quorum met, but the majority was against. Finalising will record this request as not passed."
+            }
+          >
+            <Button onClick={onFinalize} loading={isFinalizing}>
+              {isFinalizing ? "Finalising…" : wouldPass ? "Finalise — approve request" : "Finalise — close voting"}
+            </Button>
+          </Section>
+        ) : (
+          // Quorum was not reached, so finalize_proposal would revert on-chain.
+          // Don't offer a button that fails — explain the terminal state instead.
+          <Alert tone="warning" title="Can't finalise — not enough votes">
+            Voting closed at block{" "}
+            <span className="text-mono">{window.deadlineBlock.toLocaleString()}</span> with{" "}
+            {quorum.total.toLocaleString()} of {quorum.required.toLocaleString()} ballots cast. This
+            request did not reach quorum, so it can&rsquo;t be finalised or funded.
+          </Alert>
+        )
       ) : null}
 
       {canExecute ? (
