@@ -377,9 +377,12 @@ function createInitialState(): SimState {
     proposals: [
       {
         id: 0,
-        title: "Buy 6-unit building in Utrecht West",
-        description: "Acquire a partially renovated 6-unit building with strong rental demand.",
-        descHash: "0x757472656368745f776573745f6275696c64696e670000000000000000000000",
+        // Matches the Maashaven dossier (projectDossier.ts) by both id and title
+        // slug, so the featured-project story is coherent in simulation too —
+        // not just on the live demo network (whose seed script titles it the same).
+        title: "Maashaven Wonen — Rotterdam",
+        description: "Close the documented financing gap (onrendabele top) for 20 affordable homes in Rotterdam-Zuid, under a 20-year affordability covenant.",
+        descHash: "0x6d616173686176656e5f776f6e656e5f726f7474657264616d00000000000000",
         amount: 210_000,
         yesVotes: 1,
         noVotes: 0,
