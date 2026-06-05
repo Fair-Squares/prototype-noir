@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { DataTable, StatusChip, type Column } from "@/components/ui";
+import { DataTable, ModelledChip, StatusChip, type Column } from "@/components/ui";
 import { formatEUR, type Proposal } from "@/lib/contracts";
 import {
   displayStatus,
   proposalLabel,
   votingWindowFor,
 } from "@/lib/proposalLifecycle";
+import { getProjectDossier } from "@/lib/projectDossier";
 
 /**
  * Compact preview of live funding requests for the Overview command center.
@@ -36,16 +37,22 @@ const columns: Column<Proposal>[] = [
   {
     key: "request",
     header: "Funding request",
-    render: (p) => (
-      <div className="min-w-0">
-        <span className="text-body font-semibold text-text-1">
-          {proposalLabel(p)}
-        </span>
-        <span className="text-caption block text-text-3">
-          Capital to acquire one home
-        </span>
-      </div>
-    ),
+    render: (p) => {
+      const dossier = getProjectDossier(p);
+      return (
+        <div className="min-w-0">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="text-body font-semibold text-text-1">
+              {dossier?.name ?? proposalLabel(p)}
+            </span>
+            {dossier ? <ModelledChip label="Modelled" /> : null}
+          </span>
+          <span className="text-caption block text-text-3">
+            {dossier ? `${dossier.location} · ` : ""}Capital to acquire one home
+          </span>
+        </div>
+      );
+    },
   },
   {
     key: "amount",

@@ -213,7 +213,7 @@ export default function PortfolioPage() {
         actions={
           address ? (
             <>
-              <Link href="/invest" className="btn btn-primary">
+              <Link href="/invest" className="btn btn-secondary">
                 Add to position
               </Link>
               <Link href="/dex" className="btn btn-ghost">

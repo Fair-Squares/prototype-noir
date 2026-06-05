@@ -1,7 +1,8 @@
 "use client";
 
-import { Button, DataTable, EmptyState, StatusChip, type Column } from "@/components/ui";
+import { Button, DataTable, EmptyState, ModelledChip, StatusChip, type Column } from "@/components/ui";
 import { formatEUR, type Proposal } from "@/lib/contracts";
+import { getProjectDossier } from "@/lib/projectDossier";
 
 export interface ClaimableByProposalProps {
   /** Proposals with an open distribution the caller can claim from. */
@@ -37,21 +38,31 @@ export function ClaimableByProposal({
     {
       key: "project",
       header: "Project",
-      render: (p) => (
-        <div className="min-w-0">
-          <p className="text-body text-text-1">Housing proposal #{p.id}</p>
-          <p className="text-caption text-text-3">Approved {formatEUR(p.amount)}</p>
-        </div>
-      ),
+      render: (p) => {
+        const dossier = getProjectDossier(p);
+        return (
+          <div className="min-w-0">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="text-body text-text-1">
+                {dossier?.name ?? `Housing proposal #${p.id}`}
+              </span>
+              {dossier ? <ModelledChip label="Modelled" /> : null}
+            </span>
+            <p className="text-caption text-text-3">
+              {dossier ? `${dossier.location} · ` : ""}Approved {formatEUR(p.amount)}
+            </p>
+          </div>
+        );
+      },
     },
     {
       key: "status",
       header: "Status",
       render: (p) =>
         p.hasClaimed ? (
-          <StatusChip status="claimed" />
+          <StatusChip status="claimed" label="Fully claimed" />
         ) : (
-          <StatusChip status="open" label="Distribution open" />
+          <StatusChip status="open" label="Distributing" />
         ),
     },
     {

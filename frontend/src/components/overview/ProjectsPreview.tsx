@@ -1,7 +1,8 @@
 "use client";
 
-import { DataTable, StatusChip, type Column } from "@/components/ui";
+import { DataTable, ModelledChip, StatusChip, type Column } from "@/components/ui";
 import { formatEUR, type PropertyDeed } from "@/lib/contracts";
+import { getProjectDossier } from "@/lib/projectDossier";
 
 /**
  * Compact preview of active housing projects, drawn from on-chain property
@@ -14,16 +15,23 @@ const columns: Column<PropertyDeed>[] = [
   {
     key: "project",
     header: "Project",
-    render: (p) => (
-      <div className="min-w-0">
-        <span className="text-body font-semibold text-text-1">
-          Housing proposal #{p.proposalId}
-        </span>
-        <span className="text-caption block text-text-3 text-mono">
-          Deed #{p.tokenId}
-        </span>
-      </div>
-    ),
+    render: (p) => {
+      const dossier = getProjectDossier({ id: p.proposalId, title: "" });
+      return (
+        <div className="min-w-0">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="text-body font-semibold text-text-1">
+              {dossier?.name ?? `Housing proposal #${p.proposalId}`}
+            </span>
+            {dossier ? <ModelledChip label="Modelled" /> : null}
+          </span>
+          <span className="text-caption block text-text-3">
+            {dossier ? `${dossier.location} · ` : ""}
+            <span className="text-mono">Deed #{p.tokenId}</span>
+          </span>
+        </div>
+      );
+    },
   },
   {
     key: "valuation",

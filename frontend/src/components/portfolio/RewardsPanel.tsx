@@ -52,7 +52,7 @@ export function RewardsPanel({
       <p className="text-kpi mt-1 text-text-1">{rewardsClaimable.toLocaleString()}</p>
 
       <ActionBar align="start" className="mt-4">
-        <Button onClick={onClaim} loading={claiming} disabled={!canClaim || claiming}>
+        <Button variant="secondary" onClick={onClaim} loading={claiming} disabled={!canClaim || claiming}>
           {claiming ? "Claiming…" : "Claim rewards"}
         </Button>
         <Button variant="ghost" onClick={onRunCheck} loading={attesting}>
