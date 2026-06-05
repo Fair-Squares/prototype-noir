@@ -240,12 +240,12 @@ function rewardEpochStartMs(epoch: number): number {
 }
 
 function getReferenceFsftPriceEur(state: SimState): number {
-  // DEX reference price tracks NAV (share value) = CAPITAL only. Rent is a
-  // separate claimable earnings stream and does not move share value. (CLAUDE.md)
-  const navEur = Math.max(0, state.fund.totalDeposits);
-  if (state.fund.fsftTotalSupply > 0) {
-    return roundTo4(navEur / state.fund.fsftTotalSupply);
-  }
+  // DEX reference = the LAST ISSUANCE price (the token price shares were last
+  // issued/distributed at), NOT current NAV-per-share. This mirrors the live
+  // contract's last_token_price_bps and the "Last issuance reference price"
+  // label (CLAUDE.md "Truth before polish"): resting orders are bounded around
+  // the issuance price, not around live NAV. Using NAV/share here produced a
+  // reference (~€225) wildly out of line with the order book (~€1).
   const issueRef = state.fund.tokenPriceBps > 0 ? state.fund.tokenPriceBps / 10_000 : 1;
   return roundTo4(issueRef || 1);
 }
@@ -450,7 +450,7 @@ function createInitialState(): SimState {
           owner: SIM_ACCOUNTS[2].address,
           amount: 350,
           remaining: 350,
-          priceEur: 1.03,
+          priceEur: 1.02,
           status: "open",
           createdAt: now - 180,
           updatedAt: now - 180,
