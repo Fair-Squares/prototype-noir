@@ -115,7 +115,7 @@ export async function GET(request: NextRequest) {
 
     const proposals = await Promise.all(
       Array.from({ length: count }, async (_, id) => {
-        const [proposal, distribution] = await Promise.all([
+        const [proposal, distribution, covenantRaw] = await Promise.all([
           govContract.methods.get_proposal(id).simulate({ from }).then((r) =>
             simResult<{
               desc_hash: bigint;
@@ -136,6 +136,16 @@ export async function GET(request: NextRequest) {
               small_pool: bigint;
               fifo_cap: bigint;
               claimed_total: bigint;
+            }>(r)
+          ),
+          // W1: the on-chain affordability covenant (is_set=false when none attached).
+          govContract.methods.get_proposal_covenant(id).simulate({ from }).then((r) =>
+            simResult<{
+              rent_ceiling_bps: bigint;
+              lock_years: bigint;
+              clawback_bps: bigint;
+              target_group: bigint;
+              is_set: boolean;
             }>(r)
           ),
         ]);
@@ -234,6 +244,20 @@ export async function GET(request: NextRequest) {
           hasClaimed,
           claimableAmount,
           hasPrivateDeposits,
+          covenant: covenantRaw.is_set
+            ? {
+                isSet: true,
+                rentCeilingBps: Number(
+                  toBigIntStrict(covenantRaw.rent_ceiling_bps, `Governance.get_proposal_covenant(${id}).rent_ceiling_bps`)
+                ),
+                lockYears: Number(
+                  toBigIntStrict(covenantRaw.lock_years, `Governance.get_proposal_covenant(${id}).lock_years`)
+                ),
+                clawbackBps: Number(
+                  toBigIntStrict(covenantRaw.clawback_bps, `Governance.get_proposal_covenant(${id}).clawback_bps`)
+                ),
+              }
+            : undefined,
         };
       })
     );
@@ -391,6 +415,37 @@ export async function POST(request: NextRequest) {
         openDistributionTxHash: openOutcome.txHash,
         message: "Proposal executed and distribution opened",
       });
+    }
+
+    // W1: attach the affordability covenant to a proposal (proposer-only,
+    // once-only, before any vote is cast — see Governance.set_proposal_covenant).
+    if (action === "set_covenant") {
+      const { rentCeilingBps, lockYears, clawbackBps, targetGroup = 0 } = body;
+      if (rentCeilingBps == null || lockYears == null || clawbackBps == null) {
+        return NextResponse.json(
+          { error: "rentCeilingBps, lockYears, clawbackBps required" },
+          { status: 400 }
+        );
+      }
+      const receipt = await govContract.methods
+        .set_proposal_covenant(
+          Number(proposalId),
+          Number(rentCeilingBps),
+          Number(lockYears),
+          Number(clawbackBps),
+          BigInt(targetGroup)
+        )
+        .send({ from: AztecAddress.fromString(actor.address) });
+      const outcome = getAztecTxOutcome(receipt);
+      if (outcome.reverted) {
+        const mapped = humanizeContractError(outcome.error ?? "");
+        if (mapped) return NextResponse.json({ error: mapped.message }, { status: mapped.status });
+        return NextResponse.json(
+          { error: `set_covenant reverted: ${outcome.error ?? "see contract assertion."}` },
+          { status: 409 }
+        );
+      }
+      return NextResponse.json({ success: true, txHash: outcome.txHash });
     }
 
     return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });

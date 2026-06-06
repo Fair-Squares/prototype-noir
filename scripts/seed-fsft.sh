@@ -100,6 +100,17 @@ PROPOSALS=$(get "/api/governance/proposals?address=${ADDR0}&accountIndex=0")
 PID=$(printf '%s' "$PROPOSALS" | jget "['proposals'][-1]['id']")
 log "Proposal id = ${PID}"
 
+# -- 2a. Attach the on-chain affordability covenant (W1) -----------------------
+# Proposer-only (test0), once-only, and MUST be set BEFORE any vote is cast. A
+# 3.5%/yr rent ceiling, 20-year lock, 50% clawback — the same terms the dossier
+# shows, now read live from Governance.get_proposal_covenant (ModelledChip off).
+COVENANT_CEILING_BPS="${COVENANT_CEILING_BPS:-350}"
+COVENANT_LOCK_YEARS="${COVENANT_LOCK_YEARS:-20}"
+COVENANT_CLAWBACK_BPS="${COVENANT_CLAWBACK_BPS:-5000}"
+log "Attach covenant on proposal ${PID} (ceiling ${COVENANT_CEILING_BPS}bps, lock ${COVENANT_LOCK_YEARS}y, clawback ${COVENANT_CLAWBACK_BPS}bps)"
+post /api/governance/proposals \
+  "{\"action\":\"set_covenant\",\"proposalId\":${PID},\"rentCeilingBps\":${COVENANT_CEILING_BPS},\"lockYears\":${COVENANT_LOCK_YEARS},\"clawbackBps\":${COVENANT_CLAWBACK_BPS},\"accountIndex\":0,\"address\":\"${ADDR0}\"}" >/dev/null
+
 # -- 2b. Set the capped-return parameters (ROR + acquisition value) ------------
 # Admin-only (test0). Makes the dossier show a REAL on-chain ROR instead of the
 # modelled fallback, and sets the property's acquisition value for expected-rent.
