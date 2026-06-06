@@ -25,6 +25,7 @@ export function ReturnsCapPanel({
   rorOnChain,
   acquisitionEur = MODELLED_EXAMPLE_ACQUISITION_EUR,
   variant = "full",
+  covenant,
 }: {
   cappedReturnPct?: number;
   /** Real ROR percent read from chain (HousingFund.ror_bps / 100). Preferred when > 0. */
@@ -32,10 +33,15 @@ export function ReturnsCapPanel({
   /** Acquisition value used for the worked ROR rent example (modelled). */
   acquisitionEur?: number;
   variant?: "full" | "compact";
+  /** On-chain affordability covenant for this proposal (W1). When set, its
+   *  numeric terms render as REAL ("on-chain") and the enforcement note reflects
+   *  that record_rent caps rent at the ceiling. */
+  covenant?: { isSet: boolean; rentCeilingBps: number; lockYears: number; clawbackBps: number };
 }) {
   const onChain = typeof rorOnChain === "number" && rorOnChain > 0;
   const rorPct = onChain ? (rorOnChain as number) : cappedReturnPct;
   const rorSource = onChain ? "on-chain" : "modelled";
+  const covenantOnChain = covenant?.isSet === true;
 
   if (variant === "compact") {
     return (
@@ -96,10 +102,41 @@ export function ReturnsCapPanel({
         </div>
       </dl>
 
+      {covenantOnChain ? (
+        <div className="mt-4 border-t border-border pt-4">
+          <p className="text-label mb-2">
+            Affordability covenant{" "}
+            <span className="text-caption text-text-3">(on-chain)</span>
+          </p>
+          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div>
+              <dt className="text-label">Rent ceiling</dt>
+              <dd className="text-body mt-0.5 text-mono text-text-1">
+                ~{covenant!.rentCeilingBps / 100}% / year
+              </dd>
+            </div>
+            <div>
+              <dt className="text-label">Affordability lock</dt>
+              <dd className="text-body mt-0.5 text-mono text-text-1">
+                {covenant!.lockYears} years
+              </dd>
+            </div>
+            <div>
+              <dt className="text-label">Clawback on breach</dt>
+              <dd className="text-body mt-0.5 text-mono text-text-1">
+                {covenant!.clawbackBps / 100}%
+              </dd>
+            </div>
+          </dl>
+        </div>
+      ) : null}
+
       <p className="text-caption mt-4 border-t border-border pt-3 text-text-3">
         The ROR rate is {onChain ? "read from the HousingFund contract" : "the modelled pilot term sheet"};
-        the worked euro figures are illustrative. The covenant is not yet enforced in-circuit — the
-        on-chain distribution still mints each holder their full FIFO + small-floor share.
+        the worked euro figures are illustrative.{" "}
+        {covenantOnChain
+          ? "The affordability covenant is enforced on-chain — record_rent rejects rent above the ceiling, so rents stay affordable by construction."
+          : "The covenant is not yet enforced in-circuit — the on-chain distribution still mints each holder their full FIFO + small-floor share."}
       </p>
     </section>
   );

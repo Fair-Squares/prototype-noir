@@ -147,10 +147,14 @@ export function ProjectDetailDossier({
       {/* Affordability covenant. */}
       <CovenantCard dossier={dossier} />
 
-      {/* Capped return — cost-based ROR rent, fully to investors (D2). */}
+      {/* Capped return — cost-based ROR rent, fully to investors (D2). The
+          covenant's numeric terms render as REAL when the proposal carries an
+          on-chain covenant (W1); the descriptive covenant card above stays
+          modelled prose. */}
       <ReturnsCapPanel
         cappedReturnPct={covenant.cappedReturnPct}
         rorOnChain={fundStats?.rorBps ? fundStats.rorBps / 100 : undefined}
+        covenant={proposal.covenant}
       />
 
       {/* Milestones. */}

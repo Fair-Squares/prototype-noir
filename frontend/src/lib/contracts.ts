@@ -167,6 +167,18 @@ export async function registerKYC(
 
 // ── Governance ────────────────────────────────────────────────────────────────
 
+/** On-chain affordability covenant attached to a proposal (W1). Present when a
+ *  proposer has called Governance.set_proposal_covenant; the numeric terms are
+ *  REAL on-chain values (rendered untagged / "on-chain"), unlike the descriptive
+ *  dossier covenant (rent band / target group prose), which stays modelled. */
+export interface ProposalCovenant {
+  isSet: boolean;
+  /** Max ANNUAL rent, bps of acquisition value (enforced by record_rent). */
+  rentCeilingBps: number;
+  lockYears: number;
+  clawbackBps: number;
+}
+
 export interface Proposal {
   id: number;
   title: string;
@@ -195,6 +207,8 @@ export interface Proposal {
    * is not a reliable "you have nothing" signal — the UI shows a claim prompt
    * instead of a misleading €0. */
   hasPrivateDeposits?: boolean;
+  /** On-chain affordability covenant (W1), when one is attached + set. */
+  covenant?: ProposalCovenant;
 }
 
 export interface GovernanceEligibility {
