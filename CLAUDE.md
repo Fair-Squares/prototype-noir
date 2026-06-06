@@ -113,8 +113,8 @@ Use the wrapper:
 
 By default the script uses the host `aztec` CLI: each contract runs
 `aztec test`, which handles compile + TXE + oracle resolver
-internally. No docker required. The full suite is **66 tests** across the
-5 V2 contracts (kyc_verifier 7, housing_fund 24, governance 10,
+internally. No docker required. The full suite is **77 tests** across the
+5 V2 contracts (kyc_verifier 7, housing_fund 29, governance 16,
 protocol_rewards 17, fsft_dex 8) and runs in CI on every push/PR
 (`.github/workflows/tests.yml`).
 
@@ -229,6 +229,22 @@ is fixed by the ROR formula, and because that rent is **below market**
 is dropped). ROR is a fund/property parameter; the keeper still posts **actual
 collected** rent (which may fall short of the ROR target when households underpay
 — see risk-pooling below), and the ROR figure drives the *expected/billed* rent.
+
+> **On-chain affordability covenant (Phase 2 / item 1 — landed).** The covenant
+> is no longer only modelled in `projectDossier.ts`: it now lives on-chain as a
+> *votable, enforced* proposal term. A proposer attaches it once, pre-vote, via
+> `Governance.set_proposal_covenant(proposal_id, rent_ceiling_bps, lock_years,
+> clawback_bps, target_group)` (proposer-only, once-only, bounds-checked); members
+> vote on the proposal including its covenant. The fund pulls it with
+> `HousingFund.sync_proposal_covenant(proposal_id)` (keyed by `property_id ==
+> proposal_id`), and **`record_rent` rejects rent above the covenant's monthly
+> ceiling** (`acquisition_value * rent_ceiling_bps / 10000 / 12`) — so rents stay
+> affordable by construction. Enforcement is additive/backward-compatible (no
+> synced covenant ⇒ no ceiling). **Follow-ups** (not yet built): the clawback
+> *transfer* of above-cap excess to the public partner, lock-expiry (maturity)
+> enforcement, the optional `target_group` eligibility gate, and surfacing the
+> on-chain covenant in the frontend so its `ModelledChip` comes off. See
+> `docs/PHASE2_COVENANT_RECONCILIATION_HARDENING.md`.
 
 ### One shared pool, pro-rata, risk-pooled
 
