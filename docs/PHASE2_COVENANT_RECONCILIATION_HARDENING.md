@@ -153,6 +153,28 @@ test coverage"). Each has cross-contract setup + public-path E2Es to extend:
   `housing_fund/src/test.nr:215–217`.
 These run in CI (`.github/workflows/tests.yml`) and raise real confidence in the private flows users hit.
 
+> **Testing-approach finding (MCP research against v4.3.0 — supersedes the "extend the Noir test" framing above).**
+> The hinted-note private flows must be tested in **TypeScript aztec.js e2e**, not Noir `TestEnvironment`:
+> - The canonical "private fn takes a `HintedNote`" contracts upstream (`claim_contract`, `card_game`) have
+>   **no Noir `TestEnvironment` test** — they're covered by **TS e2e** (`yarn-project/end-to-end/
+>   e2e_crowdfunding_and_claim.test.ts`), where aztec.js builds the hint (`packAsHintedNote`).
+> - Noir `TestEnvironment` can only hint a note at a **known storage slot** (the `aztec-nr` `history/test.nr`
+>   MockNote pattern). There is no ergonomic way to hint a **contract-created** note (a KYC credential, a
+>   deposit note) from a test, because you'd need the emitting contract's internal storage slot.
+> - Therefore **`cast_vote_private` is the *hardest* starting point**, not the easiest: it hints notes from
+>   *two other* contracts (KYCVerifier + HousingFund). `place_order` is similar (cross-contract + authwit).
+>   The **same-contract** flows (`claim_reward_private` consuming ProtocolRewards' own `RewardClaimNote`;
+>   `claim_distribution_private` / `reinvest_rent_private` consuming HousingFund's own `DepositNote`) are the
+>   only ones even plausibly Noir-testable, and only if the contract exposes a utility that returns the hint
+>   for the caller's own note (so the slot stays internal).
+> - The project has **no TS contract-test harness today** (scripts are deploy/smoke only).
+>
+> **Revised W3a:** build a minimal **TS aztec.js e2e harness** against the local docker network (reuse the
+> frontend's `EmbeddedWallet`/`serverWallet` + bootstrap-deployed addresses), then write the private-flow
+> tests there (start with `cast_vote_private` — KYC credential + deposit note + a real vote, since the TS path
+> builds hints natively). This is a real harness build, not a "extend the existing Noir test" quick win — the
+> per-PR/holistic reviews and the covenant 1c test deliberately stayed on the **public** path for this reason.
+
 ### 3b — Testnet deploy hardening (`scripts/testnet-deploy-*.ts`)
 Works today (SponsoredFPC `salt=0` account; 11 instances; `set_contracts`/`set_admin` wiring; KYC issuance →
 `scripts/.testnet/contracts.json` + `frontend/.env.testnet`). Gaps to a real pilot:
