@@ -1,7 +1,7 @@
 {
   "kyc_verifier-KYCVerifier.json": {
     "contractName": "KYCVerifier",
-    "hash": "484f095e9485d60eb09df9f2ba9c0295a5452fc9794f6b76cb691903bf92c42a"
+    "hash": "b4968356dce1f330f159e0712c09ecf11412507844e593c829c7fc94bd27d289"
   },
   "fund_token-FundToken.json": {
     "contractName": "FundToken",
@@ -9,23 +9,23 @@
   },
   "defi_vault-DeFiVault.json": {
     "contractName": "DeFiVault",
-    "hash": "1e1fc97b8446c90551f9664dda26c1eccb901192a75c24aa00f45b79301c049f"
+    "hash": "d516e74a38d74514ebd4599106a8c229a84245dd03114f00b787b5d827728e4f"
   },
   "housing_fund-HousingFund.json": {
     "contractName": "HousingFund",
-    "hash": "907b5a1d6f3d6b0a8a6492a5ff84ae03a2fa110fe490e38af3463ce6995394f5"
+    "hash": "d3afd417bea5f796b9dd3c0a2875ab66f628c471b7a0c902eee3d0249ddfe0de"
   },
   "governance-Governance.json": {
     "contractName": "Governance",
-    "hash": "6520f37cd50aa66dedaa1edc6168c898ca86b445b76d096e46538fed058a18b6"
+    "hash": "ffa445ad448b44bf68d6c3c2393b7eab6219b4e5a1f93429a163f3f308a61136"
   },
   "fsft_dex-FSFTDex.json": {
     "contractName": "FSFTDex",
-    "hash": "81431ae0e0388c4accac6667e3f1b16e664ecfe280dd0b3a5e749e26ed867bfe"
+    "hash": "f59e192c37bf3a0cb1766da5c8232cc30bcafb376ed6bb62f1cc6939e7c160f6"
   },
   "protocol_rewards-ProtocolRewards.json": {
     "contractName": "ProtocolRewards",
-    "hash": "ff0f7c528c93bbabc14f327ff5784086116fd426cc87ae420ba293a0f9ff600c"
+    "hash": "b43ed4d0ac4423df5ac68e73d08ae2b5046d3ddecb8cc907c20adf5f0398130b"
   },
   "dripper-Dripper.json": {
     "contractName": "Dripper",
@@ -38,5 +38,33 @@
   "nft_contract-NFT.json": {
     "contractName": "NFT",
     "hash": "16a039e817c7562a0ecf6d41ec413efc998b9da82212184a05ac1994ef2de40d"
+  },
+  "housing_fund-KYCVerifier.json": {
+    "contractName": "KYCVerifier",
+    "hash": "b4968356dce1f330f159e0712c09ecf11412507844e593c829c7fc94bd27d289"
+  },
+  "governance-KYCVerifier.json": {
+    "contractName": "KYCVerifier",
+    "hash": "b4968356dce1f330f159e0712c09ecf11412507844e593c829c7fc94bd27d289"
+  },
+  "fsft_dex-HousingFund.json": {
+    "contractName": "HousingFund",
+    "hash": "04e8b4732a7bae9f4abf512ebf78c8d3ecfbb223eeb3b17b13c1938c78a39cea"
+  },
+  "fsft_dex-KYCVerifier.json": {
+    "contractName": "KYCVerifier",
+    "hash": "b4968356dce1f330f159e0712c09ecf11412507844e593c829c7fc94bd27d289"
+  },
+  "protocol_rewards-KYCVerifier.json": {
+    "contractName": "KYCVerifier",
+    "hash": "b4968356dce1f330f159e0712c09ecf11412507844e593c829c7fc94bd27d289"
+  },
+  "protocol_rewards-Token.json": {
+    "contractName": "Token",
+    "hash": "3a31755b550f85f346d88ba54ebd1ea818a3db9f7034a3b8dc942ea373a37655"
+  },
+  "housing_fund-Governance.json": {
+    "contractName": "Governance",
+    "hash": "ffa445ad448b44bf68d6c3c2393b7eab6219b4e5a1f93429a163f3f308a61136"
   }
 }

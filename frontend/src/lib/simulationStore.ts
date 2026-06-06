@@ -130,7 +130,6 @@ export interface SimProposal {
     isSet: boolean;
     rentCeilingBps: number;
     lockYears: number;
-    clawbackBps: number;
   };
 }
 
@@ -406,8 +405,9 @@ function createInitialState(): SimState {
         distributionClaimed: 0,
         claimedBy: [],
         // Maashaven was approved under a 3.5%/yr rent ceiling, 20-year lock,
-        // 50% clawback — the on-chain covenant the fund enforces in record_rent.
-        covenant: { isSet: true, rentCeilingBps: 350, lockYears: 20, clawbackBps: 5000 },
+        // The on-chain covenant the fund enforces in record_rent (rent ceiling +
+        // lock). Affordability is enforced by rejecting rent above the ceiling.
+        covenant: { isSet: true, rentCeilingBps: 350, lockYears: 20 },
       },
       {
         id: 1,

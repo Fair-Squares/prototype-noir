@@ -160,16 +160,15 @@ unconstrained fn test_proposal_without_covenant_reports_unset() {
 unconstrained fn test_set_proposal_covenant_by_proposer() {
     let (mut env, gov, _admin, proposer) = setup_with_investor();
     env.call_public(proposer, Governance::at(gov).create_proposal(Field::from(42), 1000));
-    // The proposer attaches a 3.5%/yr ceiling, 20-year lock, 50% clawback.
+    // The proposer attaches a 3.5%/yr ceiling and a 20-year lock.
     env.call_public(
         proposer,
-        Governance::at(gov).set_proposal_covenant(0, 350, 20, 5000, Field::from(0)),
+        Governance::at(gov).set_proposal_covenant(0, 350, 20, Field::from(0)),
     );
     let cov = env.execute_utility(Governance::at(gov).get_proposal_covenant(0));
     assert(cov.is_set);
     assert_eq(cov.rent_ceiling_bps, 350);
     assert_eq(cov.lock_years, 20);
-    assert_eq(cov.clawback_bps, 5000);
 }
 
 #[test(should_fail_with = "only the proposer can attach a covenant")]
@@ -179,7 +178,7 @@ unconstrained fn test_set_proposal_covenant_rejects_non_proposer() {
     let stranger = env.create_light_account();
     env.call_public(
         stranger,
-        Governance::at(gov).set_proposal_covenant(0, 350, 20, 5000, Field::from(0)),
+        Governance::at(gov).set_proposal_covenant(0, 350, 20, Field::from(0)),
     );
 }
 
@@ -189,12 +188,12 @@ unconstrained fn test_set_proposal_covenant_rejects_double_set() {
     env.call_public(proposer, Governance::at(gov).create_proposal(Field::from(42), 1000));
     env.call_public(
         proposer,
-        Governance::at(gov).set_proposal_covenant(0, 350, 20, 5000, Field::from(0)),
+        Governance::at(gov).set_proposal_covenant(0, 350, 20, Field::from(0)),
     );
     // A second attach must fail -- the covenant is fixed once set.
     env.call_public(
         proposer,
-        Governance::at(gov).set_proposal_covenant(0, 400, 25, 6000, Field::from(0)),
+        Governance::at(gov).set_proposal_covenant(0, 400, 25, Field::from(0)),
     );
 }
 
@@ -205,7 +204,7 @@ unconstrained fn test_set_proposal_covenant_rejects_excess_ceiling() {
     // A ceiling above 100%/yr (10000 bps) is rejected.
     env.call_public(
         proposer,
-        Governance::at(gov).set_proposal_covenant(0, 20000, 20, 5000, Field::from(0)),
+        Governance::at(gov).set_proposal_covenant(0, 20000, 20, Field::from(0)),
     );
 }
 
@@ -219,7 +218,7 @@ unconstrained fn test_public_covenant_getters_match() {
 
     env.call_public(
         proposer,
-        Governance::at(gov).set_proposal_covenant(0, 350, 20, 5000, Field::from(0)),
+        Governance::at(gov).set_proposal_covenant(0, 350, 20, Field::from(0)),
     );
     // After attaching, the cross-contract (#[view]) primitives match what was set.
     assert_eq(env.view_public(Governance::at(gov).get_proposal_covenant_set_public(0)), true);

@@ -19,6 +19,20 @@ produced these anchors is summarised inline.
 
 ## Workstream 1 — Affordability covenant on-chain (item 1)
 
+> **STATUS — LANDED (2026-06), with a scope decision.** W1 shipped: the covenant
+> is a votable proposal term (`Governance.set_proposal_covenant`), synced into the
+> fund (`HousingFund.sync_proposal_covenant`), and **enforced** — `record_rent`
+> **rejects** rent above the monthly ceiling. **The clawback path described in 1c
+> below was deliberately DROPPED, not built.** Because FS rent is fixed by the ROR
+> formula and capped by the covenant ceiling, rent can never exceed the agreed
+> amount — so a "collect above the cap, then claw back the excess" recapture path
+> is dead weight (and showing a clawback % for a mechanism that can't fire would
+> violate the honesty rule). The `clawback_bps` field was removed from the
+> `CovenantView` struct, storage, the setter signature, the API and the UI. The
+> 1c/clawback prose below is kept only as the historical design. Remaining W1
+> follow-ups: lock-expiry (maturity) enforcement and the optional `target_group`
+> eligibility gate.
+
 ### Current state (grounded)
 - The covenant (rent band, target group, lock years, clawback) is **frontend-only modelled metadata**
   in `frontend/src/lib/projectDossier.ts` (`AffordabilityCovenant`, lines 77–85, 191–198). `HousingFund`
@@ -226,6 +240,7 @@ private flows tested). **+ W2 + W3b/c/d = pilot-ready.**
   enumeration before committing to 2a's private path; the public-log fallback is the hedge.
 - **Valuation oracle trust model** — who the valuers are / how the appraiser feed is signed is a governance
   decision, not just code.
-- **Covenant clawback** needs a real legal counterpart (the "public partner" recipient) — the on-chain path
-  is necessary but not sufficient; pair with the off-chain agreement.
+- **Covenant clawback** — DROPPED (see the W1 status banner). FS rent is ROR-fixed and ceiling-capped, so
+  it can never exceed the agreed amount; enforcement is by rejection, not recapture. No clawback recipient
+  / legal counterpart is needed.
 - Storage growth: per-proposal covenant maps + per-account history both add state; budget for it.

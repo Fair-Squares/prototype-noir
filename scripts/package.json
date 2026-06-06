@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "deploy": "npx tsx deploy.ts"
+    "deploy": "npx tsx deploy.ts",
+    "e2e:rewards": "npx tsx e2e/rewards-claim.e2e.ts"
   },
   "dependencies": {
     "@aztec/accounts": "4.3.0",

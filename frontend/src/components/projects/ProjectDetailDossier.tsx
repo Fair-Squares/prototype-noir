@@ -275,8 +275,11 @@ function CovenantCard({ dossier }: { dossier: ProjectDossier }) {
           </dd>
         </div>
         <div className="sm:col-span-2">
-          <dt className="text-label">Clawback</dt>
-          <dd className="text-body mt-0.5 text-text-2">{covenant.clawback}</dd>
+          <dt className="text-label">Enforcement</dt>
+          <dd className="text-body mt-0.5 text-text-2">
+            Rent is capped at the affordability ceiling on-chain — the fund rejects any rent posted
+            above it, so the homes stay affordable by construction.
+          </dd>
         </div>
       </dl>
     </section>

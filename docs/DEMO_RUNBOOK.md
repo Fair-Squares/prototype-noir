@@ -68,7 +68,7 @@ balance or the DEX.
     request.
   - **The financing gap** — the documented *onrendabele top* Fair Squares closes.
   - **Affordability covenant** — rent band, key-worker target group, 20-year
-    lock, clawback.
+    lock, on-chain rent ceiling (enforced by rejection — no clawback path).
   - **Returns & the affordability cap (D2)** — investor return capped at ~3.5 %
     net; surplus protects affordability. (Modelled covenant policy; the on-chain
     claim is unchanged.)
@@ -97,7 +97,7 @@ balance or the DEX.
 | Real (on-chain, this network) | Modelled for demo (tagged) |
 |---|---|
 | KYC → deposit → vote → execute → claim | Project capital stack & financing gap |
-| FIFO + **30 % small-depositor floor** split | Affordability covenant (rent band, target, lock, clawback) |
+| FIFO + **30 % small-depositor floor** split | Affordability covenant (rent band, target, lock, rent ceiling) |
 | Distribution pool, claimed, snapshot deposits | Capped-return (~3.5 %) + reserve split |
 | Property deed (AIP-721), NAV-per-FSFT | Milestones, homes-enabled, affordability-years |
 | Private balances + public aggregates | Rent-to-equity (roadmap) |

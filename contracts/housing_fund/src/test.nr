@@ -306,11 +306,11 @@ unconstrained fn setup_with_covenant(
     env.call_public(admin, HousingFund::at(hf).set_contracts(kyc, admin, admin, gov));
     env.call_public(admin, KYCVerifier::at(kyc).register_kyc(proposer));
 
-    // Proposal 0 with a 3.5%/yr ceiling, 20-year lock, 50% clawback.
+    // Proposal 0 with a 3.5%/yr ceiling and a 20-year lock.
     env.call_public(proposer, Governance::at(gov).create_proposal(Field::from(1), 1000));
     env.call_public(
         proposer,
-        Governance::at(gov).set_proposal_covenant(0, 350, 20, 5000, Field::from(0)),
+        Governance::at(gov).set_proposal_covenant(0, 350, 20, Field::from(0)),
     );
     // The fund knows property 0 cost EUR 500,000 and pulls proposal 0's covenant.
     env.call_public(admin, HousingFund::at(hf).set_acquisition_value(0, 500000));

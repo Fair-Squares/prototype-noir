@@ -143,7 +143,6 @@ export async function GET(request: NextRequest) {
             simResult<{
               rent_ceiling_bps: bigint;
               lock_years: bigint;
-              clawback_bps: bigint;
               target_group: bigint;
               is_set: boolean;
             }>(r)
@@ -252,9 +251,6 @@ export async function GET(request: NextRequest) {
                 ),
                 lockYears: Number(
                   toBigIntStrict(covenantRaw.lock_years, `Governance.get_proposal_covenant(${id}).lock_years`)
-                ),
-                clawbackBps: Number(
-                  toBigIntStrict(covenantRaw.clawback_bps, `Governance.get_proposal_covenant(${id}).clawback_bps`)
                 ),
               }
             : undefined,
@@ -420,10 +416,10 @@ export async function POST(request: NextRequest) {
     // W1: attach the affordability covenant to a proposal (proposer-only,
     // once-only, before any vote is cast — see Governance.set_proposal_covenant).
     if (action === "set_covenant") {
-      const { rentCeilingBps, lockYears, clawbackBps, targetGroup = 0 } = body;
-      if (rentCeilingBps == null || lockYears == null || clawbackBps == null) {
+      const { rentCeilingBps, lockYears, targetGroup = 0 } = body;
+      if (rentCeilingBps == null || lockYears == null) {
         return NextResponse.json(
-          { error: "rentCeilingBps, lockYears, clawbackBps required" },
+          { error: "rentCeilingBps, lockYears required" },
           { status: 400 }
         );
       }
@@ -432,7 +428,6 @@ export async function POST(request: NextRequest) {
           Number(proposalId),
           Number(rentCeilingBps),
           Number(lockYears),
-          Number(clawbackBps),
           BigInt(targetGroup)
         )
         .send({ from: AztecAddress.fromString(actor.address) });

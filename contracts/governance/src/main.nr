@@ -59,9 +59,6 @@ pub contract Governance {
         pub rent_ceiling_bps: u32,
         /// Affordability lock length, in years. The ceiling lifts at maturity.
         pub lock_years: u32,
-        /// Share of any rent collected above the ceiling that is clawed back to
-        /// the public partner, in bps.
-        pub clawback_bps: u32,
         /// Hashed eligibility group for covenant-gated access (0 = open).
         pub target_group: Field,
         /// True once the proposer has attached the covenant (once-only).
@@ -103,7 +100,6 @@ pub contract Governance {
         // proposal with no covenant reports is_set == false.
         p_rent_ceiling_bps: Map<Field, PublicMutable<u32, Context>, Context>,
         p_lock_years: Map<Field, PublicMutable<u32, Context>, Context>,
-        p_clawback_bps: Map<Field, PublicMutable<u32, Context>, Context>,
         p_target_group: Map<Field, PublicMutable<Field, Context>, Context>,
         p_covenant_set: Map<Field, PublicMutable<bool, Context>, Context>,
     }
@@ -334,14 +330,15 @@ pub contract Governance {
     // is still ACTIVE and BEFORE any vote is cast. That makes the covenant a
     // fixed term every voter sees -- it cannot be changed mid-ballot -- without
     // changing `create_proposal`'s signature (so existing callers keep working).
-    // Enforcement of the ceiling/clawback lands in HousingFund (1b/1c).
+    // Enforcement of the ceiling lands in HousingFund.record_rent (the fund pulls
+    // the covenant via sync_proposal_covenant). Affordability is enforced by
+    // REJECTING rent above the ceiling -- there is no clawback/recapture path.
 
     #[external("public")]
     fn set_proposal_covenant(
         proposal_id: u32,
         rent_ceiling_bps: u32,
         lock_years: u32,
-        clawback_bps: u32,
         target_group: Field,
     ) {
         let pid = proposal_id as Field;
@@ -355,17 +352,14 @@ pub contract Governance {
         let cast = self.storage.p_yes_votes.at(pid).read() + self.storage.p_no_votes.at(pid).read();
         assert(cast == 0, "covenant must be set before voting begins");
 
-        // Sane bounds: a positive ceiling no greater than 100%/yr, a finite lock,
-        // a clawback share no greater than 100%.
+        // Sane bounds: a positive ceiling no greater than 100%/yr and a finite lock.
         assert(rent_ceiling_bps > 0, "rent ceiling must be positive");
         assert(rent_ceiling_bps <= 10000, "rent ceiling out of range");
         assert(lock_years > 0, "lock years must be positive");
         assert(lock_years <= 100, "lock years out of range");
-        assert(clawback_bps <= 10000, "clawback out of range");
 
         self.storage.p_rent_ceiling_bps.at(pid).write(rent_ceiling_bps);
         self.storage.p_lock_years.at(pid).write(lock_years);
-        self.storage.p_clawback_bps.at(pid).write(clawback_bps);
         self.storage.p_target_group.at(pid).write(target_group);
         self.storage.p_covenant_set.at(pid).write(true);
     }
@@ -403,7 +397,6 @@ pub contract Governance {
         CovenantView {
             rent_ceiling_bps: self.storage.p_rent_ceiling_bps.at(pid).read(),
             lock_years: self.storage.p_lock_years.at(pid).read(),
-            clawback_bps: self.storage.p_clawback_bps.at(pid).read(),
             target_group: self.storage.p_target_group.at(pid).read(),
             is_set: self.storage.p_covenant_set.at(pid).read(),
         }

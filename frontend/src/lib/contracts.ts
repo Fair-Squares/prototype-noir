@@ -176,7 +176,6 @@ export interface ProposalCovenant {
   /** Max ANNUAL rent, bps of acquisition value (enforced by record_rent). */
   rentCeilingBps: number;
   lockYears: number;
-  clawbackBps: number;
 }
 
 export interface Proposal {

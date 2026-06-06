@@ -36,7 +36,7 @@ export function ReturnsCapPanel({
   /** On-chain affordability covenant for this proposal (W1). When set, its
    *  numeric terms render as REAL ("on-chain") and the enforcement note reflects
    *  that record_rent caps rent at the ceiling. */
-  covenant?: { isSet: boolean; rentCeilingBps: number; lockYears: number; clawbackBps: number };
+  covenant?: { isSet: boolean; rentCeilingBps: number; lockYears: number };
 }) {
   const onChain = typeof rorOnChain === "number" && rorOnChain > 0;
   const rorPct = onChain ? (rorOnChain as number) : cappedReturnPct;
@@ -108,7 +108,7 @@ export function ReturnsCapPanel({
             Affordability covenant{" "}
             <span className="text-caption text-text-3">(on-chain)</span>
           </p>
-          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <dt className="text-label">Rent ceiling</dt>
               <dd className="text-body mt-0.5 text-mono text-text-1">
@@ -119,12 +119,6 @@ export function ReturnsCapPanel({
               <dt className="text-label">Affordability lock</dt>
               <dd className="text-body mt-0.5 text-mono text-text-1">
                 {covenant!.lockYears} years
-              </dd>
-            </div>
-            <div>
-              <dt className="text-label">Clawback on breach</dt>
-              <dd className="text-body mt-0.5 text-mono text-text-1">
-                {covenant!.clawbackBps / 100}%
               </dd>
             </div>
           </dl>

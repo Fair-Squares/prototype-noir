@@ -234,17 +234,19 @@ collected** rent (which may fall short of the ROR target when households underpa
 > is no longer only modelled in `projectDossier.ts`: it now lives on-chain as a
 > *votable, enforced* proposal term. A proposer attaches it once, pre-vote, via
 > `Governance.set_proposal_covenant(proposal_id, rent_ceiling_bps, lock_years,
-> clawback_bps, target_group)` (proposer-only, once-only, bounds-checked); members
-> vote on the proposal including its covenant. The fund pulls it with
+> target_group)` (proposer-only, once-only, bounds-checked); members vote on the
+> proposal including its covenant. The fund pulls it with
 > `HousingFund.sync_proposal_covenant(proposal_id)` (keyed by `property_id ==
 > proposal_id`), and **`record_rent` rejects rent above the covenant's monthly
 > ceiling** (`acquisition_value * rent_ceiling_bps / 10000 / 12`) — so rents stay
 > affordable by construction. Enforcement is additive/backward-compatible (no
-> synced covenant ⇒ no ceiling). **Follow-ups** (not yet built): the clawback
-> *transfer* of above-cap excess to the public partner, lock-expiry (maturity)
-> enforcement, the optional `target_group` eligibility gate, and surfacing the
-> on-chain covenant in the frontend so its `ModelledChip` comes off. See
-> `docs/PHASE2_COVENANT_RECONCILIATION_HARDENING.md`.
+> synced covenant ⇒ no ceiling). **Affordability is enforced by REJECTION, not
+> clawback** — because FS rent is fixed by the ROR formula and capped by the
+> ceiling, rent can never exceed the agreed amount, so there is *no* clawback /
+> recapture path (a deliberate decision — dropped 2026-06; the field was removed
+> from the covenant struct, the setter, the API and the UI). **Follow-ups** (not
+> yet built): lock-expiry (maturity) enforcement and the optional `target_group`
+> eligibility gate. See `docs/PHASE2_COVENANT_RECONCILIATION_HARDENING.md`.
 
 ### One shared pool, pro-rata, risk-pooled
 

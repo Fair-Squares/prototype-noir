@@ -79,7 +79,6 @@ export interface AffordabilityCovenant {
   targetGroup: string;
   /** Years the affordability covenant locks the homes. */
   lockYears: number;
-  clawback: string;
   /** Capped net annual investor return (%). */
   cappedReturnPct: number;
 }
@@ -193,8 +192,6 @@ const DOSSIERS: ProjectDossier[] = [
       targetGroup:
         "Key workers — healthcare, education, public safety; household income €38k–€52k",
       lockYears: 20,
-      clawback:
-        "If affordability is removed early (e.g. rent is pushed above the cost-based ROR ceiling), the capped return is clawed back to the public partner.",
       cappedReturnPct: CAPPED_RETURN_PCT,
     },
     milestones: [
