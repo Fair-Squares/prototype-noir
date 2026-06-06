@@ -47,6 +47,27 @@ pub contract Governance {
         pub deadline_block: u32,
     }
 
+    /// Affordability covenant attached to a proposal (W1). These are the terms
+    /// members vote on alongside the capital ask -- the on-chain counterpart of
+    /// the previously frontend-only `projectDossier` covenant. All-zero with
+    /// `is_set == false` means no covenant was attached to this proposal.
+    #[derive(Serialize, Deserialize)]
+    pub struct CovenantView {
+        /// Maximum ANNUAL rent, in bps of the property's acquisition value
+        /// (same unit as `ror_bps` in HousingFund). The keeper-posted rent is
+        /// capped against this at `record_rent` once 1c lands.
+        pub rent_ceiling_bps: u32,
+        /// Affordability lock length, in years. The ceiling lifts at maturity.
+        pub lock_years: u32,
+        /// Share of any rent collected above the ceiling that is clawed back to
+        /// the public partner, in bps.
+        pub clawback_bps: u32,
+        /// Hashed eligibility group for covenant-gated access (0 = open).
+        pub target_group: Field,
+        /// True once the proposer has attached the covenant (once-only).
+        pub is_set: bool,
+    }
+
     #[storage]
     struct Storage<Context> {
         // Linked contract addresses
@@ -76,6 +97,15 @@ pub contract Governance {
         // caller can flip a PASSED proposal to EXECUTED. Appended at the END of
         // the struct so existing storage slots are not shifted.
         admin: PublicMutable<AztecAddress, Context>,
+
+        // W1: per-proposal affordability covenant. Appended at the END so existing
+        // storage slots are not shifted. An unwritten slot reads zero / false, so a
+        // proposal with no covenant reports is_set == false.
+        p_rent_ceiling_bps: Map<Field, PublicMutable<u32, Context>, Context>,
+        p_lock_years: Map<Field, PublicMutable<u32, Context>, Context>,
+        p_clawback_bps: Map<Field, PublicMutable<u32, Context>, Context>,
+        p_target_group: Map<Field, PublicMutable<Field, Context>, Context>,
+        p_covenant_set: Map<Field, PublicMutable<bool, Context>, Context>,
     }
 
     #[initializer]
@@ -298,6 +328,48 @@ pub contract Governance {
         self.storage.p_status.at(pid).write(STATUS_EXECUTED);
     }
 
+    // -- W1: attach the affordability covenant (a votable proposal term) ------
+    //
+    // The proposer attaches the covenant to their fresh proposal ONCE, while it
+    // is still ACTIVE and BEFORE any vote is cast. That makes the covenant a
+    // fixed term every voter sees -- it cannot be changed mid-ballot -- without
+    // changing `create_proposal`'s signature (so existing callers keep working).
+    // Enforcement of the ceiling/clawback lands in HousingFund (1b/1c).
+
+    #[external("public")]
+    fn set_proposal_covenant(
+        proposal_id: u32,
+        rent_ceiling_bps: u32,
+        lock_years: u32,
+        clawback_bps: u32,
+        target_group: Field,
+    ) {
+        let pid = proposal_id as Field;
+        assert_eq(
+            self.msg_sender(),
+            self.storage.p_proposer.at(pid).read(),
+            "only the proposer can attach a covenant",
+        );
+        assert(self.storage.p_status.at(pid).read() == STATUS_ACTIVE, "proposal is not active");
+        assert(!self.storage.p_covenant_set.at(pid).read(), "covenant already set");
+        let cast = self.storage.p_yes_votes.at(pid).read() + self.storage.p_no_votes.at(pid).read();
+        assert(cast == 0, "covenant must be set before voting begins");
+
+        // Sane bounds: a positive ceiling no greater than 100%/yr, a finite lock,
+        // a clawback share no greater than 100%.
+        assert(rent_ceiling_bps > 0, "rent ceiling must be positive");
+        assert(rent_ceiling_bps <= 10000, "rent ceiling out of range");
+        assert(lock_years > 0, "lock years must be positive");
+        assert(lock_years <= 100, "lock years out of range");
+        assert(clawback_bps <= 10000, "clawback out of range");
+
+        self.storage.p_rent_ceiling_bps.at(pid).write(rent_ceiling_bps);
+        self.storage.p_lock_years.at(pid).write(lock_years);
+        self.storage.p_clawback_bps.at(pid).write(clawback_bps);
+        self.storage.p_target_group.at(pid).write(target_group);
+        self.storage.p_covenant_set.at(pid).write(true);
+    }
+
     // -- View functions ---------------------------------------------------
 
     #[external("utility")]
@@ -323,6 +395,18 @@ pub contract Governance {
     unconstrained fn get_proposal_status(proposal_id: u32) -> pub u8 {
         let pid = proposal_id as Field;
         self.storage.p_status.at(pid).read()
+    }
+
+    #[external("utility")]
+    unconstrained fn get_proposal_covenant(proposal_id: u32) -> pub CovenantView {
+        let pid = proposal_id as Field;
+        CovenantView {
+            rent_ceiling_bps: self.storage.p_rent_ceiling_bps.at(pid).read(),
+            lock_years: self.storage.p_lock_years.at(pid).read(),
+            clawback_bps: self.storage.p_clawback_bps.at(pid).read(),
+            target_group: self.storage.p_target_group.at(pid).read(),
+            is_set: self.storage.p_covenant_set.at(pid).read(),
+        }
     }
 
     #[external("public")]
