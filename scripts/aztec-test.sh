@@ -62,7 +62,12 @@ stage_cross_contract_deps() {
   # artifact is emitted into the workspace-root target/, not the member dir.
   local tok_dir="contracts/vendor/aztec-standards"
   case "$1" in
-    housing_fund)     _stage_dep housing_fund kyc_verifier KYCVerifier ;;
+    housing_fund)
+      _stage_dep housing_fund kyc_verifier KYCVerifier
+      # W1: the covenant-enforcement test deploys a real Governance so the fund
+      # can sync a proposal's affordability covenant.
+      _stage_dep housing_fund governance Governance
+      ;;
     governance)       _stage_dep governance kyc_verifier KYCVerifier ;;
     protocol_rewards)
       _stage_dep protocol_rewards kyc_verifier KYCVerifier

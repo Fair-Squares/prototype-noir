@@ -269,6 +269,17 @@ pub contract HousingFund {
         // post-snapshot depositor cannot claim and a pre-snapshot withdrawer cannot.
         d_snapshot_block: Map<Field, PublicMutable<u32, Context>, Context>,
         r_snapshot_block: Map<Field, PublicMutable<u32, Context>, Context>,
+
+        // -- W1: affordability covenant, synced from governance --------------
+        // The covenant a proposal was approved under, pulled into the fund via
+        // sync_proposal_covenant and keyed by property_id (== proposal_id by
+        // convention -- the property a rent is posted against is the proposal
+        // that funded it). record_rent caps keeper-posted rent against this.
+        // Appended at the END so existing storage slots are not shifted; an
+        // unsynced property reads c_covenant_set == false (no enforcement).
+        c_covenant_set: Map<Field, PublicMutable<bool, Context>, Context>,
+        c_rent_ceiling_bps: Map<Field, PublicMutable<u32, Context>, Context>,
+        c_lock_years: Map<Field, PublicMutable<u32, Context>, Context>,
     }
 
     // ====================================================================
@@ -946,6 +957,22 @@ pub contract HousingFund {
         assert(amount > 0, "rent amount must be positive");
 
         let pkey = property_id as Field;
+
+        // W1c: enforce the affordability covenant. If a covenant has been synced
+        // for this property and an acquisition value is known, the keeper cannot
+        // book rent above the covenant's monthly ceiling
+        // (acquisition_value * rent_ceiling_bps / 10000 / 12) -- the rent stays
+        // affordable by construction. Properties with no synced covenant (or no
+        // acquisition value) are unaffected, so this is fully backward-compatible.
+        if self.storage.c_covenant_set.at(pkey).read() {
+            let acq = self.storage.acquisition_value_by_property.at(pkey).read();
+            if acq > 0 {
+                let ceiling_bps = self.storage.c_rent_ceiling_bps.at(pkey).read();
+                let monthly_cap = ((acq * ceiling_bps as u64) / 10000) / 12;
+                assert(amount <= monthly_cap, "rent exceeds affordability covenant ceiling");
+            }
+        }
+
         let prev = self.storage.rent_income_by_property.at(pkey).read();
         self.storage.rent_income_by_property.at(pkey).write(prev + amount);
 
@@ -956,6 +983,39 @@ pub contract HousingFund {
         // rent that was actually collected.
         let undistributed = self.storage.undistributed_rent.read();
         self.storage.undistributed_rent.write(undistributed + amount);
+    }
+
+    // -- W1: pull a proposal's affordability covenant into the fund ----------
+    //
+    // The covenant is immutable once a proposer attaches it on governance
+    // (set_proposal_covenant, once-only). This copies it into the fund keyed by
+    // property_id (== proposal_id by convention) so record_rent can enforce the
+    // rent ceiling against a local read (no per-rent cross-contract call).
+    // Permissionless and idempotent -- it only mirrors immutable, already-public
+    // governance state. Reverts if the proposal has no covenant attached.
+    #[external("public")]
+    fn sync_proposal_covenant(proposal_id: u32) {
+        let gov = Governance::at(self.storage.governance.read());
+        let is_set = self.view(gov.get_proposal_covenant_set_public(proposal_id));
+        assert(is_set, "proposal has no covenant");
+        let ceiling_bps = self.view(gov.get_proposal_rent_ceiling_bps_public(proposal_id));
+        let lock_years = self.view(gov.get_proposal_lock_years_public(proposal_id));
+
+        let pkey = proposal_id as Field;
+        self.storage.c_covenant_set.at(pkey).write(true);
+        self.storage.c_rent_ceiling_bps.at(pkey).write(ceiling_bps);
+        self.storage.c_lock_years.at(pkey).write(lock_years);
+    }
+
+    // -- W1: read the covenant the fund enforces for a property -------------
+    #[external("utility")]
+    unconstrained fn get_property_covenant(property_id: u32) -> pub (bool, u32, u32) {
+        let pkey = property_id as Field;
+        (
+            self.storage.c_covenant_set.at(pkey).read(),
+            self.storage.c_rent_ceiling_bps.at(pkey).read(),
+            self.storage.c_lock_years.at(pkey).read(),
+        )
     }
 
     // Admin: wire the EUR stablecoin the fund pays rent yield from (its own

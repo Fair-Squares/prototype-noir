@@ -1,4 +1,5 @@
 use crate::HousingFund;
+use governance::Governance;
 use kyc_verifier::KYCVerifier;
 use aztec::{protocol::address::AztecAddress, test::helpers::test_environment::TestEnvironment};
 
@@ -273,4 +274,88 @@ unconstrained fn test_cannot_withdraw_after_reinvest_same_record() {
     // The (seq 0, epoch 0) record is consumed; withdrawing it now must revert
     // before the EUR path is even reached.
     env.call_public(user, HousingFund::at(hf).claim_rent(0, 0));
+}
+
+// -- W1c: affordability covenant ENFORCEMENT (record_rent ceiling) -----------
+//
+// Deploys a real Governance so the fund can sync a proposal's covenant, then
+// proves record_rent caps keeper-posted rent at the covenant ceiling. The
+// property the rent is posted against is the proposal id (property_id ==
+// proposal_id). property 0 has a 3.5%/yr ceiling on a EUR 500,000 acquisition,
+// so the monthly cap is 500000 * 350 / 10000 / 12 = 1458.
+
+unconstrained fn setup_with_covenant(
+) -> (TestEnvironment, AztecAddress, AztecAddress, AztecAddress, AztecAddress) {
+    let mut env = TestEnvironment::new();
+    let admin = env.create_light_account();
+    let proposer = env.create_light_account();
+    let kyc = env.deploy("KYCVerifier").with_public_initializer(
+        admin,
+        KYCVerifier::interface().constructor(admin),
+    );
+    let hf = env.deploy("HousingFund").with_public_initializer(
+        admin,
+        HousingFund::interface().constructor(admin),
+    );
+    // Governance needs the fund address up front; the fund learns governance via
+    // set_contracts. fund_token is unused here, so admin stands in.
+    let gov = env.deploy("Governance").with_public_initializer(
+        admin,
+        Governance::interface().constructor(hf, kyc, admin, 300, 2),
+    );
+    env.call_public(admin, HousingFund::at(hf).set_contracts(kyc, admin, admin, gov));
+    env.call_public(admin, KYCVerifier::at(kyc).register_kyc(proposer));
+
+    // Proposal 0 with a 3.5%/yr ceiling, 20-year lock, 50% clawback.
+    env.call_public(proposer, Governance::at(gov).create_proposal(Field::from(1), 1000));
+    env.call_public(
+        proposer,
+        Governance::at(gov).set_proposal_covenant(0, 350, 20, 5000, Field::from(0)),
+    );
+    // The fund knows property 0 cost EUR 500,000 and pulls proposal 0's covenant.
+    env.call_public(admin, HousingFund::at(hf).set_acquisition_value(0, 500000));
+    env.call_public(admin, HousingFund::at(hf).sync_proposal_covenant(0));
+    (env, hf, gov, admin, proposer)
+}
+
+#[test]
+unconstrained fn test_sync_proposal_covenant_records_terms() {
+    let (env, hf, _gov, _admin, _proposer) = setup_with_covenant();
+    let (is_set, ceiling_bps, lock_years) =
+        env.execute_utility(HousingFund::at(hf).get_property_covenant(0));
+    assert(is_set);
+    assert_eq(ceiling_bps, 350);
+    assert_eq(lock_years, 20);
+}
+
+#[test]
+unconstrained fn test_record_rent_under_covenant_ceiling_ok() {
+    let (mut env, hf, _gov, admin, _proposer) = setup_with_covenant();
+    // EUR 1,000 <= EUR 1,458 monthly cap -> accepted.
+    env.call_public(admin, HousingFund::at(hf).record_rent(0, 1000));
+    assert_eq(env.execute_utility(HousingFund::at(hf).get_total_rent_income()), 1000);
+}
+
+#[test(should_fail_with = "rent exceeds affordability covenant ceiling")]
+unconstrained fn test_record_rent_over_covenant_ceiling_fails() {
+    let (mut env, hf, _gov, admin, _proposer) = setup_with_covenant();
+    // EUR 5,000 > EUR 1,458 monthly cap -> rejected by the covenant.
+    env.call_public(admin, HousingFund::at(hf).record_rent(0, 5000));
+}
+
+#[test]
+unconstrained fn test_record_rent_uncovenanted_property_unenforced() {
+    let (mut env, hf, _gov, admin, _proposer) = setup_with_covenant();
+    // Property 1 has no synced covenant, so the ceiling does not apply.
+    env.call_public(admin, HousingFund::at(hf).record_rent(1, 999999));
+    assert_eq(env.execute_utility(HousingFund::at(hf).get_total_rent_income()), 999999);
+}
+
+#[test(should_fail_with = "proposal has no covenant")]
+unconstrained fn test_sync_requires_a_covenant() {
+    let (mut env, hf, gov, _admin, proposer) = setup_with_covenant();
+    // Proposal 1 exists but never had a covenant attached -> sync reverts.
+    // (proposer is the KYC-registered investor, so create_proposal is allowed.)
+    env.call_public(proposer, Governance::at(gov).create_proposal(Field::from(2), 500));
+    env.call_public(proposer, HousingFund::at(hf).sync_proposal_covenant(1));
 }
