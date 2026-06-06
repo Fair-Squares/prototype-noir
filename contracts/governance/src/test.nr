@@ -208,3 +208,21 @@ unconstrained fn test_set_proposal_covenant_rejects_excess_ceiling() {
         Governance::at(gov).set_proposal_covenant(0, 20000, 20, 5000, Field::from(0)),
     );
 }
+
+#[test]
+unconstrained fn test_public_covenant_getters_match() {
+    let (mut env, gov, _admin, proposer) = setup_with_investor();
+    env.call_public(proposer, Governance::at(gov).create_proposal(Field::from(42), 1000));
+    // Before a covenant is attached, the public accessors HousingFund reads report
+    // "no covenant" so the fund enforces nothing.
+    assert_eq(env.view_public(Governance::at(gov).get_proposal_covenant_set_public(0)), false);
+
+    env.call_public(
+        proposer,
+        Governance::at(gov).set_proposal_covenant(0, 350, 20, 5000, Field::from(0)),
+    );
+    // After attaching, the cross-contract (#[view]) primitives match what was set.
+    assert_eq(env.view_public(Governance::at(gov).get_proposal_covenant_set_public(0)), true);
+    assert_eq(env.view_public(Governance::at(gov).get_proposal_rent_ceiling_bps_public(0)), 350);
+    assert_eq(env.view_public(Governance::at(gov).get_proposal_lock_years_public(0)), 20);
+}

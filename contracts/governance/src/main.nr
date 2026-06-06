@@ -423,6 +423,34 @@ pub contract Governance {
         self.storage.p_amount.at(pid).read()
     }
 
+    // W1b: public covenant accessors so HousingFund (and other contracts) can read
+    // a proposal's affordability terms cross-contract via `self.view(...)`. Returned
+    // as primitives, matching the existing cross-contract read pattern -- no
+    // CovenantView struct crosses the crate boundary. HousingFund depends on
+    // governance (not vice versa), so the fund pulls these; governance never calls
+    // the fund (which would be a circular crate dependency).
+
+    #[external("public")]
+    #[view]
+    fn get_proposal_covenant_set_public(proposal_id: u32) -> pub bool {
+        let pid = proposal_id as Field;
+        self.storage.p_covenant_set.at(pid).read()
+    }
+
+    #[external("public")]
+    #[view]
+    fn get_proposal_rent_ceiling_bps_public(proposal_id: u32) -> pub u32 {
+        let pid = proposal_id as Field;
+        self.storage.p_rent_ceiling_bps.at(pid).read()
+    }
+
+    #[external("public")]
+    #[view]
+    fn get_proposal_lock_years_public(proposal_id: u32) -> pub u32 {
+        let pid = proposal_id as Field;
+        self.storage.p_lock_years.at(pid).read()
+    }
+
     #[external("utility")]
     unconstrained fn get_voting_window_blocks() -> pub u32 {
         self.storage.voting_window_blocks.read()
