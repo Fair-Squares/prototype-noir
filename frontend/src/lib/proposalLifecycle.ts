@@ -2,9 +2,11 @@ import type { StatusKind } from "@/components/ui";
 import type { Proposal } from "@/lib/contracts";
 import { AZTEC_SLOT_DURATION_SEC, BLOCK_PRODUCTION_MODE } from "@/lib/chainParams";
 
-// Maps the on-chain proposal status enum (0=active, 1=passed, 2=failed,
-// 3=executed) to a StatusChip kind. No invented states — only the four the
-// Governance contract reports.
+// Maps the on-chain proposal status enum integer to a StatusChip kind. No
+// invented states — only the four the Governance contract reports. The integers
+// (0/1/2/3) carry NO user-facing label here; they are resolved to the canonical
+// vocabulary ("Voting open"/"Approved"/"Rejected"/"Funded") via GOVERNANCE_LABEL
+// and displayStatus() below, which is the source of truth for proposal labels.
 const STATUS_KIND: Record<number, StatusKind> = {
   0: "active",
   1: "passed",

@@ -21,7 +21,7 @@ function stateFor(index: number, current: number): StepState {
 }
 
 const MARKER: Record<StepState, string> = {
-  done: "border-[var(--color-success)] bg-[var(--color-success)] text-white",
+  done: "stepper-marker-done",
   active: "border-fs-magenta bg-fs-magenta text-white",
   upcoming: "border-border-strong bg-card text-text-3",
 };
@@ -64,7 +64,7 @@ export function Stepper({ steps, current, className }: StepperProps) {
                 <span
                   aria-hidden="true"
                   className={`my-1 w-px flex-1 sm:my-0 sm:mx-2 sm:h-px sm:w-auto sm:flex-1 ${
-                    state === "done" ? "bg-[var(--color-success)]" : "bg-border"
+                    state === "done" ? "stepper-connector-done" : "bg-border"
                   }`}
                 />
               ) : null}

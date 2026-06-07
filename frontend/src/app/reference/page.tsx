@@ -59,12 +59,6 @@ const CONTRACT_ROWS: ContractRow[] = [
     role: "Settlement currency (AIP-20)",
   },
   {
-    name: "Dripper",
-    envKey: "NEXT_PUBLIC_DRIPPER_ADDRESS",
-    address: process.env.NEXT_PUBLIC_DRIPPER_ADDRESS ?? "",
-    role: "Test-EUR faucet (test tooling only)",
-  },
-  {
     name: "Governance",
     envKey: "NEXT_PUBLIC_GOVERNANCE_ADDRESS",
     address: process.env.NEXT_PUBLIC_GOVERNANCE_ADDRESS ?? "",
@@ -96,9 +90,23 @@ const CONTRACT_ROWS: ContractRow[] = [
   },
 ];
 
+// Development / testing helpers — kept out of the core protocol list above so a
+// partner auditing addresses never reads a test faucet as a protocol component.
+const DEV_TOOL_ROWS: ContractRow[] = [
+  {
+    name: "Dripper",
+    envKey: "NEXT_PUBLIC_DRIPPER_ADDRESS",
+    address: process.env.NEXT_PUBLIC_DRIPPER_ADDRESS ?? "",
+    role: "Test-EUR faucet — demo network only, not a real onramp",
+    isDevTool: true,
+  },
+];
+
+const ALL_CONTRACT_ROWS = [...CONTRACT_ROWS, ...DEV_TOOL_ROWS];
+
 // How many components actually resolved to an address in this build's env.
-// Derived from CONTRACT_ROWS so it can never drift from the rendered table.
-const resolvedContractCount = CONTRACT_ROWS.filter((r) => r.address !== "").length;
+// Derived from the combined rows so it can never drift from the rendered tables.
+const resolvedContractCount = ALL_CONTRACT_ROWS.filter((r) => r.address !== "").length;
 
 const TABS: TabItem[] = [
   { value: "chain", label: "Chain & limits" },
@@ -307,7 +315,7 @@ function ReferencePageInner() {
 
       <Tabs tabs={TABS} value={activeTab} onValueChange={setTab} aria-label="Reference sections">
         {activeTab === "chain" ? (
-          <div className="space-y-6">
+          <div id="chain" className="space-y-6">
             <Section
               title="Live chain state"
               description="Current network and block height. Raw build/version detail lives here, out of the everyday UI."
@@ -357,19 +365,28 @@ function ReferencePageInner() {
         ) : null}
 
         {activeTab === "contracts" ? (
-          <Section
-            title="Deployed contracts"
-            description="On-chain instance for each protocol component in this environment. Addresses are read from the build-time NEXT_PUBLIC_*_ADDRESS values; a component with no value set shows “Not deployed” rather than a placeholder address."
-          >
-            <p className="text-caption text-text-3 mb-3">
-              {resolvedContractCount} of {CONTRACT_ROWS.length} components resolved to an address in this environment.
-            </p>
-            <ContractAddressTable rows={CONTRACT_ROWS} />
-          </Section>
+          <div id="contracts" className="space-y-6">
+            <Section
+              title="Core protocol contracts"
+              description="On-chain instance for each protocol component in this environment. Addresses are read from the build-time NEXT_PUBLIC_*_ADDRESS values; a component with no value set shows “Not deployed” rather than a placeholder address."
+            >
+              <p className="text-caption text-text-3 mb-3">
+                {resolvedContractCount} of {ALL_CONTRACT_ROWS.length} components resolved to an address in this environment.
+              </p>
+              <ContractAddressTable rows={CONTRACT_ROWS} />
+            </Section>
+
+            <Section
+              title="Development & testing"
+              description="Helpers used to run the demo network — not part of the protocol surface. The faucet mints test EUR and never touches real funds."
+            >
+              <ContractAddressTable rows={DEV_TOOL_ROWS} />
+            </Section>
+          </div>
         ) : null}
 
         {activeTab === "rewards" ? (
-          <div className="space-y-6">
+          <div id="rewards" className="space-y-6">
             <Section
               title="Reward pool & weighting (FSP)"
               description="Emission configuration read from the Protocol Rewards contract."
@@ -433,12 +450,14 @@ function ReferencePageInner() {
         ) : null}
 
         {activeTab === "formulas" ? (
-          <Section
-            title="Protocol formulas"
-            description="The exact distribution, NAV, and reward calculations this network runs, as implemented in the contracts and API layer."
-          >
-            <ProtocolFormulas />
-          </Section>
+          <div id="formulas">
+            <Section
+              title="Protocol formulas"
+              description="The exact distribution, NAV, and reward calculations this network runs, as implemented in the contracts and API layer."
+            >
+              <ProtocolFormulas />
+            </Section>
+          </div>
         ) : null}
       </Tabs>
     </div>

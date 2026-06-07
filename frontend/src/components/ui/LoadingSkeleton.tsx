@@ -4,7 +4,7 @@ export interface LoadingSkeletonProps {
   className?: string;
 }
 
-const BAR = "h-3 rounded bg-[var(--color-surface-muted)] animate-pulse";
+const BAR = "h-3 rounded skeleton-bar animate-pulse";
 
 /**
  * Calm multi-line text placeholder. Uses a low-key opacity pulse (no shimmer
@@ -36,8 +36,8 @@ export function SkeletonKpi({ className }: { className?: string }) {
       role="status"
       aria-label="Loading metric"
     >
-      <div className="mb-3 h-2.5 w-20 rounded bg-[var(--color-surface-muted)] animate-pulse" />
-      <div className="h-7 w-28 rounded bg-[var(--color-surface-muted)] animate-pulse" />
+      <div className="mb-3 h-2.5 w-20 rounded skeleton-bar animate-pulse" />
+      <div className="h-7 w-28 rounded skeleton-bar animate-pulse" />
     </div>
   );
 }
@@ -59,7 +59,7 @@ export function SkeletonRow({ cols = 4, className }: SkeletonRowProps) {
       {Array.from({ length: cols }).map((_, i) => (
         <div
           key={i}
-          className="h-3 flex-1 rounded bg-[var(--color-surface-muted)] animate-pulse"
+          className="h-3 flex-1 rounded skeleton-bar animate-pulse"
         />
       ))}
     </div>

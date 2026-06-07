@@ -84,6 +84,8 @@ export function CreateProposalForm({ onCreate, onCancel }: CreateProposalFormPro
           id="proposal-title"
           ref={titleRef}
           type="text"
+          name="proposal-title"
+          autoComplete="off"
           value={title}
           onChange={(event) => setTitle(event.target.value)}
           disabled={saving}
@@ -103,6 +105,8 @@ export function CreateProposalForm({ onCreate, onCancel }: CreateProposalFormPro
           id="proposal-amount"
           ref={amountRef}
           type="number"
+          name="proposal-amount"
+          autoComplete="off"
           min="1"
           inputMode="numeric"
           value={amount}
@@ -121,6 +125,8 @@ export function CreateProposalForm({ onCreate, onCancel }: CreateProposalFormPro
       >
         <textarea
           id="proposal-note"
+          name="proposal-note"
+          autoComplete="off"
           rows={3}
           value={description}
           onChange={(event) => setDescription(event.target.value)}
@@ -130,7 +136,7 @@ export function CreateProposalForm({ onCreate, onCancel }: CreateProposalFormPro
       </FormField>
 
       {submitError ? (
-        <p role="alert" className="text-caption text-[var(--color-danger)]">
+        <p role="alert" className="text-caption text-danger">
           {submitError}
         </p>
       ) : null}

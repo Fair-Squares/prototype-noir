@@ -32,12 +32,18 @@ interface StatusMeta {
 
 // Single source of truth: status string -> chip variant + default label.
 // Status never relies on color alone — a text label always renders.
+//
+// The governance kinds (active/passed/failed/executed) default to the CANONICAL
+// lifecycle vocabulary, not the raw on-chain enum words, so an un-overridden chip
+// can never leak crypto-DAO words into a housing-first UI. Proposal/project
+// rendering must STILL pass the override from proposalLifecycle.displayStatus()
+// (or ProjectStatusChip) — these defaults are only a safe fallback.
 const STATUS: Record<StatusKind, StatusMeta> = {
-  active: { variant: "success", label: "Active" },
+  active: { variant: "success", label: "Voting open" },
   verified: { variant: "success", label: "Verified" },
-  passed: { variant: "success", label: "Passed" },
+  passed: { variant: "success", label: "Approved" },
   completed: { variant: "success", label: "Completed" },
-  executed: { variant: "success", label: "Executed" },
+  executed: { variant: "success", label: "Funded" },
   claimed: { variant: "success", label: "Claimed" },
 
   ready: { variant: "accent", label: "Ready" },
@@ -47,7 +53,7 @@ const STATUS: Record<StatusKind, StatusMeta> = {
   delayed: { variant: "warning", label: "Delayed" },
 
   blocked: { variant: "danger", label: "Blocked" },
-  failed: { variant: "danger", label: "Failed" },
+  failed: { variant: "danger", label: "Rejected" },
   breached: { variant: "danger", label: "Breached" },
   impaired: { variant: "danger", label: "Impaired" },
 

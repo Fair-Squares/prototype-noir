@@ -20,9 +20,9 @@ export interface KpiCardProps {
 const VALUE_TONE: Record<KpiTone, string> = {
   default: "text-text-1",
   accent: "text-fs-teal-dark",
-  success: "text-[var(--color-success)]",
-  warning: "text-[var(--color-warning)]",
-  danger: "text-[var(--color-danger)]",
+  success: "text-success",
+  warning: "text-warning",
+  danger: "text-danger",
 };
 
 /**

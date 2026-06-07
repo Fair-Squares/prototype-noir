@@ -60,7 +60,7 @@ export function FormField({
         <span>{label}</span>
         {required ? (
           <>
-            <span className="text-[var(--color-alert)]" aria-hidden="true">
+            <span className="text-danger" aria-hidden="true">
               *
             </span>
             <span className="sr-only">(required)</span>
@@ -72,7 +72,7 @@ export function FormField({
         <p
           id={describedById}
           role="alert"
-          className="text-caption text-[var(--color-danger)]"
+          className="text-caption text-danger"
         >
           {error}
         </p>

@@ -180,12 +180,8 @@ function ProjectDetail({ projectId }: { projectId: number }) {
         description={
           <>
             {formatEUR(proposal.amount)} requested to acquire one affordable home
-            {proposal.status === 0 ? (
-              <>
-                {" "}·{" "}
-                <span className="text-mono">block {window.deadlineBlock.toLocaleString()}</span>{" "}
-                voting deadline
-              </>
+            {proposal.status === 0 && !window.closed && !window.unknown ? (
+              <> · voting ends in {window.remainingLabel}</>
             ) : null}
           </>
         }

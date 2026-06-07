@@ -15,20 +15,20 @@ export interface AlertProps {
 // family. Calm by design — no full-saturation fills.
 const TONE: Record<AlertTone, { box: string; text: string }> = {
   info: {
-    box: "border-[rgba(57,166,163,0.3)] bg-[rgba(57,166,163,0.1)]",
+    box: "alert-info",
     text: "text-fs-teal-dark",
   },
   success: {
-    box: "border-[rgba(46,140,137,0.25)] bg-[var(--color-success-bg)]",
-    text: "text-[var(--color-success)]",
+    box: "alert-success",
+    text: "text-success",
   },
   warning: {
-    box: "border-[rgba(178,107,0,0.25)] bg-[var(--color-warning-bg)]",
-    text: "text-[var(--color-warning)]",
+    box: "alert-warning",
+    text: "text-warning",
   },
   danger: {
-    box: "border-[rgba(192,53,59,0.25)] bg-[var(--color-danger-bg)]",
-    text: "text-[var(--color-danger)]",
+    box: "alert-danger",
+    text: "text-danger",
   },
 };
 

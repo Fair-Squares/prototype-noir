@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { CreateProposalForm } from "@/components/governance/CreateProposalForm";
 import { GovernanceMemoCard } from "@/components/governance/GovernanceMemoCard";
 import {
@@ -51,6 +52,7 @@ export default function GovernancePage() {
     isInvestor: false,
     roles: [],
   });
+  const [standingLoaded, setStandingLoaded] = useState(false);
   const [eligibility, setEligibility] = useState<GovernanceEligibility | null>(null);
 
   const refresh = async () => {
@@ -71,6 +73,7 @@ export default function GovernancePage() {
   }, [address, accountIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    setStandingLoaded(false);
     if (!address) {
       setKycProfile({ verified: false, isInvestor: false, roles: [] });
       setEligibility(null);
@@ -80,6 +83,7 @@ export default function GovernancePage() {
       .then(([profile, nextEligibility]) => {
         setKycProfile(profile);
         setEligibility(nextEligibility);
+        setStandingLoaded(true);
       })
       .catch((error: unknown) => {
         setLoadError(
@@ -177,6 +181,16 @@ export default function GovernancePage() {
         ) : null}
       </div>
 
+      {address && standingLoaded && !canCreate ? (
+        <Alert tone="info" title="Opening a funding request needs the investor role">
+          Only verified investors can ask the fund to commit capital to a home.{" "}
+          <Link href="/kyc" className="underline">
+            Verify your identity
+          </Link>{" "}
+          to unlock new funding requests. You can still review and vote on requests below.
+        </Alert>
+      ) : null}
+
       <KpiGrid cols={4}>
         {loading ? (
           <>
@@ -231,8 +245,8 @@ export default function GovernancePage() {
           </div>
         ) : proposals.length === 0 ? (
           <EmptyState
-            title="No funding requests yet"
-            description="When the committee opens a request to acquire a home, it will appear here for review and voting."
+            title="No funding requests awaiting the committee yet"
+            description="Approved, funded, and rejected requests appear here as decisions are made."
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

@@ -68,7 +68,7 @@ export function VotesTab({ proposal }: VotesTabProps) {
           aria-label="Quorum progress"
         >
           <div
-            className="h-full rounded-full bg-[var(--color-success)]"
+            className="h-full rounded-full bar-success"
             style={{
               width: `${quorum.required > 0 ? Math.min(100, (total / quorum.required) * 100) : 0}%`,
             }}

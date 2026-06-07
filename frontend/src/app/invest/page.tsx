@@ -317,9 +317,14 @@ function InvestPageInner() {
       {/* ── Step 3: Fund wallet (faucet is test-only) ───────────────────────── */}
       {isConnected && isInvestor && !hasCash ? (
         <Section
-          title="Fund your wallet"
-          description="You need EUR in your wallet before depositing. On testnet you can add test EUR below."
-          actions={verifyChip}
+          title="Fund your wallet (test faucet)"
+          description="You need EUR in your wallet before depositing. On this demo network you can add test EUR below — this is not a real onramp."
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              {verifyChip}
+              <StatusChip status="simulation" label="Test only" />
+            </div>
+          }
         >
           <EmptyState
             title="No cash available to deposit"
@@ -451,13 +456,10 @@ function InvestPageInner() {
           ) : null}
 
           <div className="text-caption mt-4 flex items-center gap-1.5 text-text-3">
-            <span>
-              Trade is optional. After depositing, FSFT shares can be sold on the
-              secondary market within a NAV-banded price range.
-            </span>
+            <span>After depositing, your Fund Shares (FSFT) can be sold on the secondary market.</span>
             <InfoDot
               label="About secondary liquidity"
-              content="Selling is never required — holding your position funds homes for the long term. When you do sell, the price is constrained to a band around the fund's net asset value."
+              content="Selling is never required — holding your position funds homes for the long term. When you do sell, the price is constrained to a band around the fund's net asset value (NAV)."
               align="right"
             />
           </div>

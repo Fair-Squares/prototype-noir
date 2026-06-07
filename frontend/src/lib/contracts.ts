@@ -186,7 +186,12 @@ export interface Proposal {
   amount: number;
   yesVotes: number;
   noVotes: number;
-  status: number; // 0=active, 1=passed, 2=failed, 3=executed
+  // On-chain enum integer. Render ONLY via proposalLifecycle.displayStatus()
+  // (source of truth), which maps it to the canonical labels:
+  //   0 → "Voting open" (or "Voting ended" once the deadline block passes)
+  //   1 → "Approved"  ·  2 → "Rejected"  ·  3 → "Funded"
+  // Never surface the raw enum words (Active/Passed/Failed/Executed).
+  status: number;
   deadline: number; // block number (legacy alias)
   createdAt: number; // block number (legacy alias)
   deadlineBlock?: number;
@@ -221,13 +226,6 @@ export interface GovernanceEligibility {
   reason: string;
   source?: string;
 }
-
-export const PROPOSAL_STATUS: Record<number, string> = {
-  0: "Active",
-  1: "Passed",
-  2: "Failed",
-  3: "Executed",
-};
 
 export async function fetchProposals(address?: string, accountIndex?: number): Promise<Proposal[]> {
   const params = new URLSearchParams();

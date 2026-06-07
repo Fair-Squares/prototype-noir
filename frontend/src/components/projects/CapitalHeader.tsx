@@ -8,7 +8,7 @@ export interface CapitalHeaderProps {
 
 /**
  * The capital context for the deal room: what the pool can still deploy into a
- * new home, what is already deployed in yield strategies, and what is committed
+ * new home, what is set aside for a future yield source, and what is committed
  * to funded projects. Every figure comes straight from `fetchFundStats` — no
  * derived "funding gap" or "homes enabled" is invented.
  */
@@ -45,7 +45,7 @@ export function CapitalHeader({ stats, loading }: CapitalHeaderProps) {
           label="Deployed"
           value={formatEUR(stats.totalInDefi)}
           tone="accent"
-          sub="Working in yield strategies while idle"
+          sub="Idle — set aside for yield, none active yet"
         />
         <KpiCard
           label="Committed to projects"

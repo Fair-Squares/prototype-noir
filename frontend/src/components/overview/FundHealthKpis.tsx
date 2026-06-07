@@ -35,9 +35,9 @@ export function FundHealthKpis({ stats }: { stats: FundStats }) {
         hint="Capital in the fund not yet parked in yield or committed to a home — what new acquisitions can draw on. €0 means every euro is already parked in yield or committed to a funded home."
       />
       <KpiCard
-        label="Parked in DeFi"
+        label="Idle capital"
         value={formatEUR(stats.totalInDefi)}
-        sub="Held idle"
+        sub="No yield active yet"
         hint="Idle capital set aside to be parked in a yield source. No real DeFi yield is earned yet — wiring a real yield adapter is future work (see docs/PHASE1_YIELD_AND_RENT.md)."
       />
       <KpiCard

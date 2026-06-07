@@ -12,6 +12,12 @@ export interface ContractRow {
   address: string;
   /** One-line role description. */
   role: string;
+  /**
+   * Marks a development / testing helper (e.g. the test-EUR faucet) rather than
+   * a core protocol component, so an auditor never reads it as part of the
+   * protocol surface. Renders a "Test tooling" badge.
+   */
+  isDevTool?: boolean;
 }
 
 /** 0x12ab…cdef — keeps the head + tail, collapses the middle. */
@@ -26,7 +32,10 @@ const COLUMNS: Column<ContractRow>[] = [
     header: "Contract",
     render: (r) => (
       <div className="min-w-0">
-        <div className="text-body text-text-1">{r.name}</div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-body text-text-1">{r.name}</span>
+          {r.isDevTool ? <span className="chip chip-neutral">Test tooling</span> : null}
+        </div>
         <div className="text-caption text-text-3">{r.role}</div>
       </div>
     ),

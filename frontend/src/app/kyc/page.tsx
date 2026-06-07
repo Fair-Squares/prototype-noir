@@ -5,6 +5,7 @@ import Link from "next/link";
 import KYCFlow from "@/components/KYCFlow";
 import { EligibilityChecklist, type ChecklistItem } from "@/components/verification/EligibilityChecklist";
 import {
+  AdvancedDetails,
   Alert,
   Button,
   EmptyState,
@@ -12,6 +13,7 @@ import {
   KpiGrid,
   LoadingSkeleton,
   PageHeader,
+  ProofChip,
   Section,
   SkeletonKpi,
   StatusChip,
@@ -139,14 +141,11 @@ export default function VerificationPage() {
         "Verified investors can place and match orders to transfer fund stakes peer-to-peer on the order book.",
       nextStep: "Complete identity verification to unlock the order book.",
     },
-    {
-      label: "Verifier keys configured",
-      state: eligibility?.recursiveVkConfigured ? "ok" : "pending",
-      explanation:
-        "The protocol's proof-verification keys are in place, so private eligibility proofs can be checked on-chain. This is a network-level readiness check, not something you act on.",
-      nextStep: "This is configured by the protocol operator. No action is needed from you.",
-    },
   ];
+
+  // Network-level readiness — configured by the protocol operator, not something
+  // the user acts on. Kept available but demoted out of the actionable checklist.
+  const verifierKeysConfigured = Boolean(eligibility?.recursiveVkConfigured);
 
   return (
     <div className="space-y-6">
@@ -198,7 +197,7 @@ export default function VerificationPage() {
             />
             <KpiCard
               label="Investor role"
-              value={profile.isInvestor ? "Active" : "Inactive"}
+              value={profile.isInvestor ? "Verified" : "Not verified"}
               tone={profile.isInvestor ? "success" : "default"}
               sub={profile.isInvestor ? "Can deposit and back proposals" : "Granted after verification"}
             />
@@ -220,7 +219,24 @@ export default function VerificationPage() {
         {loading && !eligibility ? (
           <LoadingSkeleton lines={6} />
         ) : (
-          <EligibilityChecklist items={checklist} />
+          <div className="space-y-4">
+            <EligibilityChecklist items={checklist} />
+            <AdvancedDetails summary="Protocol-level readiness">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-4">
+                <div className="flex-shrink-0 sm:w-52">
+                  <ProofChip
+                    label="Verifier keys configured"
+                    state={verifierKeysConfigured ? "ok" : "pending"}
+                  />
+                </div>
+                <p className="text-caption min-w-0 flex-1 text-text-2">
+                  The protocol&rsquo;s proof-verification keys are in place, so private eligibility
+                  proofs can be checked on-chain. This is a network-level readiness check configured
+                  by the protocol operator — no action is needed from you.
+                </p>
+              </div>
+            </AdvancedDetails>
+          </div>
         )}
       </Section>
 

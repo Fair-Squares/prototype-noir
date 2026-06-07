@@ -178,7 +178,7 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
           ) : null}
           {connected && canClaim ? (
             <p className="mt-0.5 inline-flex items-center gap-2">
-              <span className="text-mono text-[var(--color-success)]">
+              <span className="text-mono text-success">
                 {formatEUR(row.claimableAmount ?? 0)} claimable
               </span>
               <StatusChip status="open" label="Claimable" />

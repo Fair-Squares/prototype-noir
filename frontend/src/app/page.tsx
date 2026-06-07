@@ -206,7 +206,7 @@ export default function OverviewPage() {
               label="Available to deploy"
               value={formatEUR(stats.available)}
               sub={stats.available > 0 ? "Ready for new acquisitions" : "Fully committed"}
-              hint="Capital in the fund not yet parked in a yield source or committed to a home — what new acquisitions can draw on."
+              hint="Capital in the fund not yet parked in yield or committed to a home — what new acquisitions can draw on."
             />
             <KpiCard
               label="Committed to homes"

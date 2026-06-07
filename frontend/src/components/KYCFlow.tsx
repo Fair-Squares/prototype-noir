@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { registerKYC } from "@/lib/contracts";
-import { ActionBar, Alert, Button } from "@/components/ui";
+import { ActionBar, AdvancedDetails, Alert, Button } from "@/components/ui";
 
 const DEV_MODE =
   process.env.NEXT_PUBLIC_DEV_MODE === "true" ||
@@ -153,11 +153,7 @@ export default function KYCFlow({ userAddress, isVerified, isInvestor, onVerifie
           Start verification
         </Button>
 
-        {DEV_MODE ? (
-          <Button variant="secondary" onClick={handleDevSkip} disabled={loading}>
-            Dev skip
-          </Button>
-        ) : PHASE_STATUS[phase] ? (
+        {!DEV_MODE && PHASE_STATUS[phase] ? (
           <span className="text-caption text-text-3" aria-live="polite">
             {PHASE_STATUS[phase]}
           </span>
@@ -165,9 +161,23 @@ export default function KYCFlow({ userAddress, isVerified, isInvestor, onVerifie
       </ActionBar>
 
       {DEV_MODE && (
-        <p className="text-caption text-text-3" aria-live="polite">
-          Phase: {phase}
-        </p>
+        <AdvancedDetails summary="Demo mode">
+          <div className="space-y-3">
+            <p className="text-caption text-text-3">
+              This build runs in demo / simulation mode. The control below bypasses the real
+              identity proof and marks you verified without zkPassport — it exists only here, never
+              in the live system.
+            </p>
+            <ActionBar align="start">
+              <Button variant="secondary" onClick={handleDevSkip} disabled={loading}>
+                Skip verification (demo only)
+              </Button>
+            </ActionBar>
+            <p className="text-caption text-text-3" aria-live="polite">
+              Phase: {phase}
+            </p>
+          </div>
+        </AdvancedDetails>
       )}
 
       {error && (

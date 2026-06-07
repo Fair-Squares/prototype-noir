@@ -67,7 +67,7 @@ export function ReturnsCapPanel({
     <section className="surface p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-heading text-text-1">Capped return — rent is cost-based</h2>
-        <ModelledChip />
+        {onChain ? null : <ModelledChip />}
       </div>
       <p className="text-caption mt-1 max-w-prose text-text-2">
         Fair Squares is supply-side, capped capital — not a yield-chasing fund. The rent is defined

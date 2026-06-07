@@ -426,3 +426,39 @@ h3 {
 /* Simulation/demo chip — dashed, low-key, never dominant. */
 .chip-sim { background: rgba(191,19,99,0.05); color: var(--color-fs-magenta); border: 1px dashed rgba(191,19,99,0.45); }
 .chip-sim::before { display: none; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Status text colors — semantic intent classes so components reference status
+   by name, not by arbitrary `text-[var(...)]` values. Pair with .chip-* /
+   .alert-* for the matching tints.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.text-success { color: var(--color-success); }
+.text-warning { color: var(--color-warning); }
+.text-danger  { color: var(--color-danger); }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Loading skeletons & progress fills — muted ground + status fill, via class.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.skeleton-bar { background: var(--color-surface-muted); }
+.bar-success  { background: var(--color-success); }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Alert tones — each pairs a muted tint with a matching hairline border. Calm
+   by design (no full-saturation fills); the matching text color is .text-* /
+   .text-fs-teal-dark applied by the component.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.alert-info    { border-color: rgba(57,166,163,0.3);  background: rgba(57,166,163,0.1); }
+.alert-success { border-color: rgba(46,140,137,0.25); background: var(--color-success-bg); }
+.alert-warning { border-color: rgba(178,107,0,0.25);  background: var(--color-warning-bg); }
+.alert-danger  { border-color: rgba(192,53,59,0.25);  background: var(--color-danger-bg); }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Stepper marker / connector done-state — the completed-step accent (success).
+   Active (magenta) + upcoming states stay as brand utility classes.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.stepper-marker-done    { border-color: var(--color-success); background: var(--color-success); color: #fff; }
+.stepper-connector-done { background: var(--color-success); }
