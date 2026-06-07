@@ -278,7 +278,11 @@ on-chain, for privacy). `rentClaimable = earned − withdrawn − reinvested`.
   in-memory store (`simClaimRent` / `simReinvestRent`); `/portfolio` shows the
   earned/withdrawn/reinvested/claimable breakdown with both buttons.
 - **Live: Withdraw + Reinvest are both wired** — `claim_rent_private` and
-  `reinvest_rent_private` (each needs a keeper-opened rent epoch). Withdraw
+  `reinvest_rent_private` (each needs a keeper-opened rent epoch **and** the fund's
+  `eur_token` wired). The bootstrap now calls `HousingFund.set_eur_token` at deploy
+  (`bootstrap-local-network.sh`); it previously did **not**, so `eur_token` stayed
+  zero and a live rent claim reverted "eur token mismatch" — caught by the TS e2e
+  `scripts/e2e/rent-claim.e2e.ts` (see `scripts/e2e/README.md`). Withdraw
   (`claim_rent_private`) and the governance **distribution claim**
   (`claim_distribution_private`) now **enumerate all the caller's deposit notes**
   (loop over `get_my_deposit_notes`, skipping already-claimed / zero-share /

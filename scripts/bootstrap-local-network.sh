@@ -483,6 +483,17 @@ wire_contracts() {
     --contract-address "${FUND_ADDR}" \
     --args "${PROPERTY_NFT_ADDR}"
 
+  # Wire the EUR stablecoin the fund pays rent yield from (its own public
+  # balance). REQUIRED before any rent can be claimed -- without it
+  # HousingFund.eur_token stays zero and claim_rent_private / reinvest_rent_private
+  # revert "eur token mismatch" (surfaced by scripts/e2e/rent-claim.e2e.ts).
+  log "Wiring HousingFund.set_eur_token(eur_token)..."
+  wallet_send_with_retries required "HousingFund.set_eur_token" \
+    $AZTEC_WALLET_BIN send set_eur_token \
+    --from accounts:test0 \
+    --contract-address "${FUND_ADDR}" \
+    --args "${EUR_ADDR}"
+
   log "Wiring DeFiVault.set_housing_fund(housing_fund)..."
   wallet_send_with_retries required "DeFiVault.set_housing_fund" \
     $AZTEC_WALLET_BIN send set_housing_fund \

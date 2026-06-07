@@ -89,6 +89,12 @@ export async function connect(): Promise<Harness> {
     const acct = await wallet.createSchnorrAccount(a.secret, a.salt, a.signingKey);
     addresses.push(acct.address);
   }
+  // NOTE on cross-PXE note discovery: a fresh ephemeral PXE rediscovers the KYC
+  // credential issued at bootstrap (get_my_kyc_credentials -> 1) but NOT a
+  // DepositNote minted by another process's PXE (get_my_deposit_notes -> 0).
+  // So flows that need a deposit note CREATE it in-process via deposit_private
+  // (using the discoverable KYC hint) -- the same self-contained pattern flow #1
+  // uses for its reward note. Don't rely on reading another PXE's deposit notes.
   log("harness", `accounts: ${addresses.map((a) => a.toString().slice(0, 10)).join(", ")}`);
   return { node, wallet, addresses };
 }

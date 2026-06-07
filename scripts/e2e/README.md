@@ -44,7 +44,7 @@ which `bootstrap-local-network.sh` writes to `frontend/.env.local`. Inject them:
 cd scripts
 env $(grep -v '^#' ../frontend/.env.local | xargs) \
     AZTEC_NODE_URL=http://localhost:8080 \
-    npm run e2e:rewards
+    npm run e2e:rewards     # or: npm run e2e:rent
 ```
 
 A green run prints `[e2e:rewards] PASS …` and exits 0; any failed assertion or
@@ -58,6 +58,8 @@ reverted tx exits non-zero.
 | `REWARD_EPOCH` | `0` | epoch to checkpoint+allocate; bump for re-runs against a long-lived stack (no double-checkpoint guard) |
 | `REWARD_EMISSION` | `1000` | epoch emission (must be ≤ `epoch_emission_target(8M, epoch)`) |
 | `REWARD_AMOUNT` | `100` | reward units to allocate then claim |
+| `RENT_EPOCH` | `0` | rent epoch to open+claim; bump for re-runs (`open_rent_distribution` rejects a re-open) |
+| `RENT_AMOUNT` | `1000` | rent to record+distribute (kept under property 0's covenant ceiling) |
 
 > The test does its **own** `checkpoint_epoch` + `allocate_reward_private` —
 > the bootstrap does not open any epoch, so this keeps the flow self-contained
@@ -68,14 +70,30 @@ reverted tx exits non-zero.
 Implemented:
 - **`rewards-claim.e2e.ts`** — `allocate_reward_private` → `claim_reward_private`
   (mint to private balance) + double-claim rejection (SingleUseClaim).
+- **`rent-claim.e2e.ts`** — `deposit_private` (consumes a cross-contract
+  `HintedNote<KycCredentialNote>`) → `claim_rent_private` (same-contract
+  `HintedNote<DepositNote>`, private EUR payout) + double-claim rejection
+  (per-`(note,epoch)` nullifier). **This e2e caught a real bug:** the bootstrap
+  never called `HousingFund.set_eur_token`, so `eur_token` stayed zero and the
+  *live* rent claim reverted "eur token mismatch" — now fixed in
+  `bootstrap-local-network.sh`.
 
 Next, in ascending setup cost (see the PHASE2 plan's ranking):
-2. `housing_fund` `claim_distribution_private` (same-contract DepositNote; needs
-   a KYC note → `deposit_private` → an executed-proposal distribution).
-3. `housing_fund` `reinvest_rent_private` (same, + an opened rent epoch).
-4. `governance` `cast_vote_private` (TWO cross-contract hints: KYC + deposit).
-5. `fsft_dex` `place_order`/`claim` (cross-contract KYC hint + token escrow +
+3. `housing_fund` `reinvest_rent_private` (like rent-claim, mints a new note).
+4. `housing_fund` `claim_distribution_private` (same-contract DepositNote; needs
+   an executed-proposal distribution → the governance vote lifecycle).
+5. `governance` `cast_vote_private` (TWO cross-contract hints: KYC + deposit).
+6. `fsft_dex` `place_order`/`claim` (cross-contract KYC hint + token escrow +
    authwit + two funded traders).
+
+### Note on PXE note discovery
+A fresh ephemeral PXE rediscovers the bootstrap **KYC credential**
+(`get_my_kyc_credentials` → 1) but NOT a **DepositNote** minted by another
+process's PXE (`get_my_deposit_notes` → 0), even though both are
+`ONCHAIN_CONSTRAINED`. So flows that need a deposit note **create it in-process**
+via `deposit_private` (using the discoverable KYC hint) — the same self-contained
+pattern the rewards e2e uses for its reward note. Don't rely on reading another
+PXE's deposit notes.
 
 `harness.ts` provides the shared connection (`connect`, `loadContract`),
 the simulate-unwrap (`simValue`), and revert-aware send helpers (`sendOk`,
