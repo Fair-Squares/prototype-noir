@@ -151,7 +151,9 @@ Pattern lives in each contract's `src/test.nr`: a `use crate::Contract;` +
 real KYCVerifier, public deposit→rent→reinvest E2E). Host nargo runs tests in
 ~5 s per contract.
 
-**Coverage status (public-path E2Es landed; private-note E2Es still deferred):**
+**Coverage status (public-path E2Es landed in Noir; the private hinted-note E2Es
+— once deferred — are now ALL covered by the TS aztec.js harness in `scripts/e2e/`,
+see "Private-flow E2E harness" below):**
 
 1. ✅ KYCVerifier — issue/revoke happy paths + commitment parity (7 tests).
 2. ✅ HousingFund — rent ingestion, ROR, public reinvest E2E (24 tests).
@@ -167,6 +169,29 @@ real KYCVerifier, public deposit→rent→reinvest E2E). Host nargo runs tests i
    can_trade (real KYCVerifier) (8 tests). `place_order` → match → `cancel_order`
    / `claim` is the remaining PRIVATE E2E (hinted KYC note + token escrow +
    authwit).
+
+The "remaining PRIVATE E2E" notes above are **done** — but in TypeScript, not
+Noir. The hinted-note flows can't be hinted from `TestEnvironment` (it can only
+hint a note at a known storage slot, not a contract-created one), so they live as
+aztec.js e2e tests against the docker node under `scripts/e2e/` (`npm run e2e:all`):
+all six private flows — `claim_reward_private`, `claim_rent_private`,
+`reinvest_rent_private`, `cast_vote_private`, `claim_distribution_private`, and the
+DEX `place_order`/`cancel_order` — pass from a fresh deploy, each asserting a real
+numeric state delta and the single-use guard. See `scripts/e2e/README.md`.
+
+### Private-flow E2E harness (`scripts/e2e/`)
+
+TS aztec.js end-to-end tests for the private hinted-note flows that Noir
+`aztec test` structurally cannot cover. Run after `docker compose --profile aztec
+up -d` (bootstrap exited 0), on a quiet host:
+`cd scripts && env $(grep -v '^#' ../frontend/.env.local | xargs) AZTEC_NODE_URL=http://localhost:8080 npm run e2e:all`.
+`harness.ts` holds the shared connection + helpers (`connect`, `loadContract`,
+`simValue`, revert-aware `sendOk`/`sendExpectFail`, `depositInProcess`,
+`openRentEpoch`, `runProposalToExecuted`, `allDepositNotes`, the `totalClaim` math
+mirror) so all six flow files match. Key constraint: a fresh ephemeral PXE can't
+rediscover a note minted by another process's PXE, so each flow **creates the
+notes it consumes in-process**. These tests also caught + drove the
+`HousingFund.set_eur_token` bootstrap fix. Full details in `scripts/e2e/README.md`.
 
 ## Frontend unit tests (Vitest)
 

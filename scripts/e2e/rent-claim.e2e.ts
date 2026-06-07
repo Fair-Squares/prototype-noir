@@ -39,6 +39,8 @@ import {
   simValue,
   sendOk,
   sendExpectFail,
+  depositInProcess,
+  openRentEpoch,
 } from "./harness";
 
 const TAG = "e2e:rent-claim";
@@ -81,69 +83,28 @@ async function main() {
   );
   assert(!pre.open, `rent epoch ${EPOCH} is already open -- re-run with RENT_EPOCH set to a fresh index`);
 
-  // -- 1. KYC hint (discoverable cross-PXE) ----------------------------------
-  const creds = simValue<{ len: bigint; storage: unknown[] }>(
-    await kyc.methods.get_my_kyc_credentials(test0, 0).simulate({ from: test0 }),
-  );
-  log(TAG, `get_my_kyc_credentials -> len=${creds.len}`);
-  assert(BigInt(creds.len) >= 1n, "test0 has no KYC credential -- did bootstrap issue_credential run?");
-  const kycHint = creds.storage[0];
-
-  // -- 2. FIFO cursors + small threshold -------------------------------------
-  const cursor = simValue<{
-    cum_deposits: bigint;
-    cum_small_deposits: bigint;
-    deposit_seq: bigint;
-    small_threshold: bigint;
-  }>(await hf.methods.get_deposit_cursor_unconstrained().simulate({ from: test0 }));
-  // Deposit AT the small threshold => is_small=true => earns a small-pool share
-  // (a fresh deposit's FIFO share is 0; the small pool is what makes it non-zero).
-  const DEPOSIT = BigInt(cursor.small_threshold);
-  const suppliedCumBefore = BigInt(cursor.cum_deposits);
-  const suppliedSeq = BigInt(cursor.deposit_seq);
-  const suppliedIsSmall = DEPOSIT <= BigInt(cursor.small_threshold);
-  log(TAG, `cursor: cum_before=${suppliedCumBefore} seq=${suppliedSeq} threshold=${BigInt(cursor.small_threshold)} -> deposit ${DEPOSIT} (small=${suppliedIsSmall})`);
-
-  // -- 3. mint a fresh DepositNote in-process (consumes the KYC hint) ---------
-  log(TAG, `deposit_private(${DEPOSIT}, kycHint, ...)`);
-  await sendOk(
-    hf.methods.deposit_private(DEPOSIT, kycHint, suppliedCumBefore, suppliedSeq, suppliedIsSmall),
-    test0,
-    "deposit_private",
-  );
+  // -- 1-3+6. mint a fresh DepositNote in-process (shared helper) -------------
+  // depositInProcess reads the discoverable KYC hint, reads the FIFO cursors,
+  // deposits AT the small_threshold (is_small => earns a small-pool share; a
+  // fresh deposit's FIFO share is 0), and reads the new note's hint back.
+  const dep = await depositInProcess(h, hf, kyc, test0);
+  const depHint = dep.depositHint;
+  log(TAG, `deposit ${dep.amount} (small=${dep.isSmall}) cum_before=${dep.cumBefore} seq=${dep.seq} -> ${dep.noteCount} note(s)`);
 
   const balBefore = await privateEur(eur, test0);
   log(TAG, `baseline private EUR(test0) = ${balBefore}`);
 
-  // -- 4. admin posts rent + opens the rent distribution ---------------------
-  // The bootstrap does NOT wire the EUR token into the fund (HF.eur_token == 0),
-  // so the rent payout would revert "eur token mismatch" -- this e2e CAUGHT that
-  // gap (it also breaks the live frontend rent claim until bootstrap sets it; a
-  // bootstrap fix follows). set_eur_token is admin-only and idempotent.
-  log(TAG, `set_eur_token(${eurAddr})`);
-  await sendOk(hf.methods.set_eur_token(AztecAddress.fromString(eurAddr)), test0, "set_eur_token");
-
-  log(TAG, `record_rent(0, ${RENT_AMOUNT}) + open_rent_distribution(${EPOCH}, ${RENT_AMOUNT})`);
-  await sendOk(hf.methods.record_rent(0, RENT_AMOUNT), test0, "record_rent");
-  await sendOk(hf.methods.open_rent_distribution(EPOCH, RENT_AMOUNT), test0, "open_rent_distribution");
-
-  // -- 5. snapshot params the private claim must supply ----------------------
-  const st = simValue<RentStatus>(
-    await hf.methods.get_rent_distribution_status(EPOCH).simulate({ from: test0 }),
-  );
-  const smallPool = BigInt(st.small_pool);
-  const smallTotal = BigInt(st.small_total);
-  const fifoCap = BigInt(st.fifo_cap);
-  const snapBlock = Number(st.snapshot_block);
-  log(TAG, `epoch ${EPOCH}: amount=${BigInt(st.amount)} small_pool=${smallPool} small_total=${smallTotal} fifo_cap=${fifoCap} snapshot_block=${snapBlock}`);
-
-  // -- 6. the in-process DepositNote hint ------------------------------------
-  const deposits = simValue<{ len: bigint; storage: unknown[] }>(
-    await hf.methods.get_my_deposit_notes(test0, 0).simulate({ from: test0 }),
-  );
-  log(TAG, `get_my_deposit_notes -> len=${deposits.len}`);
-  assert(BigInt(deposits.len) >= 1n, "expected the in-process DepositNote");
-  const depHint = deposits.storage[0];
+  // -- 4-5. admin posts rent + opens the rent distribution (shared helper) ----
+  // openRentEpoch wires the EUR token (idempotent; bootstrap leaves HF.eur_token
+  // == 0, which would revert the payout "eur token mismatch" -- this e2e CAUGHT
+  // that gap), posts rent, opens the epoch, and returns the snapshot params the
+  // private claim must supply (small_pool/small_total/fifo_cap/snapshot_block).
+  const snap = await openRentEpoch(h, hf, test0, { epoch: EPOCH, amount: RENT_AMOUNT, eurAddr });
+  const smallPool = snap.smallPool;
+  const smallTotal = snap.smallTotal;
+  const fifoCap = snap.fifoCap;
+  const snapBlock = snap.snapshotBlock;
+  log(TAG, `epoch ${EPOCH}: amount=${snap.amount} small_pool=${smallPool} small_total=${smallTotal} fifo_cap=${fifoCap} snapshot_block=${snapBlock}`);
 
   // -- 7. the private flow under test ----------------------------------------
   log(TAG, `claim_rent_private(epoch=${EPOCH}, depositHint, eur, snapshots...)`);

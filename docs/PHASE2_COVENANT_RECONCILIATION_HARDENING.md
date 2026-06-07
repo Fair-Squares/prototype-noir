@@ -154,9 +154,20 @@ parity test; manual check that `/portfolio` shows a real history and `/dex` + Ov
 
 ## Workstream 3 — Deploy / proving / E2E / audit hardening (item 5)
 
-### 3a — Land the deferred private-note E2Es (scaffolding already exists)
-Current: **66 tests**, all **public paths**; the private paths are deferred (CLAUDE.md "Adding more aztec
-test coverage"). Each has cross-contract setup + public-path E2Es to extend:
+### 3a — Land the deferred private-note E2Es — ✅ DONE (TS aztec.js harness)
+
+> **STATUS — LANDED (2026-06).** All six private hinted-note flows now have passing e2e tests under
+> `scripts/e2e/` (`npm run e2e:all`), built as **TypeScript aztec.js tests against the docker node** —
+> NOT Noir `TestEnvironment` (which can't hint a contract-created note; see the finding below). Covered:
+> `claim_reward_private`, `claim_rent_private`, `reinvest_rent_private`, `cast_vote_private`,
+> `claim_distribution_private`, and the DEX `place_order`/`cancel_order`. Each is self-contained (mints
+> the notes it consumes in-process), asserts a real numeric state delta, and asserts the single-use guard
+> fires on a repeat. A shared `harness.ts` (connect/loadContract, revert-aware sends, `depositInProcess`,
+> `openRentEpoch`, `runProposalToExecuted`, `allDepositNotes`, the `totalClaim` math mirror) keeps the
+> six files consistent. The harness also caught + drove the `HousingFund.set_eur_token` bootstrap fix.
+> See `scripts/e2e/README.md` and the "Private-flow E2E harness" section in CLAUDE.md.
+
+Original plan (for reference) — each had cross-contract setup + public-path E2Es to extend:
 - **Governance** `cast_vote_private` (happy / double-vote via SingleUseClaim / revoked-credential / tie) —
   `governance/src/test.nr:40–46`; extend `setup_with_investor`.
 - **ProtocolRewards** `allocate_reward_private` → `claim_reward_private` (+ re-claim rejection) —

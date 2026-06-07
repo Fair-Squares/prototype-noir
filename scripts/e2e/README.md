@@ -1,21 +1,23 @@
 # Private-flow E2E harness (W3a)
 
 TypeScript aztec.js end-to-end tests for the contracts' **private hinted-note**
-flows, run against the **running docker local-network** node.
+flows, run against the **running docker local-network** node. All six private
+flows are covered and pass from a fresh deploy via `npm run e2e:all`.
 
 ## Why this exists (and why it isn't a Noir `aztec test`)
 
-The private entrypoints (`claim_reward_private`, `claim_distribution_private`,
-`cast_vote_private`, the DEX `place_order`/`claim`) take a `HintedNote<…>` — an
-unconstrained hint proving a **contract-created** note exists in the note-hash
-tree. Noir's `TestEnvironment` can only hint a note at a *known storage slot*
-(the `aztec-nr` `history/test.nr` MockNote pattern); it has no ergonomic way to
-hint a note an *emitting contract* created (a reward note, a deposit note, a KYC
-credential). Upstream Aztec covers exactly this shape (`claim_contract`,
-`crowdfunding`) only via a **TS aztec.js e2e**, where the test reads the note's
-hint from a `get_my_*_notes` utility (`.simulate({ from })` → `storage[i]`) and
-passes it straight into the private consumer — **no manual `packAsHintedNote`**.
-See `docs/PHASE2_COVENANT_RECONCILIATION_HARDENING.md` → Workstream 3a.
+The private entrypoints (`claim_reward_private`, `claim_rent_private`,
+`reinvest_rent_private`, `cast_vote_private`, `claim_distribution_private`, the
+DEX `place_order`/`cancel_order`) take a `HintedNote<…>` — an unconstrained hint
+proving a **contract-created** note exists in the note-hash tree. Noir's
+`TestEnvironment` can only hint a note at a *known storage slot* (the `aztec-nr`
+`history/test.nr` MockNote pattern); it has no ergonomic way to hint a note an
+*emitting contract* created (a reward note, a deposit note, a KYC credential).
+Upstream Aztec covers exactly this shape (`claim_contract`, `crowdfunding`) only
+via a **TS aztec.js e2e**, where the test reads the note's hint from a
+`get_my_*_notes` utility (`.simulate({ from })` → `storage[i]`) and passes it
+straight into the private consumer — **no manual `packAsHintedNote`**. See
+`docs/PHASE2_COVENANT_RECONCILIATION_HARDENING.md` → Workstream 3a.
 
 ## Prerequisites
 
@@ -26,11 +28,11 @@ See `docs/PHASE2_COVENANT_RECONCILIATION_HARDENING.md` → Workstream 3a.
    ```
 2. **Quiet host** — do NOT run a host-side `aztec compile` / `aztec test` while
    the stack is bootstrapping. The repo is bind-mounted into the bootstrap
-   container, so concurrent writes to `contracts/*/target` truncate artifacts
-   (see CLAUDE.md "Docker full-stack bind-mount race"). A *read-only* node test
-   (which these are) is safe **after** bootstrap completes. The harness loads
-   artifacts from `frontend/src/artifacts/` (build-generated), not the racing
-   `target/` dir.
+   container, so concurrent writes to the per-contract target dirs truncate
+   artifacts (see CLAUDE.md "Docker full-stack bind-mount race"). A *read-only*
+   node test (which these are) is safe **after** bootstrap completes. The harness
+   loads artifacts from `frontend/src/artifacts/` (build-generated), not the
+   racing target dir.
 3. Deps are already declared in `scripts/package.json`
    (`@aztec/{aztec.js,accounts,wallets}@4.3.0`, `tsx`). Run `npm install` in
    `scripts/` once if `node_modules` is absent.
@@ -44,57 +46,60 @@ which `bootstrap-local-network.sh` writes to `frontend/.env.local`. Inject them:
 cd scripts
 env $(grep -v '^#' ../frontend/.env.local | xargs) \
     AZTEC_NODE_URL=http://localhost:8080 \
-    npm run e2e:rewards     # or: npm run e2e:rent
+    npm run e2e:all   # or one flow: e2e:rewards | e2e:rent | e2e:reinvest | e2e:vote | e2e:distribution | e2e:dex
 ```
 
-A green run prints `[e2e:rewards] PASS …` and exits 0; any failed assertion or
-reverted tx exits non-zero.
+Each flow prints `[<tag>] PASS -- …` and exits 0; any failed assertion or
+reverted tx exits non-zero. `e2e:all` runs all six in sequence (one PXE at a
+time — concurrent runs would race on nonces/shared state).
+
+> Re-runs against a **long-lived** node accumulate state (epochs, proposals,
+> notes). The flows self-pick fresh indices where they can (rewards auto-scans
+> for an un-opened epoch; proposal ids derive from the live count) and page over
+> `get_my_*_notes` past the 10-note `MAX_NOTES_PER_PAGE` cap. For rent-based
+> flows, bump `RENT_EPOCH` on re-run, or just reset the stack for a clean slate.
 
 ### Knobs (env)
 
-| var | default | meaning |
-|---|---|---|
-| `AZTEC_NODE_URL` | `http://localhost:8080` | the docker node RPC (host port) |
-| `REWARD_EPOCH` | `0` | epoch to checkpoint+allocate; bump for re-runs against a long-lived stack (no double-checkpoint guard) |
-| `REWARD_EMISSION` | `1000` | epoch emission (must be ≤ `epoch_emission_target(8M, epoch)`) |
-| `REWARD_AMOUNT` | `100` | reward units to allocate then claim |
-| `RENT_EPOCH` | `0` | rent epoch to open+claim; bump for re-runs (`open_rent_distribution` rejects a re-open) |
-| `RENT_AMOUNT` | `1000` | rent to record+distribute (kept under property 0's covenant ceiling) |
+| var | default | flow | meaning |
+|---|---|---|---|
+| `AZTEC_NODE_URL` | `http://localhost:8080` | all | the docker node RPC (host port) |
+| `REWARD_EPOCH` | `0` | rewards | start of the upward scan for an un-opened epoch |
+| `REWARD_EMISSION` / `REWARD_AMOUNT` | `1000` / `100` | rewards | epoch emission (≤ target) / units allocated+claimed |
+| `RENT_EPOCH` | `0` (rent), `5` (reinvest) | rent, reinvest | rent epoch to open; bump on re-run (re-open rejected) |
+| `RENT_AMOUNT` | `1000` | rent, reinvest | rent recorded+distributed (under property 0's covenant ceiling) |
+| `VOTE_PROPOSAL_AMOUNT` / `VOTE_DESC_HASH` | `1000` / `1` | vote | the in-process proposal's amount / desc hash (id auto-derived) |
+| `DISTRIBUTION_AMOUNT` | `5000` | distribution | the executed proposal's distribution pool |
+| `DEX_DIST_AMOUNT` / `DEX_SELL_AMOUNT` | `1000` / `50` | dex | FSFT minted via the distribution / SELL size (capped to minted) |
+| `DEX_PRICE_BPS` / `DEX_TTL_BLOCKS` | `10000` / `60` | dex | SELL price (par=1.0) / order ttl (< max_ttl 120) |
 
-> The test does its **own** `checkpoint_epoch` + `allocate_reward_private` —
-> the bootstrap does not open any epoch, so this keeps the flow self-contained
-> on the one contract.
+## Coverage (all six private hinted-note flows)
 
-## Coverage / roadmap
+| script | flow | hints consumed | asserts | single-use guard |
+|---|---|---|---|---|
+| `e2e:rewards` | `allocate_reward_private` → `claim_reward_private` | reward note (same-contract) | `total_claimed` += amount, private token += amount | duplicate nullifier on re-claim |
+| `e2e:rent` | `deposit_private` → `claim_rent_private` | KYC (x-contract) → DepositNote | private EUR += `claimed_total` | per-`(note,epoch)` on re-claim |
+| `e2e:reinvest` | `deposit_private` → `reinvest_rent_private` | KYC → DepositNote | new DepositNote +1, `claimed_total` + `total_deposits` += share | per-`(note,epoch)` on re-reinvest |
+| `e2e:vote` | `deposit_private` → `cast_vote_private` | KYC + DepositNote (both x-contract) | `yes_votes` += 1 | per-`(proposal,voter)` on re-vote |
+| `e2e:distribution` | full gov lifecycle → `claim_distribution_private` | KYC → DepositNote | private FSFT += share == `claimed_total` Δ | per-`(note,proposal)` on re-claim |
+| `e2e:dex` | distribution → `place_order` → `cancel_order` | KYC (x-contract) + self-minted OrderOwnerNote + escrow authwit | FSFT escrowed then refunded to claimable | "order not cancellable" on re-cancel |
 
-Implemented:
-- **`rewards-claim.e2e.ts`** — `allocate_reward_private` → `claim_reward_private`
-  (mint to private balance) + double-claim rejection (SingleUseClaim).
-- **`rent-claim.e2e.ts`** — `deposit_private` (consumes a cross-contract
-  `HintedNote<KycCredentialNote>`) → `claim_rent_private` (same-contract
-  `HintedNote<DepositNote>`, private EUR payout) + double-claim rejection
-  (per-`(note,epoch)` nullifier). **This e2e caught a real bug:** the bootstrap
-  never called `HousingFund.set_eur_token`, so `eur_token` stayed zero and the
-  *live* rent claim reverted "eur token mismatch" — now fixed in
-  `bootstrap-local-network.sh`.
+Every flow is **self-contained** (mints the notes it consumes in this run),
+asserts a **real numeric state delta** (never just "no error"), and asserts the
+**single-use guard fires** on a repeat.
 
-Next, in ascending setup cost (see the PHASE2 plan's ranking):
-3. `housing_fund` `reinvest_rent_private` (like rent-claim, mints a new note).
-4. `housing_fund` `claim_distribution_private` (same-contract DepositNote; needs
-   an executed-proposal distribution → the governance vote lifecycle).
-5. `governance` `cast_vote_private` (TWO cross-contract hints: KYC + deposit).
-6. `fsft_dex` `place_order`/`claim` (cross-contract KYC hint + token escrow +
-   authwit + two funded traders).
+### Shared harness (`harness.ts`)
+
+Connection + helpers every flow reuses, so the files match:
+- `connect()` / `loadContract()` — ephemeral PXE + the 3 schnorr accounts; node-instance registration.
+- `simValue()` — tolerant 4.3.0 `simulate()` unwrap; `sendOk()` / `sendExpectFail()` — revert-aware sends (a default `send()` resolves even on a post-mining revert).
+- `kycHint()`, `depositCursor()`, `depositInProcess()`, `allDepositNotes()` (pages past the 10-note cap), `openRentEpoch()`, `advanceBlocks()`, `runProposalToExecuted()` (create → vote ×quorum → finalize → execute → open_distribution).
+- `fifoShare()` / `smallShare()` / `totalClaim()` — a TS mirror of the on-chain allocation math, so claims assert the **exact** predicted share.
 
 ### Note on PXE note discovery
 A fresh ephemeral PXE rediscovers the bootstrap **KYC credential**
-(`get_my_kyc_credentials` → 1) but NOT a **DepositNote** minted by another
-process's PXE (`get_my_deposit_notes` → 0), even though both are
-`ONCHAIN_CONSTRAINED`. So flows that need a deposit note **create it in-process**
-via `deposit_private` (using the discoverable KYC hint) — the same self-contained
-pattern the rewards e2e uses for its reward note. Don't rely on reading another
-PXE's deposit notes.
-
-`harness.ts` provides the shared connection (`connect`, `loadContract`),
-the simulate-unwrap (`simValue`), and revert-aware send helpers (`sendOk`,
-`sendExpectFail`) for all of the above.
+(`get_my_kyc_credentials` → 1) but NOT a **DepositNote/OrderOwnerNote/reward
+note** minted by another process's PXE, even though they're `ONCHAIN_CONSTRAINED`.
+So every flow **creates the notes it consumes in-process** (via `deposit_private`
+/ `place_order` / `allocate_reward_private`) rather than reading another PXE's
+notes — the self-contained pattern throughout.

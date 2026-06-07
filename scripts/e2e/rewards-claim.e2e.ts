@@ -31,11 +31,16 @@ import {
 
 const TAG = "e2e:rewards";
 
-// Epoch is configurable so a re-run against a long-lived stack can use a fresh
-// epoch (checkpoint_epoch has no double-checkpoint guard, so re-opening epoch 0
-// would re-bump total_distributed -- harmless but noisy). Default 0 for a fresh
-// bootstrap.
-const EPOCH = Number(process.env.REWARD_EPOCH ?? "0");
+// Start epoch is configurable; the flow scans UPWARD from here for the first
+// epoch that is NOT yet open (get_epoch_stats(e).open === false) and uses that
+// as the run's epoch. This matters on the shared long-lived node: RewardClaimNotes
+// are NEVER nullified (claim_reward_private burns a per-(note_hash,owner)
+// SingleUseClaim nullifier, leaving the note itself ACTIVE forever), so notes
+// accumulate across runs and re-using an already-claimed epoch's note would emit a
+// duplicate siloed nullifier. checkpoint_epoch also has no double-checkpoint guard
+// (re-opening would just re-bump total_distributed), so picking a fresh epoch each
+// run keeps the flow self-contained and re-runnable (gotcha #5).
+const EPOCH_START = Number(process.env.REWARD_EPOCH ?? "0");
 // Emission must be <= epoch_emission_target(8M pool, EPOCH) (~10400 at epoch 0)
 // and is what protocol_rewards/src/test.nr setup_full uses.
 const EMISSION = BigInt(process.env.REWARD_EMISSION ?? "1000");
@@ -80,34 +85,79 @@ async function main() {
   log(TAG, `token   = ${tokenAddr}`);
 
   // -- baseline --------------------------------------------------------------
+  const cfgBefore = simValue<{ total_epochs: bigint }>(
+    await rewards.methods.get_rewards_config().simulate({ from: test0 }),
+  );
+  const totalEpochs = Number(cfgBefore.total_epochs);
   const claimedBefore = await readClaimed(rewards, test0);
   const balBefore = await readPrivateBalance(token, test0);
-  log(TAG, `baseline: total_claimed=${claimedBefore} privateBalance=${balBefore ?? "n/a"}`);
+  log(TAG, `baseline: total_claimed=${claimedBefore} privateBalance=${balBefore ?? "n/a"} total_epochs=${totalEpochs}`);
+
+  // -- 0. pick a fresh (not-yet-open) epoch ---------------------------------
+  // Scan upward from EPOCH_START for the first epoch with open === false. Re-using
+  // an already-claimed epoch's note re-emits its nullifier (duplicate). A fresh
+  // epoch guarantees the note we allocate below is brand-new and unclaimed.
+  let epoch = -1;
+  for (let e = EPOCH_START; e < totalEpochs; e++) {
+    const stats = simValue<{ open: boolean }>(
+      await rewards.methods.get_epoch_stats(e).simulate({ from: test0 }),
+    );
+    if (!stats.open) {
+      epoch = e;
+      break;
+    }
+  }
+  assert(epoch >= 0, `no un-opened epoch found from ${EPOCH_START}..<${totalEpochs}`);
+  log(TAG, `selected fresh epoch ${epoch} (scanned from ${EPOCH_START})`);
+
+  // Emission for this epoch must be <= its emission target (later epochs taper).
+  const target = BigInt(
+    simValue<bigint>(await rewards.methods.get_epoch_target(epoch).simulate({ from: test0 })),
+  );
+  const emission = EMISSION <= target ? EMISSION : target;
+  assert(AMOUNT <= emission, `AMOUNT ${AMOUNT} must fit within epoch emission ${emission}`);
+  log(TAG, `epoch ${epoch} target=${target} -> using emission=${emission}`);
 
   // -- 1. open the epoch (admin) --------------------------------------------
-  log(TAG, `checkpoint_epoch(${EPOCH}, emission=${EMISSION})`);
+  log(TAG, `checkpoint_epoch(${epoch}, emission=${emission})`);
   await sendOk(
-    rewards.methods.checkpoint_epoch(EPOCH, EMISSION, 100, 100, 100),
+    rewards.methods.checkpoint_epoch(epoch, emission, 100, 100, 100),
     test0,
     "checkpoint_epoch",
   );
 
   // -- 2. allocate a private reward note to test0 (admin) -------------------
-  log(TAG, `allocate_reward_private(${EPOCH}, test0, ${AMOUNT})`);
+  log(TAG, `allocate_reward_private(${epoch}, test0, ${AMOUNT})`);
   await sendOk(
-    rewards.methods.allocate_reward_private(EPOCH, test0, AMOUNT),
+    rewards.methods.allocate_reward_private(epoch, test0, AMOUNT),
     test0,
     "allocate_reward_private",
   );
 
   // -- 3. read the caller's own reward-note hint (NO manual packAsHintedNote) -
-  const notes = simValue<{ len: bigint; storage: unknown[] }>(
+  // RewardClaimNotes accumulate (never nullified), so get_my_reward_notes can
+  // return notes from prior runs. Select the note created THIS run by matching its
+  // epoch (fresh => exactly one match, and it is unclaimed). The HintedNote decodes
+  // with a `.note` field exposing the RewardClaimNote struct (owner/amount/epoch).
+  const notes = simValue<{ len: bigint; storage: { note: { epoch: bigint; amount: bigint } }[] }>(
     await rewards.methods.get_my_reward_notes(test0, 0).simulate({ from: test0 }),
   );
   log(TAG, `get_my_reward_notes -> len=${notes.len}`);
   assert(BigInt(notes.len) >= 1n, "expected >= 1 RewardClaimNote after allocate_reward_private");
-  const hint = notes.storage[0];
-  assert(hint, "reward-note hint (storage[0]) is empty");
+  const matchIdx = notes.storage.findIndex((hn) => Number(hn.note.epoch) === epoch);
+  assert(
+    matchIdx >= 0,
+    `no RewardClaimNote for fresh epoch ${epoch} (have epochs: ${notes.storage.map((hn) => Number(hn.note.epoch)).join(",")})`,
+  );
+  const matched = notes.storage[matchIdx];
+  assert.equal(
+    BigInt(matched.note.amount),
+    AMOUNT,
+    `the epoch-${epoch} reward note amount should equal the allocated ${AMOUNT}`,
+  );
+  const hint = matched as unknown;
+  assert(hint, `reward-note hint (storage[${matchIdx}]) is empty`);
+  log(TAG, `selected reward note at storage[${matchIdx}] (epoch=${epoch} amount=${matched.note.amount})`);
 
   // -- 4. the private flow under test ---------------------------------------
   log(TAG, `claim_reward_private(hint, token)`);
