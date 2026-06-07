@@ -35,7 +35,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Usage in API routes:
- *   import { getServerWallet, getTestAccountWallet } from '@/lib/serverWallet';
+ *   import { getTestAccount } from '@/lib/serverWallet';
  *   const { wallet, address } = await getTestAccount(0); // test0 = admin
  *   const contract = await HousingFundContract.at(addr, wallet);
  *   await contract.methods.deposit(amount).send({ from: AztecAddress.fromString(address) });
@@ -227,15 +227,6 @@ export async function getServerWallet(): Promise<WalletSingleton> {
     });
   }
   return initPromise;
-}
-
-/**
- * Returns a Wallet scoped to a specific test account.
- * accountIndex: 0 = test0 (admin), 1 = test1, 2 = test2
- */
-export async function getTestAccountWallet(accountIndex = 0): Promise<Wallet> {
-  const entry = await getTestAccount(accountIndex);
-  return entry.wallet;
 }
 
 export async function getTestAccount(

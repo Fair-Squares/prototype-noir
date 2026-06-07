@@ -342,6 +342,162 @@ present the two numbers plainly — *"Stake (share value): €X"* and *"Rent ear
 paragraph. Real on-chain figures are untagged; only genuinely modelled inputs
 (e.g. an acquisition value not yet on-chain) carry the `ModelledChip`.
 
+> **Stale-plan signpost.** [`docs/FUTURE_DEVELOPMENT_PLAN.md`](./docs/FUTURE_DEVELOPMENT_PLAN.md)
+> still frames the dropped *"surplus → affordability-reserve" / capped-return*
+> mechanism as the plan, and [`docs/PHASE2_COVENANT_RECONCILIATION_HARDENING.md`](./docs/PHASE2_COVENANT_RECONCILIATION_HARDENING.md)
+> §1c shows never-implemented clawback pseudo-code (it carries its own
+> "clawback DROPPED" status banner). Those are kept as **history**; the section
+> above (ROR-based: rent = ROR × acquisition value, fully to investors, no surplus
+> reserve) is the **canonical** model and supersedes them.
+
+## Privacy model (canonical)
+
+This is the **single source of truth** for what user data is private vs public in
+Fair Squares, so an auditor/reader no longer has to grep the contracts for the
+known transparency surfaces and demo-only limits. The forward-looking redesign that
+closes the residual public leaks (M13/M14/M15 + the public investor list) lives in
+[`docs/PRIVACY_V2_REDESIGN_PLAN.md`](./docs/PRIVACY_V2_REDESIGN_PLAN.md) — that is a
+**FUTURE plan, not the current architecture**.
+
+### Private by default, dual-mode
+
+Fair Squares is **PRIVATE BY DEFAULT and DUAL-MODE**. For every user-related datum
+the everyday flow goes through **encrypted, per-owner private notes spent via
+nullifiers** and **private entrypoints**; an OPTIONAL public *"transparency mode"*
+path also exists and is **opt-in**. The default frontend flow uses the **private
+path everywhere it exists** — the caller's address never crosses the private/public
+boundary on those paths.
+
+### Per-datum private (everyday) vs public (transparency-mode) path
+
+| User datum | Private-by-default path (everyday) | Opt-in PUBLIC transparency path |
+| --- | --- | --- |
+| Deposit amount / fund position | `DepositNote` via `deposit_private` / `withdraw_private` | public `deposit_records` / investor registry / `deposit_tickets` (public deposit path) |
+| FSFT fund-share balance | private AIP-20 token balance | public AIP-20 balance (`balance_of_public`) |
+| Governance vote | `cast_vote_private` (only the **aggregate** yes/no tally is public; per-voter data + the double-vote guard `vote_claims` SingleUseClaim nullifiers stay owner-siloed) | proposer identity is **intentionally public** (proposals are accountable, attributable) |
+| Distribution & rent claims | `claim_distribution_private` / `claim_rent_private` / `reinvest_rent_private` (enumerate the caller's own `DepositNote`s via PXE-scoped reads; **no** per-user attribution written on-chain) | public claim ledgers + `rent_withdrawn_by` / `rent_reinvested_by` (public-path claims only) |
+| Participation rewards | `RewardClaimNote` via `claim_reward_private` (exposes nothing per-address) | per-user PUBLIC accounting `user_claimable` / `user_total_claimed` / `user_last_claimed_epoch` + `get_claimable` / `get_user_stats` (**M13**) |
+| DEX orders / trades | `OrderOwnerNote`; the on-chain book is **anonymous** (keyed by `seq + owner_tag = poseidon2([secret_owner_key, seq])`, no address in the book; proceeds settle to private `PartialUintNote` commitments) | — |
+| KYC / investor status | a hinted `KycCredentialNote` attested privately on `deposit_private` / `cast_vote_private` / private `place_order` (never touches the public maps) | public `is_verified` / `is_investor` confirmed on-chain via `HousingFund.deposit`, `Governance.create_proposal`, `FSFTDex.can_trade`, `ProtocolRewards.claim` (**M15**) |
+| Rent earnings | derived from private `DepositNote`s, paid out privately | public-path ledgers (above) |
+
+**Safe public aggregates kept** (counts/totals only, no identities): `verified_count`
+/ `get_verified_count`, `total_deposits`, and per-proposal / per-epoch claimed
+totals. The `get_investor_count` / `get_investor_at` enumeration covers **public-path
+depositors only** — private depositors are invisible there.
+
+### Known, documented limits (current V1 — private-by-default holds; these are the residual leaks)
+
+- **M12 — credential-commitment linkage (accepted).** `deposit_private`,
+  `cast_vote_private`, and DEX `place_order` each publish the same **constant**
+  handle `poseidon2([owner, nonce])` in their public tails (for revocation
+  checking). An on-chain observer can **cluster** one user's deposits + votes +
+  orders by matching that field — though `owner` / `nonce` stay private (no address
+  crosses the boundary). Full close-out needs private revocation checking (migrate
+  `KYCVerifier.revocations` to `DelayedPublicMutable`) or a per-action-domain salt
+  `poseidon2([owner, nonce, action_domain])` with per-domain revocation
+  registration. Documented in-code.
+- **One-bit + amount aggregate leak on private deposits (accepted prototype
+  tradeoff).** `deposit_private`'s public tail moves `cum_deposits` by the **exact
+  amount** (already public pre-Phase-3) and reveals **one bit** (small vs large) via
+  whether `cum_small_deposits` moves. The caller's **address never crosses** the
+  boundary. Accepted to keep FIFO small-depositor-floor stamping simple (alternative
+  = private FIFO advancement, not implemented). Documented in `housing_fund/main.nr`
+  (~lines 19–29).
+- **M13 — protocol_rewards per-user PUBLIC reward accounting.** `user_claimable` /
+  `user_total_claimed` / `user_last_claimed_epoch` are address-keyed PUBLIC maps;
+  `get_claimable(user)` / `get_user_stats(user)` expose per-address reward balance +
+  history. This is the transparency-mode claim path; the private path
+  (`claim_reward_private` / `RewardClaimNote`) exposes nothing per-address.
+  Documented in-code (PRIVACY NOTE M13). Future remediation: move per-user accounting
+  onto the private `RewardClaimNote` path so only epoch/aggregate views stay public.
+- **M14 — protocol_rewards FSFT-reward eligibility.** `set_user_epoch_weights` reads
+  the target's **public** FSFT balance via `balance_of_public(user)`, which (a)
+  excludes purely-private FSFT holders unless they unshield (deanonymize) and (b)
+  records on-chain that the user holds FSFT. Documented in-code (PRIVACY NOTE M14).
+  Future remediation: attest FSFT eligibility privately via a `HintedNote` ownership
+  proof (mirroring `Governance.cast_vote_private`).
+- **M15 — public KYC status on the public-path KYC checks.** `kyc_verifier`'s
+  `verified` / `investor_role` address-keyed PUBLIC maps + `is_verified` /
+  `is_investor` views are reached publicly via `HousingFund.deposit`,
+  `Governance.create_proposal`, `FSFTDex.can_trade`, `ProtocolRewards.claim`; each
+  public call confirms the caller's KYC status on-chain and leaks them into the
+  participant set. **TRANSPARENCY-MODE-ONLY** — the everyday PRIVATE paths attest a
+  hinted `KycCredentialNote` and never touch these maps/views. The aggregate
+  `verified_count` / `get_verified_count` is intentional, safe transparency (count
+  only, no identities). Documented in-code (PRIVACY NOTE M15).
+- **Public investor enumeration in housing_fund.** `get_investor_count()` /
+  `get_investor_at(index)` + `investor_index` / `investor_seen` / `deposit_tickets`
+  + `get_user_deposit_ticket(user)` enumerate the **public-path** investor set and
+  per-address public deposit amounts. INTENTIONAL transparency-mode for public
+  depositors only; private depositors (`deposit_private` / `DepositNote`s) never
+  register here. Slated for removal/gating in the V2 redesign
+  (`docs/PRIVACY_V2_REDESIGN_PLAN.md`).
+- **M16 — server auth model (DEMO-ONLY, hard caveat).** The frontend uses **one
+  shared server-side `EmbeddedWallet`/PXE** (`frontend/src/lib/serverWallet.ts`)
+  holding the keys for **every** deterministic test account. API routes select the
+  acting account purely from **request-supplied params** (`address` /
+  `accountIndex`). Action + per-user-read routes **do** validate that `address`
+  matches the selected account's address (verified across `/api/rewards/claim`,
+  `/api/fund/deposit`, `/api/fund/withdraw`, `/api/governance/vote`,
+  `/api/dex/claim`, `/api/dex/cancel`, `/api/fund/rent/claim`,
+  `/api/rewards/attest`, `/api/portfolio`, `/api/governance/eligibility`) — but
+  *"address matches accountIndex"* is **NOT authentication**: any HTTP caller can
+  supply any `(address, accountIndex)` pair, so there is no cryptographic
+  requester→account binding. Any caller could therefore act as / read any account's
+  private state. **Acceptable for the LOCAL DEMO only**; before any multi-user or
+  testnet exposure this MUST get per-session challenge–signature auth (ideally one
+  PXE/key set per session). Fully documented in the `serverWallet.ts` M16 comment
+  block.
+  - **M16 parity gap (flagged for human review).** `/api/kyc/status` GET is the one
+    user-read route that does **not** follow the address-match pattern: it has no
+    `accountIndex` param and always simulates from `getTestAccount(0)` (admin),
+    reading `from: userAddress` (the queried address's own PXE note scope). It still
+    returns the **queried** address's data (KYC/investor/eligibility), so the same
+    demo-only posture applies. Bringing it to parity (add `accountIndex` + an
+    address-match guard) is **left flagged for human review** because it needs a
+    cross-cutting client change (`fetchKYCProfile` in `contracts.ts` + all callers
+    currently send only `address`). Covered by the M16 demo-only caveat.
+
+### Confirmed-correct privacy postures (do NOT "fix" these by mistake)
+
+- `cast_vote_private` publishes **only** aggregate yes/no tallies — never per-voter
+  data; `vote_claims` are owner-siloed `SingleUseClaim` nullifiers (private
+  double-vote guard).
+- The DEX order book is **anonymous** (keyed by `seq + owner_tag`, no address ever in
+  the book) and claims pay to private `PartialUintNote` commitments.
+- `rent_withdrawn_by` / `rent_reinvested_by` ledgers are **PUBLIC-PATH-ONLY**;
+  `claim_rent_private` / `reinvest_rent_private` intentionally skip per-user
+  attribution for privacy.
+- `KYCVerifier.revocations` are keyed by **credential commitment (hash), not
+  address**.
+- `get_my_deposit_notes` / `get_my_kyc_credentials` / `get_deposit_cursor` are
+  owner-scoped PXE reads or global params (safe).
+- `defi_vault` is **intentionally deprecated/dormant**: deployed + wired for
+  backward-compat but NOT on any live deposit/claim/rent path, has no per-user state,
+  and accrues **zero** yield. The frontend must never claim idle capital *"earns
+  yield"* (honesty rule) — only *"can be parked in a yield source (adapter not active
+  yet)"* (already reflected in copy).
+
+### Frontend privacy labeling (already honest — keep green)
+
+The user-facing copy is verified honest and must stay so: *"Publicly registered
+investors"* floor-count hint (`FundHealthKpis` / `FundParticipationKpis`),
+`VotePanel` / `VotesTab` *"Your ballot stays private — only running totals are
+public"*, DEX *"who posted each order is not [public]"*, KYC *"your documents/
+positions stay private"*, invest *"receive a private position"*. No deanonymization,
+no bare-0-implying-empty-fund, no mislabeled live/modelled values.
+
+### Build-generated artifacts note
+
+`frontend/src/artifacts/` is **gitignored, build-generated, and root-owned** (docker
+writes it). It may contain **stale unused** codegen wrappers (`DeFiVault.ts`,
+`NFT.ts` — zero imports) and unused cross-contract JSONs (`defi_vault-DeFiVault.json`,
+`fsft_dex-HousingFund.json`, `protocol_rewards-Token.json`, `fund_token-FundToken.json`,
+etc.) left from earlier phases. These are **cosmetic clutter only** — do **NOT**
+manually `rm` them (root-owned + regenerated from the contracts on deploy). `Dripper`
+IS used (via `dripper-Dripper.json` in `/api/fund/tokens`).
+
 ## Frontend design system & app shell
 
 ### Run mode: production by default, `FRONTEND_DEV=1` to edit
@@ -399,8 +555,10 @@ Reuse these; do **not** build per-page chrome or invent type sizes:
   `governanceStatus.displayStatus()`, not the raw on-chain status.
 - Font: Plus Jakarta Sans (400/500/600/700), self-hosted via `next/font`.
 
-`SimplePage.tsx` is legacy (only `explain` still uses it) — migrate off it, do
-not extend it. Any client page reading `useSearchParams()` must be wrapped in a
+`SimplePage.tsx` was a legacy page wrapper; it has been **deleted** and `/explain`
+no longer uses it (`explain/page.tsx` imports only `next/link` + `@/components/ui`).
+Build pages on the `@/components/ui` primitives — do not reintroduce a per-page
+wrapper. Any client page reading `useSearchParams()` must be wrapped in a
 `<Suspense>` boundary or the Vercel static build fails.
 
 ### Project dossier & the demo layer (FUTURE_DEVELOPMENT_PLAN §9 / D1–D4)
