@@ -201,6 +201,13 @@ These run in CI (`.github/workflows/tests.yml`) and raise real confidence in the
 > per-PR/holistic reviews and the covenant 1c test deliberately stayed on the **public** path for this reason.
 
 ### 3b — Testnet deploy hardening (`scripts/testnet-deploy-*.ts`)
+
+> **QUEUED — the next backend workstream (deferred 2026-06 to focus on the frontend).** W1 (covenant)
+> and W3a (private-flow e2e harness) are done; W3b is the agreed next backend item to pick up after the
+> frontend-excellence pass. Scope = the five gaps below (codegen in the testnet deploy, deterministic
+> salts, key management, server/API fee method on testnet, real user-wallet multi-user). Pairs with W3c
+> (real proving) and W3d (audit prep) to reach a pilotable testnet. No code started yet.
+
 Works today (SponsoredFPC `salt=0` account; 11 instances; `set_contracts`/`set_admin` wiring; KYC issuance →
 `scripts/.testnet/contracts.json` + `frontend/.env.testnet`). Gaps to a real pilot:
 - **Codegen missing** from `testnet-deploy-contracts.ts` (only `bootstrap-local-network.sh` runs it) — add
