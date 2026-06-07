@@ -24,6 +24,11 @@ import {
 import { ProjectsPreview } from "@/components/overview/ProjectsPreview";
 import { ImpactStrip } from "@/components/overview/ImpactStrip";
 import { FeaturedProject } from "@/components/overview/FeaturedProject";
+import { MarketingHero } from "@/components/marketing/MarketingHero";
+import { AffordabilityProblem } from "@/components/marketing/AffordabilityProblem";
+import { HowItWorks } from "@/components/marketing/HowItWorks";
+import { ImpactCalculator } from "@/components/marketing/ImpactCalculator";
+import { MarketingCTA } from "@/components/marketing/MarketingCTA";
 import { getProjectDossier } from "@/lib/projectDossier";
 import { useWallet } from "@/contexts/WalletContext";
 import {
@@ -162,20 +167,27 @@ export default function OverviewPage() {
           <OverviewNextStep step={nextStep} portfolio={portfolio} />
         </>
       ) : (
-        <header className="max-w-2xl">
-          <p className="text-label mb-1.5">Community-owned affordable housing</p>
-          <h1 className="text-display text-text-1">
-            Help finance affordable homes, earn a fair return
-          </h1>
-          <p className="text-body mt-2 text-text-2">
-            Fair Squares pools capital from many savers to acquire and protect
-            affordable homes — you receive Fund Shares, earn a capped return on
-            rent, and members decide what the fund buys.
-          </p>
-        </header>
+        // Disconnected lead — the mission-first marketing stack. It stays inside
+        // main's max-w-6xl column (in-column, not full-bleed): hero → problem
+        // (mint card) → how-it-works → impact calculator. The existing
+        // FeaturedProject block below is the bridge into the live fund sections,
+        // and MarketingCTA closes the disconnected page (after FeaturedProject).
+        // rorBps is passed from the already-loaded `stats` (no new fetch).
+        <div className="space-y-12">
+          <MarketingHero
+            rorBps={stats?.rorBps}
+            ctaCalculatorHref="/learn#calculator"
+            ctaLearnHref="/learn#how"
+          />
+          <AffordabilityProblem band={false} />
+          <HowItWorks />
+          <ImpactCalculator initialRorBps={stats?.rorBps} />
+        </div>
       )}
 
-      {/* FEATURED PROJECT — the housing-first hero (the product). */}
+      {/* FEATURED PROJECT — the housing-first hero (the product). For the
+          disconnected visitor it is the bridge from the marketing stack into the
+          live fund sections; for the investor it follows the next-step block. */}
       {!loading && featured && featuredDossier ? (
         <FeaturedProject
           proposal={featured}
@@ -331,6 +343,11 @@ export default function OverviewPage() {
           </div>
         </AdvancedDetails>
       ) : null}
+
+      {/* CLOSING CTA — disconnected only. The marketing page's final call to
+          action (single magenta highlight); the connected experience ends on
+          the fund sections, not a marketing CTA. */}
+      {!isConnected ? <MarketingCTA /> : null}
     </div>
   );
 }

@@ -9,6 +9,7 @@ import SkipLink from "@/components/shell/SkipLink";
 import TopBar from "@/components/shell/TopBar";
 import MobileDrawer from "@/components/shell/MobileDrawer";
 import BottomNav from "@/components/shell/BottomNav";
+import SiteFooter from "@/components/marketing/SiteFooter";
 
 // Body — DM Sans, the geometric-humanist companion to Nexa (per the Fair Squares
 // design system). Variable font, self-hosted via next/font — no render-blocking
@@ -58,25 +59,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   {children}
                 </main>
 
-                {/* Calm footer — brand + the public marketing site. Raw chain
-                    state (block height) and the Aztec/Noir build stamp live in
-                    Reference, not in persistent chrome. */}
-                <footer className="border-t border-border bg-card/60 px-4 py-3 lg:px-8">
-                  <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 text-text-3">
-                    <span className="text-tag">Fair Squares — people, not profit</span>
-                    <span className="text-tag flex items-center gap-2">
-                      <span className="opacity-70">Public project:</span>
-                      <a
-                        href="https://fair-squares.nl"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-fs-teal-dark hover:text-fs-magenta"
-                      >
-                        fair-squares.nl
-                      </a>
-                    </span>
-                  </div>
-                </footer>
+                {/* App-wide dark marketing footer (brand + real-route link
+                    columns + honest runtime label). Full-bleed: it sits OUTSIDE
+                    <main>'s max-w-6xl column but inside the flex column, as its
+                    last child. Raw chain state (block height) and the
+                    Aztec/Noir build stamp live in Reference, not in this
+                    persistent chrome. */}
+                <SiteFooter />
               </div>
             </ShellProvider>
           </ProofSignalsProvider>

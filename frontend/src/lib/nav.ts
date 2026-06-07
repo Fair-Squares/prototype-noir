@@ -44,8 +44,12 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Reference",
     items: [
-      { num: "09", label: "Reference",    href: "/reference",  blurb: "Parameters and metrics",  tier: "more-reference" },
-      { num: "10", label: "How it works", href: "/explain",    blurb: "Mechanics and glossary",  tier: "more-reference" },
+      // The public story leads the reference group: marketing / explanatory, not
+      // an everyday account task (so not a top tab — per "don't expose the whole
+      // architecture through nav").
+      { num: "11", label: "About Fair Squares", href: "/learn",     blurb: "The mission, how it works, impact calculator", tier: "more-reference" },
+      { num: "09", label: "Reference",          href: "/reference", blurb: "Parameters and metrics",                       tier: "more-reference" },
+      { num: "10", label: "How it works",       href: "/explain",   blurb: "Mechanics and glossary",                       tier: "more-reference" },
     ],
   },
 ];
