@@ -151,6 +151,19 @@ pub contract FSFTDex {
         (fsft_amount * price_bps as u128) / 10000
     }
 
+    // Valuation price band as (ref, min, max) in bps: the reference price (the
+    // fund's last token price, or par = 10000 if unset) widened by +/- band_bps.
+    // Single-sourced so the public snapshot view, the is_price_in_band predicate,
+    // and the placement-time guard (_place_and_match) can never diverge.
+    #[contract_library_method]
+    fn price_band_bounds(token_price_bps: u64, band_bps: u32) -> (u64, u64, u64) {
+        let ref_price_bps = if token_price_bps > 0 { token_price_bps } else { 10000 };
+        let band = band_bps as u64;
+        let min_price_bps = (ref_price_bps * (10000 - band)) / 10000;
+        let max_price_bps = (ref_price_bps * (10000 + band)) / 10000;
+        (ref_price_bps, min_price_bps, max_price_bps)
+    }
+
     #[initializer]
     #[external("public")]
     fn constructor(
@@ -308,6 +321,19 @@ pub contract FSFTDex {
         let kyc = KYCVerifier::at(self.storage.kyc_verifier.read());
         let revoked = self.view(kyc.is_credential_revoked(credential_commitment));
         assert(!revoked, "credential revoked");
+
+        // Enforce the valuation price band on the order's price. Until now the band
+        // was computed only in get_orderbook_snapshot (#[view]) for the UI -- nothing
+        // CONSTRAINED it, so any price_bps > 0 would rest on the book at a stale or
+        // manipulated quote. Reuse the exact snapshot math (price_band_bounds) so the
+        // view and this guard can never diverge. Makers fill at EXACT price
+        // (m_price == price_bps below), so guarding the incoming price keeps every
+        // crossing fill in-band too.
+        let valuation =
+            self.view(HousingFund::at(self.storage.housing_fund.read()).get_valuation_public());
+        let (_ref_price_bps, min_price_bps, max_price_bps) =
+            price_band_bounds(valuation.last_token_price_bps, self.storage.price_band_bps.read());
+        assert((price_bps >= min_price_bps) & (price_bps <= max_price_bps), "price out of band");
 
         // Forge-proof FCFS sequence stamp (supplied-then-verified).
         let seq = self.storage.seq_counter.read();
@@ -573,19 +599,31 @@ pub contract FSFTDex {
     fn get_orderbook_snapshot() -> pub OrderbookSnapshot {
         let fund = HousingFund::at(self.storage.housing_fund.read());
         let valuation = self.view(fund.get_valuation_public());
-        let token_price_bps = valuation.last_token_price_bps;
-        let ref_price_bps = if token_price_bps > 0 { token_price_bps } else { 10000 };
-        let band = self.storage.price_band_bps.read() as u64;
-        let min_price_bps = (ref_price_bps * (10000 - band)) / 10000;
-        let max_price_bps = (ref_price_bps * (10000 + band)) / 10000;
+        let band_bps = self.storage.price_band_bps.read();
+        let (ref_price_bps, min_price_bps, max_price_bps) =
+            price_band_bounds(valuation.last_token_price_bps, band_bps);
         OrderbookSnapshot {
             ref_price_bps,
             min_price_bps,
             max_price_bps,
-            price_band_bps: self.storage.price_band_bps.read(),
+            price_band_bps: band_bps,
             max_ttl_blocks: self.storage.max_ttl_blocks.read(),
             order_count: self.storage.order_count.read(),
         }
+    }
+
+    // Whether `price_bps` sits inside the current valuation band. The frontend can
+    // pre-check an order before paying for a tx; _place_and_match enforces the same
+    // band on-chain via the shared price_band_bounds, so this view and the
+    // placement-time guard always agree.
+    #[external("public")]
+    #[view]
+    fn is_price_in_band(price_bps: u64) -> pub bool {
+        let fund = HousingFund::at(self.storage.housing_fund.read());
+        let valuation = self.view(fund.get_valuation_public());
+        let (_ref_price_bps, min_price_bps, max_price_bps) =
+            price_band_bounds(valuation.last_token_price_bps, self.storage.price_band_bps.read());
+        (price_bps >= min_price_bps) & (price_bps <= max_price_bps)
     }
 
     #[external("public")]

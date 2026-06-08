@@ -60,8 +60,10 @@ const TOKEN_FSFT = 1;
 // stack can use a distinct proposal (create_proposal returns count-1, so a fresh
 // id is automatic, but the amount knob lets a re-run tune headroom).
 const DIST_AMOUNT = BigInt(process.env.DEX_DIST_AMOUNT ?? "1000");
-// SELL price (par = 1.0 EUR/FSFT) and ttl. No price-band check at placement, so
-// par always rests cleanly. ttl well under the DEX max_ttl_blocks (120).
+// SELL price (par = 1.0 EUR/FSFT) and ttl. par sits INSIDE the valuation band, so
+// it rests cleanly; _place_and_match now ENFORCES the band (an out-of-band price
+// reverts "price out of band" -- exercised by the negative probe below). ttl well
+// under the DEX max_ttl_blocks (120).
 const PRICE_BPS = BigInt(process.env.DEX_PRICE_BPS ?? "10000");
 const TTL_BLOCKS = Number(process.env.DEX_TTL_BLOCKS ?? "60");
 // Requested SELL size; capped to the actually-claimed FSFT balance at runtime.
@@ -191,6 +193,64 @@ async function main() {
   // DEX keys claimable balances under (the contract computes it identically).
   const ownerTag = await poseidon2Hash([secretOwnerKey, new Fr(suppliedSeq)]);
   log(TAG, `owner_tag = ${ownerTag.toString()}`);
+
+  // -- 5b. NEGATIVE: an out-of-band price MUST be rejected at placement -------
+  // _place_and_match enforces the valuation band (price_band_bounds). Pick a
+  // price one bp below the band's floor (or above its ceiling, if the floor is
+  // 0) and confirm via the is_price_in_band view that it is genuinely out, then
+  // assert place_order reverts with "price out of band". The revert is atomic
+  // (the band assert runs before the resting row is written and before any state
+  // is committed), so seq_counter and test0's FSFT balance are untouched and the
+  // happy-path placement below proceeds unchanged.
+  const band = simValue<{ min_price_bps: bigint; max_price_bps: bigint }>(
+    await dex.methods.get_orderbook_snapshot().simulate({ from: test0 }),
+  );
+  const probePrice =
+    BigInt(band.min_price_bps) > 1n ? BigInt(band.min_price_bps) - 1n : BigInt(band.max_price_bps) + 1n;
+  const probeInBand = simValue<boolean>(
+    await dex.methods.is_price_in_band(probePrice).simulate({ from: test0 }),
+  );
+  assert.equal(
+    probeInBand,
+    false,
+    `probe price ${probePrice} should be OUT of band [${band.min_price_bps}, ${band.max_price_bps}]`,
+  );
+  // Escrow enough to clear the private leg (so the ONLY failure cause is the band,
+  // not insufficient balance); fresh nonce + owner key keep it independent of the
+  // happy-path order. The atomic revert refunds it.
+  const probeNonce = Fr.random();
+  const probeEscrowCall = await fsft.methods
+    .transfer_private_to_public(test0, AztecAddress.fromString(dexAddr), sellAmount, probeNonce)
+    .getFunctionCall();
+  const probeAuthwit = await h.wallet.createAuthWit(test0, {
+    caller: AztecAddress.fromString(dexAddr),
+    call: probeEscrowCall,
+  });
+  const probeInteraction = dex.methods.place_order(
+    SIDE_SELL,
+    sellAmount,
+    probePrice,
+    TTL_BLOCKS,
+    Fr.random(), // fresh secret_owner_key
+    suppliedSeq, // reverts atomically, so this seq is still free for the happy path
+    probeNonce,
+    0,
+    [0n, 0n, 0n, 0n],
+    0,
+    hintedKycNote,
+  );
+  const probeWithAuthwit = {
+    send: (opts: { from: AztecAddress }) =>
+      probeInteraction.send({ from: opts.from, authWitnesses: [probeAuthwit] }),
+  };
+  log(TAG, `NEGATIVE place_order @ ${probePrice} bps (out of band) must fail...`);
+  const bandFail = await sendExpectFail(probeWithAuthwit, test0);
+  assert(bandFail.failed, `out-of-band place_order must fail; instead it ${bandFail.how}`);
+  assert(
+    bandFail.how.includes("price out of band"),
+    `out-of-band place_order should revert "price out of band"; got: ${bandFail.how}`,
+  );
+  log(TAG, `out-of-band place_order correctly rejected (${bandFail.how})`);
 
   // -- 1'. order must not already exist at this seq --------------------------
   const orderBefore = await readOrder(dex, suppliedSeq, test0);

@@ -112,29 +112,35 @@ pub contract ProtocolRewards {
     // two in sync -- they cannot share a source across the Noir/TS boundary.
     // ====================================================================
 
+    // The year->bps reward ladder. Years past the table (>= 9) hold the final
+    // slice (800 bps). The slices MUST sum to 10000 (100% of the distribution
+    // pool); that invariant is enforced at COMPILE TIME by year_emission_bps's
+    // static_assert below, so a future edit to this table cannot silently break
+    // the 100%-of-pool guarantee (complements the TS rewardsEmissionParity test).
+    global YEAR_EMISSION_BPS: [u64; 10] = [1300, 1200, 1100, 1000, 1000, 1000, 900, 900, 800, 800];
+
     #[contract_library_method]
     fn year_emission_bps(year: u32) -> u64 {
-        if year == 0 {
-            1300
-        } else if year == 1 {
-            1200
-        } else if year == 2 {
-            1100
-        } else if year == 3 {
-            1000
-        } else if year == 4 {
-            1000
-        } else if year == 5 {
-            1000
-        } else if year == 6 {
-            900
-        } else if year == 7 {
-            900
-        } else if year == 8 {
-            800
-        } else {
-            800
-        }
+        // Compile-time conservation guard: the ladder sums to exactly 10000 bps.
+        // static_assert is a builtin evaluated during compilation (the predicate is
+        // a constant over the global literal array), so a non-conserving edit fails
+        // the build rather than mis-emitting at runtime.
+        std::static_assert(
+            YEAR_EMISSION_BPS[0]
+                + YEAR_EMISSION_BPS[1]
+                + YEAR_EMISSION_BPS[2]
+                + YEAR_EMISSION_BPS[3]
+                + YEAR_EMISSION_BPS[4]
+                + YEAR_EMISSION_BPS[5]
+                + YEAR_EMISSION_BPS[6]
+                + YEAR_EMISSION_BPS[7]
+                + YEAR_EMISSION_BPS[8]
+                + YEAR_EMISSION_BPS[9]
+                == 10000,
+            "reward bps ladder must sum to 10000 (100% of pool)",
+        );
+        let idx = if year > 9 { 9 } else { year };
+        YEAR_EMISSION_BPS[idx]
     }
 
     // Per-epoch emission ceiling: a year's bps slice of the distribution pool,

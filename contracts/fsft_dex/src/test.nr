@@ -113,6 +113,44 @@ unconstrained fn test_set_risk_policy_updates_snapshot() {
     assert_eq(snap.max_price_bps, 10300);
 }
 
+// -- Price band predicate (the placement-time guard's shared math) ------------
+// _place_and_match enforces "price out of band" via price_band_bounds, but that
+// public tail is #[only_self] and reached only through the private place_order
+// leg (hinted KYC note + token escrow + authwit) -- which TestEnvironment cannot
+// drive -- so the negative REVERT is exercised in the TS e2e
+// (scripts/e2e/dex-order.e2e.ts). Here we pin the identical band math the guard
+// uses, through the is_price_in_band view that shares price_band_bounds.
+
+#[test]
+unconstrained fn test_price_in_band_accepts_within_and_boundaries() {
+    let (env, dex, _admin, _kyc) = setup_linked();
+    // No valuation posted -> ref = par (10000); 200 bps band -> [9800, 10200].
+    assert(env.view_public(FSFTDex::at(dex).is_price_in_band(10000))); // mid
+    assert(env.view_public(FSFTDex::at(dex).is_price_in_band(9800))); // min edge
+    assert(env.view_public(FSFTDex::at(dex).is_price_in_band(10200))); // max edge
+}
+
+#[test]
+unconstrained fn test_price_in_band_rejects_out_of_band() {
+    let (env, dex, _admin, _kyc) = setup_linked();
+    // Just outside [9800, 10200], plus fat-finger extremes the guard must reject.
+    assert(!env.view_public(FSFTDex::at(dex).is_price_in_band(9799)));
+    assert(!env.view_public(FSFTDex::at(dex).is_price_in_band(10201)));
+    assert(!env.view_public(FSFTDex::at(dex).is_price_in_band(1)));
+    assert(!env.view_public(FSFTDex::at(dex).is_price_in_band(100000)));
+}
+
+#[test]
+unconstrained fn test_price_band_follows_risk_policy() {
+    let (mut env, dex, admin, _kyc) = setup_linked();
+    env.call_public(admin, FSFTDex::at(dex).set_risk_policy(300, 60));
+    // 300 bps band around par -> [9700, 10300].
+    assert(env.view_public(FSFTDex::at(dex).is_price_in_band(9700)));
+    assert(env.view_public(FSFTDex::at(dex).is_price_in_band(10300)));
+    assert(!env.view_public(FSFTDex::at(dex).is_price_in_band(9699)));
+    assert(!env.view_public(FSFTDex::at(dex).is_price_in_band(10301)));
+}
+
 #[test]
 unconstrained fn test_can_trade_reflects_kyc() {
     let (mut env, dex, admin, kyc) = setup_linked();

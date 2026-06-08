@@ -13,7 +13,7 @@
   },
   "housing_fund-HousingFund.json": {
     "contractName": "HousingFund",
-    "hash": "d3afd417bea5f796b9dd3c0a2875ab66f628c471b7a0c902eee3d0249ddfe0de"
+    "hash": "b9a24f6a144173f357fa2927eb6f403703ad753f7be3525c367d4d56478df597"
   },
   "governance-Governance.json": {
     "contractName": "Governance",
@@ -21,11 +21,11 @@
   },
   "fsft_dex-FSFTDex.json": {
     "contractName": "FSFTDex",
-    "hash": "f59e192c37bf3a0cb1766da5c8232cc30bcafb376ed6bb62f1cc6939e7c160f6"
+    "hash": "913488a08726353fb2849d1203b4f74d0cd966999ef9196a2c78e2d64cafc0f8"
   },
   "protocol_rewards-ProtocolRewards.json": {
     "contractName": "ProtocolRewards",
-    "hash": "b43ed4d0ac4423df5ac68e73d08ae2b5046d3ddecb8cc907c20adf5f0398130b"
+    "hash": "21f6f917355c3fdd421ea9b0b85a8e82682a9cd7c4890ed4998b29e9ca4ca2a6"
   },
   "dripper-Dripper.json": {
     "contractName": "Dripper",
@@ -49,7 +49,7 @@
   },
   "fsft_dex-HousingFund.json": {
     "contractName": "HousingFund",
-    "hash": "04e8b4732a7bae9f4abf512ebf78c8d3ecfbb223eeb3b17b13c1938c78a39cea"
+    "hash": "b9a24f6a144173f357fa2927eb6f403703ad753f7be3525c367d4d56478df597"
   },
   "fsft_dex-KYCVerifier.json": {
     "contractName": "KYCVerifier",

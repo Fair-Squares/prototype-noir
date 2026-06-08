@@ -67,6 +67,28 @@ When writing Aztec.nr contract code that requires hashing, **always use Poseidon
 - **Do NOT** default to Pedersen (`pedersen_hash`). Pedersen is available but Poseidon2 is cheaper in circuits and is the standard across Aztec.
 - If you are unsure which hash to use, use Poseidon2.
 
+## Math conventions (integer-only; do NOT import a bignum / fixed-point lib)
+
+FS money math is deliberately **integer `* bps / 10000 [/ 12]`** on `u64`/`u128`
+with per-step whole-EUR flooring (rent = `ROR * acquisition_value / 10000 / 12`,
+the reward bps ladder, the small-depositor floor). This is **canonical, not a
+limitation** — the ROR model is integer-floored by design (the fund keeps the
+sub-EUR dust), so there is no precision to recover.
+
+- **Rejected: `noir-bignum` and `wad.nr` (18-decimal fixed point).** Worst-case
+  products (≈€500K acquisition, 8M reward pool ⇒ ~1.8e23) sit ~15 orders of
+  magnitude below `u128`'s ~3.4e38 ceiling, so arbitrary-width / fixed-point math
+  would add constraints for **zero** precision or range benefit. `noir-bignum`'s
+  `udiv_mod` is documented EXPENSIVE. **Do not import either** — if a future pass
+  is tempted, this is the recorded decision (see
+  `docs/AZTEC_ECOSYSTEM_LEARNINGS.md` §2 "Noir math").
+- **Overflow posture:** native checked arithmetic already traps on overflow/
+  underflow (fail-closed), so do **not** add manual range checks. The only
+  sanctioned helper is an optional `#[contract_library_method] mul_div(a, b, c)`
+  (widen to `u128`, assert no overflow, then divide) for the two `u64` `value*bps`
+  products that could in principle overflow *before* the divide — that is
+  mul-div-as-a-pattern, explicitly **not** a library.
+
 ## Testnet smoke test
 
 To verify the pinned `@aztec/aztec.js` (v4.3.0) talks to the public Aztec testnet:

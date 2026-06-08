@@ -328,8 +328,14 @@ pub contract HousingFund {
     // Available (unencumbered) balance: pooled deposits net of capital that is
     // out in DeFi or already allocated to executed proposals. Single-sourced so
     // every guard (deploy_to_defi / reserve_for_property / open_distribution /
-    // withdraw paths) uses the identical subtraction order and saturation
-    // semantics. Pure helper -- caller reads the three aggregates and passes them.
+    // withdraw paths) uses the identical subtraction order.
+    //
+    // FAIL-CLOSED, NOT SATURATING: Noir u64 subtraction REVERTS on underflow (it
+    // does NOT clamp to 0 -- WrappingSub is the explicit opt-in and is not used
+    // here). So if encumbrances ever exceed deposits this traps the tx rather
+    // than returning a misleading 0; callers must not assume a 0-floor. Native
+    // checked arithmetic already does the range check -- do not add a manual one.
+    // Pure helper -- caller reads the three aggregates and passes them.
     #[contract_library_method]
     fn available_balance(deposits: u64, in_defi: u64, allocated: u64) -> u64 {
         deposits - in_defi - allocated
