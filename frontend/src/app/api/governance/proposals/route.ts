@@ -380,11 +380,22 @@ export async function POST(request: NextRequest) {
       if (!housingFundAddr) {
         return NextResponse.json({ error: "NEXT_PUBLIC_HOUSING_FUND_ADDRESS is required" }, { status: 500 });
       }
-      const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, actor.wallet);
+      // execute_proposal is ADMIN-GATED (governance/main.nr: assert msg_sender ==
+      // admin), and the seed flow runs this step as the protocol admin (test0).
+      // Progressing a passed proposal to "executed + distribution opened" is an
+      // OPERATOR action, not a per-user one — so route it through the admin account
+      // regardless of which account is connected. Without this, a non-admin caller
+      // reverts "not admin". (open_distribution is permissionless, but we run it as
+      // the same admin actor for a single coherent operator step.) Demo-only: the
+      // server holds every key — see the serverWallet M16 note.
+      const admin = await getTestAccount(0);
+      const adminAddress = AztecAddress.fromString(admin.address);
+      const govAsAdmin = await Contract.at(AztecAddress.fromString(govAddr), govArtifact, admin.wallet);
+      const hfAsAdmin = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, admin.wallet);
 
-      const executeReceipt = await govContract.methods
+      const executeReceipt = await govAsAdmin.methods
         .execute_proposal(Number(proposalId))
-        .send({ from: AztecAddress.fromString(actor.address) });
+        .send({ from: adminAddress });
       const executeOutcome = getAztecTxOutcome(executeReceipt);
       if (executeOutcome.reverted) {
         const mapped = humanizeContractError(executeOutcome.error ?? "");
@@ -394,9 +405,9 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         );
       }
-      const openReceipt = await hfContract.methods
+      const openReceipt = await hfAsAdmin.methods
         .open_distribution(Number(proposalId))
-        .send({ from: AztecAddress.fromString(actor.address) });
+        .send({ from: adminAddress });
       const openOutcome = getAztecTxOutcome(openReceipt);
       if (openOutcome.reverted) {
         return NextResponse.json(
