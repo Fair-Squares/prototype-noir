@@ -67,18 +67,26 @@ export async function GET(request: NextRequest) {
     ]);
 
     // V2 eligibility: count private notes instead of reading public maps.
-    // FSFT exposure is now the AIP-20 public balance (balance_of_public > 0).
-    const [credSim, depSim, fsftSim] = await Promise.all([
+    // FSFT exposure = the AIP-20 balance. CRITICAL: distribution claims mint
+    // PRIVATE FSFT (claim_distribution_private), so a public-only read misses them
+    // and a holder who just claimed shows "no fund shares held". Read the owner's
+    // PRIVATE balance too (their own PXE scope, exactly as the portfolio route
+    // does: fsftBalance = privateFsft + publicFsft) and count either side.
+    const [credSim, depSim, fsftPubSim, fsftPrivSim] = await Promise.all([
       kycContract.methods.get_my_kyc_credentials(userAddress, 0).simulate({ from: actorAddress }),
       hfContract.methods.get_my_deposit_notes(userAddress, 0).simulate({ from: actorAddress }),
       ftContract.methods.balance_of_public(userAddress).simulate({ from: actorAddress }),
+      ftContract.methods.balance_of_private(userAddress).simulate({ from: actorAddress }),
     ]);
 
     const isInvestor = simResult<{ len: bigint }>(credSim).len > 0n;
     const hasDepositTicket = simResult<{ len: bigint }>(depSim).len > 0n;
-    const hasFsftExposure = Number(simResult(fsftSim)) > 0;
+    const publicFsft = Number(simResult(fsftPubSim));
+    const privateFsft = Number(simResult(fsftPrivSim));
+    const hasFsftExposure = publicFsft > 0 || privateFsft > 0;
     const canVote = isInvestor && (hasDepositTicket || hasFsftExposure);
-    const privateFsftProofMode = hasFsftExposure ? "aztec-public-balance" : "none";
+    const privateFsftProofMode =
+      privateFsft > 0 ? "aztec-private-balance" : publicFsft > 0 ? "aztec-public-balance" : "none";
 
     return NextResponse.json({
       investorRole: Boolean(isInvestor),

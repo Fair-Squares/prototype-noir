@@ -1,7 +1,7 @@
 "use client";
 
 import { Alert, Button, EmptyState, KpiCard, KpiGrid, Section } from "@/components/ui";
-import { formatEUR, type Proposal } from "@/lib/contracts";
+import { formatEUR, formatFSFT, type Proposal } from "@/lib/contracts";
 
 export interface DistributionTabProps {
   proposal: Proposal;
@@ -47,10 +47,16 @@ export function DistributionTab({
   return (
     <div className="space-y-6">
       <KpiGrid cols={3}>
-        <KpiCard label="Distribution pool" value={formatEUR(total)} />
-        <KpiCard label="Claimed so far" value={formatEUR(claimed)} />
-        <KpiCard label="Still unclaimed" value={formatEUR(remaining)} />
+        <KpiCard label="Fund Shares pool" value={formatFSFT(total)} />
+        <KpiCard label="Claimed so far" value={formatFSFT(claimed)} />
+        <KpiCard label="Still unclaimed" value={formatFSFT(remaining)} />
       </KpiGrid>
+
+      <p className="text-caption text-text-2">
+        A distribution pays out <span className="font-semibold text-text-1">Fund Shares (FSFT)</span> —
+        your ownership stake in the property, minted to depositors pro-rata. It is not a cash payout;
+        rent income is the separate EUR stream.
+      </p>
 
       <Section
         title="How the allocation is split"
@@ -100,12 +106,12 @@ export function DistributionTab({
                     Your deposits are private, so your exact share isn&rsquo;t shown here — it&rsquo;s
                     calculated in-circuit at claim time, and claiming sweeps every one of your
                     deposit notes.
-                    {remaining > 0 ? ` ${formatEUR(remaining)} of the pool is still unclaimed.` : ""}
+                    {remaining > 0 ? ` ${formatFSFT(remaining)} of the pool is still unclaimed.` : ""}
                   </p>
                 </>
               ) : (
                 <>
-                  <p className="text-kpi mt-1 text-text-1">{formatEUR(claimable)}</p>
+                  <p className="text-kpi mt-1 text-text-1">{formatFSFT(claimable)}</p>
                   <p className="text-caption mt-1">
                     The exact amount is determined privately in-circuit at claim time.
                   </p>

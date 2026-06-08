@@ -756,6 +756,20 @@ export function formatEURDecimals(amount: number): string {
   }).format(amount);
 }
 
+/**
+ * Format an FSFT (Fund Shares) amount. FSFT is a token COUNT representing
+ * ownership — never a currency, so this renders e.g. "20,000 FSFT", not "€20,000".
+ * Use for distribution pools/claims (minted FSFT), NOT for EUR figures like the
+ * proposal funding request or rent income.
+ */
+export function formatFSFT(amount: number): string {
+  const n = new Intl.NumberFormat("en-EU", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+  return `${n} FSFT`;
+}
+
 export interface ChainParams {
   timing: {
     aztecSlotDurationSec: number;
