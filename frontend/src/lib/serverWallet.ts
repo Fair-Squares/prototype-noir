@@ -52,11 +52,34 @@ interface AccountEntry {
   index: number;
   address: string;
   wallet: Wallet; // shared embedded wallet; sender is selected via `from` on interactions
+  isGenerated?: boolean; // runtime-created account (fees sponsored via SponsoredFPC)
+}
+
+/** A runtime-created account returned to the client. */
+export interface GeneratedAccountResult {
+  index: number;
+  address: string;
+  alias: string;
 }
 
 interface WalletSingleton {
   baseWallet: Wallet; // the embedded wallet (has PXE, account management)
   accounts: AccountEntry[];
+  /**
+   * Create + deploy a fresh Schnorr account whose fees are sponsored by the
+   * canonical SponsoredFPC, register it in the PXE, and append it to `accounts`.
+   * Throws if sponsorship setup was unavailable (so we never hand back a
+   * non-functional account).
+   */
+  createGenerated: () => Promise<GeneratedAccountResult>;
+}
+
+interface SchnorrAccountManager {
+  address: { toString(): string };
+  getDeployMethod: () => Promise<{
+    simulate: (opts: unknown) => Promise<unknown>;
+    send: (opts: unknown) => Promise<{ wait?: () => Promise<unknown> } | unknown>;
+  }>;
 }
 
 interface WalletWithSchnorrAccounts extends Wallet {
@@ -65,7 +88,7 @@ interface WalletWithSchnorrAccounts extends Wallet {
     salt: unknown,
     signingKey?: unknown,
     alias?: string
-  ) => Promise<{ address: { toString(): string } }>;
+  ) => Promise<SchnorrAccountManager>;
 }
 
 // ── Module-level cache ─────────────────────────────────────────────────────────
@@ -209,7 +232,107 @@ async function initWallet(): Promise<WalletSingleton> {
     console.warn("[serverWallet] Contract registration bootstrap failed:", err);
   }
 
-  return { baseWallet, accounts };
+  // ── Runtime account creation (sponsored fees) ────────────────────────────────
+  // Accounts created at runtime (via /api/accounts/create) have no fee juice. The
+  // canonical SponsoredFPC — deployed on every Aztec network at salt=0, including
+  // this local-network — pays their fees. We register it and install it as the
+  // wallet's FALLBACK fee payment method (BaseWallet leaves it undefined) for
+  // GENERATED addresses only, so a `.send({ from })` from a new account is
+  // sponsored with NO route changes, while the pre-funded test accounts keep
+  // self-paying from their own fee juice (their address isn't in the set below).
+  const generatedAddresses = new Set<string>();
+  let nextGeneratedIndex = 1000;
+  let createGenerated: () => Promise<GeneratedAccountResult> = () => {
+    throw new Error(
+      "Account creation unavailable: SponsoredFPC fee sponsorship was not set up on this network."
+    );
+  };
+
+  try {
+    const { SponsoredFeePaymentMethod } = await import("@aztec/aztec.js/fee");
+    const { getContractInstanceFromInstantiationParams } = await import("@aztec/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
+    const { Fr } = await import("@aztec/aztec.js/fields");
+    const { AccountFeePaymentMethodOptions } = await import("@aztec/entrypoints/account");
+    const { NO_FROM } = await import("@aztec/aztec.js/account");
+
+    // @aztec/noir-contracts.js isn't a frontend dependency, so we vendor just the
+    // SponsoredFPC artifact (v4.3.0). The canonical instance derives from it at
+    // salt=0 — the same deterministic address the local-network deploys.
+    const sponsoredFpcJson = (await import("./sponsoredFpcArtifact.json")).default;
+    const sponsoredArtifact = loadContractArtifact(
+      sponsoredFpcJson as unknown as Parameters<typeof loadContractArtifact>[0]
+    );
+    const sponsoredFpcInstance = await getContractInstanceFromInstantiationParams(
+      sponsoredArtifact,
+      { salt: new Fr(0) }
+    );
+    await baseWallet.registerContract(sponsoredFpcInstance, sponsoredArtifact);
+    const sponsoredMethod = new SponsoredFeePaymentMethod(sponsoredFpcInstance.address);
+    console.log(
+      `[serverWallet] SponsoredFPC registered for generated accounts: ${sponsoredFpcInstance.address.toString()}`
+    );
+
+    // Patch completeFeeOptions to return the sponsored method as the wallet-level
+    // fallback for generated addresses. Applies to both gas-estimation and the
+    // real send (both call this), so estimation doesn't try to charge the new
+    // account's empty fee juice. accountFeePaymentMethodOptions=EXTERNAL tells the
+    // account entrypoint the FPC (not the account) is paying. `!feePayer` skips
+    // the deploy call, which already passes the method explicitly.
+    const walletAny = baseWallet as unknown as {
+      completeFeeOptions: (config: {
+        from?: unknown;
+        feePayer?: unknown;
+      }) => Promise<Record<string, unknown>>;
+    };
+    const origCompleteFeeOptions = walletAny.completeFeeOptions.bind(baseWallet);
+    walletAny.completeFeeOptions = async (config) => {
+      const base = await origCompleteFeeOptions(config);
+      const from = config.from as { toString?: () => string } | undefined;
+      const fromStr =
+        from && from !== NO_FROM && typeof from.toString === "function"
+          ? from.toString().toLowerCase()
+          : null;
+      if (fromStr && generatedAddresses.has(fromStr) && !config.feePayer) {
+        return {
+          ...base,
+          walletFeePaymentMethod: sponsoredMethod,
+          accountFeePaymentMethodOptions: AccountFeePaymentMethodOptions.EXTERNAL,
+        };
+      }
+      return base;
+    };
+
+    const walletWithSchnorr = baseWallet as WalletWithSchnorrAccounts;
+    createGenerated = async (): Promise<GeneratedAccountResult> => {
+      const secret = Fr.random();
+      const salt = Fr.random();
+      const manager = await walletWithSchnorr.createSchnorrAccount(secret, salt);
+      const address = manager.address.toString();
+      // Mark generated BEFORE any send so the deploy + every later tx is sponsored.
+      generatedAddresses.add(address.toLowerCase());
+
+      const deployMethod = await manager.getDeployMethod();
+      // Simulate first to surface any deploy revert with a clear message.
+      await deployMethod.simulate({ from: NO_FROM });
+      const sent = await deployMethod.send({
+        from: NO_FROM,
+        fee: { paymentMethod: sponsoredMethod },
+        wait: { timeout: 120 },
+      });
+      const maybeWait = sent as { wait?: () => Promise<unknown> };
+      if (typeof maybeWait?.wait === "function") await maybeWait.wait();
+
+      const index = nextGeneratedIndex++;
+      accounts.push({ index, address, wallet: baseWallet, isGenerated: true });
+      console.log(`[serverWallet] Generated account #${index} deployed (sponsored): ${address}`);
+      return { index, address, alias: `dev-${index}` };
+    };
+  } catch (err) {
+    console.warn("[serverWallet] SponsoredFPC / account-creation setup failed:", err);
+  }
+
+  return { baseWallet, accounts, createGenerated };
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -241,16 +364,28 @@ export async function getTestAccount(
 }
 
 /**
- * Returns all registered test account addresses (for use in /api/accounts).
- * Much faster than getServerWallet() on first call — waits for full init.
+ * Returns all registered accounts (for use in /api/accounts), including any
+ * runtime-generated ones — the server is the source of truth for those.
  */
 export async function getTestAccountAddresses(): Promise<
-  Array<{ index: number; address: string; isAdmin: boolean }>
+  Array<{ index: number; address: string; isAdmin: boolean; isGenerated: boolean; alias: string }>
 > {
   const { accounts } = await getServerWallet();
   return accounts.map((a) => ({
     index: a.index,
     address: a.address,
     isAdmin: a.index === 0,
+    isGenerated: Boolean(a.isGenerated),
+    alias: a.isGenerated ? `dev-${a.index}` : a.index === 0 ? "test0 (admin)" : `test${a.index}`,
   }));
+}
+
+/**
+ * Create + deploy a real, fee-sponsored account at runtime and return it.
+ * The account is registered in the shared PXE and added to the accounts list,
+ * so it can immediately verify KYC, deposit, vote, and trade like a test account.
+ */
+export async function createGeneratedAccount(): Promise<GeneratedAccountResult> {
+  const { createGenerated } = await getServerWallet();
+  return createGenerated();
 }

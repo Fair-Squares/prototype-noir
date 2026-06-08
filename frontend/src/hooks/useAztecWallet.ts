@@ -40,10 +40,6 @@ const INITIAL: WalletState = {
 const STORAGE_KEY = "fs_active_account_index";
 const GENERATED_STORAGE_KEY = "fs_generated_accounts";
 
-function toHex(bytes: Uint8Array): string {
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
 function parseGeneratedAccounts(raw: string | null): AztecAccount[] {
   if (!raw) return [];
   try {
@@ -104,6 +100,30 @@ function mergeAccounts(base: AztecAccount[], generated: AztecAccount[]): AztecAc
   return out.sort((a, b) => a.index - b.index);
 }
 
+// Generated account indices live at 1000+. Next free index given current accounts.
+function nextGeneratedIndex(accounts: AztecAccount[]): number {
+  const max = accounts.reduce((m, acc) => {
+    if (!acc.isGenerated || acc.index < 1000) return m;
+    return Math.max(m, acc.index);
+  }, 999);
+  return max + 1;
+}
+
+// In live mode the server is the source of truth for generated accounts (they
+// live in its in-memory wallet and are returned by /api/accounts). Drop any
+// stale localStorage entries the server no longer knows — e.g. after a server
+// restart — so we never select a non-existent account. In sim mode there is no
+// server-side account list, so client-side generated accounts are kept as-is.
+function reconcileGenerated(
+  serverAccounts: AztecAccount[],
+  source: string | undefined
+): AztecAccount[] {
+  const generated = loadGeneratedAccounts();
+  if (source !== "live") return generated;
+  const serverIdx = new Set(serverAccounts.map((a) => a.index));
+  return generated.filter((g) => serverIdx.has(g.index));
+}
+
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useAztecWallet() {
@@ -114,12 +134,12 @@ export function useAztecWallet() {
     const savedIndex =
       typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
     const idx = savedIndex !== null ? parseInt(savedIndex, 10) : null;
-    const generated = loadGeneratedAccounts();
 
     fetch("/api/accounts")
       .then((r) => r.json())
-      .then((data: { accounts: AztecAccount[] }) => {
-        const accounts = mergeAccounts(data.accounts ?? [], generated);
+      .then((data: { accounts: AztecAccount[]; source?: string }) => {
+        const serverAccounts = data.accounts ?? [];
+        const accounts = mergeAccounts(serverAccounts, reconcileGenerated(serverAccounts, data.source));
 
         // Restore saved account or stay idle
         if (idx !== null) {
@@ -135,7 +155,9 @@ export function useAztecWallet() {
         }
       })
       .catch((e) => {
-        const accounts = generated;
+        // Server unreachable: fall back to whatever generated accounts the
+        // browser has cached (sim/offline only — these can't transact live).
+        const accounts = loadGeneratedAccounts();
         setState({
           status: accounts.length > 0 ? "selected" : "error",
           accounts,
@@ -164,8 +186,9 @@ export function useAztecWallet() {
 
     try {
       const res = await fetch("/api/accounts");
-      const data: { accounts: AztecAccount[] } = await res.json();
-      const merged = mergeAccounts(data.accounts ?? [], loadGeneratedAccounts());
+      const data: { accounts: AztecAccount[]; source?: string } = await res.json();
+      const serverAccounts = data.accounts ?? [];
+      const merged = mergeAccounts(serverAccounts, reconcileGenerated(serverAccounts, data.source));
       const account =
         merged.find((a) => a.index === accountIndex) ??
         merged[0] ??
@@ -207,37 +230,51 @@ export function useAztecWallet() {
     setState((s) => ({ ...s, status: "idle", activeAccount: null }));
   }, []);
 
-  const generateDevAccount = useCallback(() => {
-    if (typeof window === "undefined") return;
-
-    const bytes = new Uint8Array(32);
-    crypto.getRandomValues(bytes);
-    const address = `0x${toHex(bytes)}`;
-
-    setState((s) => {
-      const maxGeneratedIndex = s.accounts.reduce((max, acc) => {
-        if (!acc.isGenerated || acc.index < 1000) return max;
-        return Math.max(max, acc.index);
-      }, 999);
-      const index = maxGeneratedIndex + 1;
-      const next: AztecAccount = {
-        index,
-        alias: `dev-${index}`,
-        address,
-        isAdmin: false,
-        isGenerated: true,
+  // Create a new account. In LIVE mode this deploys a REAL, fee-sponsored account
+  // server-side (so it can verify KYC, deposit, vote, trade); in SIM mode the
+  // route returns a phantom address the in-memory sim store accepts. Either way
+  // the server is authoritative for the address; the client assigns the index in
+  // sim. Surfaces an error instead of silently creating a non-functional account.
+  const generateDevAccount = useCallback(async () => {
+    setState((s) => ({ ...s, status: "loading", error: null }));
+    try {
+      const res = await fetch("/api/accounts/create", { method: "POST" });
+      const data = (await res.json()) as {
+        index?: number;
+        address?: string;
+        alias?: string;
+        error?: string;
       };
-      const accounts = mergeAccounts(s.accounts, [next]);
-      saveGeneratedAccounts(accounts);
-      localStorage.setItem(STORAGE_KEY, String(next.index));
-      return {
+      if (!res.ok || !data.address) {
+        setState((s) => ({
+          ...s,
+          status: s.activeAccount ? "selected" : "idle",
+          error: data.error ?? "Could not create account.",
+        }));
+        return;
+      }
+      setState((s) => {
+        const index =
+          typeof data.index === "number" ? data.index : nextGeneratedIndex(s.accounts);
+        const next: AztecAccount = {
+          index,
+          alias: data.alias ?? `dev-${index}`,
+          address: data.address as string,
+          isAdmin: false,
+          isGenerated: true,
+        };
+        const accounts = mergeAccounts(s.accounts, [next]);
+        saveGeneratedAccounts(accounts);
+        if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, String(index));
+        return { ...s, status: "selected", accounts, activeAccount: next, error: null };
+      });
+    } catch (e) {
+      setState((s) => ({
         ...s,
-        status: "selected",
-        accounts,
-        activeAccount: next,
-        error: null,
-      };
-    });
+        status: s.activeAccount ? "selected" : "idle",
+        error: e instanceof Error ? e.message : String(e),
+      }));
+    }
   }, []);
 
   return {

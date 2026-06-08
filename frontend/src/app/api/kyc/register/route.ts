@@ -10,10 +10,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "userAddress required" }, { status: 400 });
   }
 
+  // Dev/sim shortcut ONLY when NOT in live mode. Previously this fired whenever
+  // NEXT_PUBLIC_DEV_MODE=true (which the live docker stack sets), so register
+  // silently wrote a SIM flag and never issued the on-chain credential — while
+  // /api/kyc/status reads the chain (it gates dev-mode on !isLiveModeEnabled()).
+  // That mismatch left UI-registered accounts (new dev accounts) unverified.
+  // Match the status route: in live mode, always register + issue on-chain.
   const forceDevMode =
-    devMode ||
-    process.env.NEXT_PUBLIC_DEV_MODE === "true" ||
-    process.env.NEXT_PUBLIC_SIMULATION === "true";
+    !isLiveModeEnabled() &&
+    (devMode ||
+      process.env.NEXT_PUBLIC_DEV_MODE === "true" ||
+      process.env.NEXT_PUBLIC_SIMULATION === "true");
 
   // ── SDK dev-mode/testing bypass ─────────────────────────────────────────
   // This keeps local KYC flows usable even when a live PXE/node is not running.
@@ -76,15 +83,17 @@ export async function POST(request: NextRequest) {
     // KYCVerifier.compute_revocation_commitment(owner, nonce).
     const credentialNonce = BigInt(Date.now());
     let credentialTxHash: string | undefined;
+    let credentialError: string | undefined;
     try {
       const credentialReceipt = await kycContract.methods
         .issue_credential(userAddr, credentialNonce)
         .send({ from: adminAddress });
       credentialTxHash = requireAztecTxHash(credentialReceipt);
-    } catch (credentialError: unknown) {
+    } catch (err: unknown) {
       // Do not fail the whole request — public registration already succeeded.
       // The user can re-issue later; downstream V1 contracts still see them as
       // verified via the public maps.
+      credentialError = err instanceof Error ? err.message : String(err);
       console.warn("[kyc/register] private credential issuance failed:", credentialError);
     }
 
@@ -93,6 +102,7 @@ export async function POST(request: NextRequest) {
       message: devMode ? "KYC verified instantly (dev mode). Investor role granted." : "KYC verified on-chain. Investor role granted.",
       txHash: requireAztecTxHash(receipt),
       credentialTxHash,
+      credentialError,
       credentialNonce: credentialNonce.toString(),
       verified: true,
       isInvestor: true,

@@ -480,6 +480,24 @@ depositors only** — private depositors are invisible there.
     address-match guard) is **left flagged for human review** because it needs a
     cross-cutting client change (`fetchKYCProfile` in `contracts.ts` + all callers
     currently send only `address`). Covered by the M16 demo-only caveat.
+  - **Runtime account creation (DEMO-ONLY).** Beyond the deterministic test0/1/2,
+    the UI's "Generate dev account" now deploys a **real** account in live mode via
+    `POST /api/accounts/create` → `serverWallet.createGeneratedAccount()`: it
+    creates + deploys a Schnorr account whose fees are paid by the canonical
+    **SponsoredFPC** (vendored artifact `frontend/src/lib/sponsoredFpcArtifact.json`,
+    derived at salt=0), registers it in the shared PXE, and appends it to the
+    in-memory accounts list at index ≥1000 (also surfaced by `GET /api/accounts`,
+    aliased `dev-N`). Fees are sponsored **only for generated addresses** via a
+    patched `completeFeeOptions` that injects the SponsoredFPC as the wallet-level
+    `walletFeePaymentMethod` fallback (test accounts still self-pay; no route
+    changes). Such accounts can verify KYC, deposit, vote, and trade like a test
+    account. **They are EPHEMERAL** — held only in the server PXE's memory, so a
+    frontend restart forgets them (the client reconciles stale localStorage entries
+    against `/api/accounts` in live mode). The shared PXE now holds these keys too,
+    so the M16 demo-only auth caveat extends to them. NOTE: `/api/kyc/register`'s
+    dev-mode shortcut is gated on `!isLiveModeEnabled()` (it previously fired on
+    `NEXT_PUBLIC_DEV_MODE=true`, which the live stack sets, so it wrote a sim flag
+    and never issued the on-chain credential while `/api/kyc/status` read the chain).
 
 ### Confirmed-correct privacy postures (do NOT "fix" these by mistake)
 

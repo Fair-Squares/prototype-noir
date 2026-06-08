@@ -61,9 +61,10 @@ export async function GET() {
     const addrs = await getTestAccountAddresses();
     const accounts = addrs.map((a) => ({
       index: a.index,
-      alias: a.index === 0 ? "test0 (admin)" : `test${a.index}`,
+      alias: a.alias,
       address: a.address,
       isAdmin: a.isAdmin,
+      isGenerated: a.isGenerated,
     }));
     return NextResponse.json({ accounts, initialized: true, source: "live" });
   } catch (e) {
