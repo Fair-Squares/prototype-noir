@@ -71,50 +71,48 @@ export async function GET(request: NextRequest) {
         );
         return totalSupplyRaw ? Number(BigInt(totalSupplyRaw)) : 0;
       })(),
+      // No catch-to-0 here: a failed balance read must surface as the route's
+      // 500, never render as a fake €0 / 0 FSFT (repo error-handling rule).
       (async () => {
         if (!address || !eurTokenAddr) return 0;
-        try {
-          const { getTestAccount } = await import("@/lib/serverWallet");
-          const { Contract } = await import("@aztec/aztec.js/contracts");
-          const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-          const { AztecAddress } = await import("@aztec/aztec.js/addresses");
-          const admin = await getTestAccount(0);
-          const w = admin.wallet;
-          // EUR is an AIP-20 token (vendored standards): balance_of_public.
-          const EurJson = await loadGeneratedArtifactJson("token_contract-Token.json");
-          const eurC = await Contract.at(
-            AztecAddress.fromString(eurTokenAddr),
-            loadContractArtifact(EurJson as Parameters<typeof loadContractArtifact>[0]),
-            w
-          );
-          return Number(
-            simResult(await eurC.methods.balance_of_public(AztecAddress.fromString(address)).simulate({
-              from: AztecAddress.fromString(admin.address),
-            }))
-          );
-        } catch { return 0; }
+        const { getTestAccount } = await import("@/lib/serverWallet");
+        const { Contract } = await import("@aztec/aztec.js/contracts");
+        const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
+        const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+        const admin = await getTestAccount(0);
+        const w = admin.wallet;
+        // EUR is an AIP-20 token (vendored standards): balance_of_public.
+        const EurJson = await loadGeneratedArtifactJson("token_contract-Token.json");
+        const eurC = await Contract.at(
+          AztecAddress.fromString(eurTokenAddr),
+          loadContractArtifact(EurJson as Parameters<typeof loadContractArtifact>[0]),
+          w
+        );
+        return Number(
+          simResult(await eurC.methods.balance_of_public(AztecAddress.fromString(address)).simulate({
+            from: AztecAddress.fromString(admin.address),
+          }))
+        );
       })(),
       (async () => {
         if (!address || !fundTokenAddr) return 0;
-        try {
-          const { getTestAccount } = await import("@/lib/serverWallet");
-          const { Contract } = await import("@aztec/aztec.js/contracts");
-          const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-          const { AztecAddress } = await import("@aztec/aztec.js/addresses");
-          const admin = await getTestAccount(0);
-          const w = admin.wallet;
-          const FtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
-          const ftC = await Contract.at(
-            AztecAddress.fromString(fundTokenAddr),
-            loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]),
-            w
-          );
-          return Number(
-            simResult(await ftC.methods.balance_of_public(AztecAddress.fromString(address)).simulate({
-              from: AztecAddress.fromString(admin.address),
-            }))
-          );
-        } catch { return 0; }
+        const { getTestAccount } = await import("@/lib/serverWallet");
+        const { Contract } = await import("@aztec/aztec.js/contracts");
+        const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
+        const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+        const admin = await getTestAccount(0);
+        const w = admin.wallet;
+        const FtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
+        const ftC = await Contract.at(
+          AztecAddress.fromString(fundTokenAddr),
+          loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]),
+          w
+        );
+        return Number(
+          simResult(await ftC.methods.balance_of_public(AztecAddress.fromString(address)).simulate({
+            from: AztecAddress.fromString(admin.address),
+          }))
+        );
       })(),
     ]);
 

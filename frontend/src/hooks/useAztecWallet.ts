@@ -141,27 +141,33 @@ export function useAztecWallet() {
         const serverAccounts = data.accounts ?? [];
         const accounts = mergeAccounts(serverAccounts, reconcileGenerated(serverAccounts, data.source));
 
-        // Restore saved account or stay idle
+        // Restore the saved account; if it no longer exists (e.g. a server
+        // restart forgot a generated account), drop to idle so the user
+        // re-selects — NEVER silently substitute accounts[0] (the admin) and
+        // let them act under the wrong identity.
         if (idx !== null) {
-          const account = accounts.find((a) => a.index === idx) ?? accounts[0] ?? null;
+          const account = accounts.find((a) => a.index === idx) ?? null;
           setState({
             status: account ? "selected" : "idle",
             accounts,
             activeAccount: account,
-            error: null,
+            error: account
+              ? null
+              : "Your previously selected account is no longer available — please reconnect.",
           });
         } else {
           setState((s) => ({ ...s, accounts }));
         }
       })
       .catch((e) => {
-        // Server unreachable: fall back to whatever generated accounts the
-        // browser has cached (sim/offline only — these can't transact live).
+        // Server unreachable: surface the cached generated accounts (sim/offline
+        // only — these can't transact live) but stay un-selected: auto-acting
+        // as a cached account while erroring would be a silent fallback.
         const accounts = loadGeneratedAccounts();
         setState({
-          status: accounts.length > 0 ? "selected" : "error",
+          status: "error",
           accounts,
-          activeAccount: accounts[0] ?? null,
+          activeAccount: null,
           error: String(e),
         });
       });

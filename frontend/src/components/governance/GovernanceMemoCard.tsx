@@ -88,7 +88,7 @@ export function GovernanceMemoCard({
             {isActive ? window.remainingLabel : "Closed"}
           </dd>
           <dd className="text-caption mt-0.5 text-mono">
-            Closes at block {window.deadlineBlock.toLocaleString()}
+            Closes at {window.closesAtLabel}
           </dd>
         </div>
       </dl>

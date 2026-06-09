@@ -66,7 +66,11 @@ export default function DexPage() {
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Monotonic token so a slow in-flight load for a previous account can never
+  // overwrite the newly selected account's data (account-switch race).
+  const refreshSeqRef = useRef(0);
   const refresh = useCallback(async () => {
+    const seq = ++refreshSeqRef.current;
     setLoading(true);
     try {
       const [book, params, port, mine] = await Promise.all([
@@ -75,15 +79,17 @@ export default function DexPage() {
         address ? fetchPortfolio(address, accountIndex) : Promise.resolve(null),
         address ? fetchMyDexOrders(address, accountIndex) : Promise.resolve([]),
       ]);
+      if (seq !== refreshSeqRef.current) return;
       setOrderbook(book);
       setChainParams(params);
       setPortfolio(port);
       setMyOrders(mine);
       setLoadError(null);
     } catch (error: unknown) {
+      if (seq !== refreshSeqRef.current) return;
       setLoadError(error instanceof Error ? error.message : "Could not load trade data.");
     } finally {
-      setLoading(false);
+      if (seq === refreshSeqRef.current) setLoading(false);
     }
   }, [address, accountIndex]);
 
@@ -121,6 +127,8 @@ export default function DexPage() {
       // shows up under "Your orders" below, no number to remember.
       notify("success", result.message ?? "Order placed.");
       await refresh();
+    } catch (err: unknown) {
+      notify("error", err instanceof Error ? err.message : "Order could not be placed.");
     } finally {
       setBusy(false);
     }
@@ -142,6 +150,8 @@ export default function DexPage() {
       const result = await action(address);
       notify(result.success ? "success" : "error", result.success ? (result.message ?? fallback.ok) : (result.error ?? fallback.fail));
       if (result.success) await refresh();
+    } catch (err: unknown) {
+      notify("error", err instanceof Error ? err.message : fallback.fail);
     } finally {
       setBusySeq(null);
     }
@@ -168,7 +178,7 @@ export default function DexPage() {
       <PageHeader
         eyebrow="Secondary liquidity"
         title="Transfer your position"
-        description="A small, optional venue for moving Fund Share tokens between verified investors at a price tied to the fund's net asset value. Most investors never need this - it is not where the fund is built."
+        description="A small, optional venue for moving Fund Share tokens between verified investors at a price bounded around the last issuance reference price. Most investors never need this - it is not where the fund is built."
         actions={
           <Button variant="secondary" size="sm" className="inline-flex" disabled={loading} onClick={refresh}>
             Refresh

@@ -62,7 +62,11 @@ export default function TrustChip() {
         className={`chip min-h-11 ${TONE[summary.state]} cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]`}
         style={{ touchAction: "manipulation" }}
       >
-        <span aria-hidden="true">🛡</span>
+        {/* No emoji (brand rule) — a plain tone-coloured dot marks the state. */}
+        <span
+          aria-hidden="true"
+          className="inline-block h-2 w-2 flex-none rounded-full bg-current"
+        />
         <span className="hidden sm:inline">{summary.word}</span>
         <span aria-hidden="true" className="opacity-60">
           ▾

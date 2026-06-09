@@ -6,7 +6,8 @@ import {
   StatusChip,
   type Column,
 } from "@/components/ui";
-import { formatEUR, type PortfolioData } from "@/lib/contracts";
+import { formatEUR,
+  formatEURDecimals, type PortfolioData } from "@/lib/contracts";
 
 export interface HoldingsBreakdownProps {
   portfolio: PortfolioData;
@@ -167,7 +168,7 @@ export function HoldingsBreakdown({
                 />
               </dt>
               <dd className="text-body text-mono text-text-1">
-                {formatEUR(portfolio.navPerFsftEur)}
+                {formatEURDecimals(portfolio.navPerFsftEur)}
               </dd>
             </div>
           ) : null}
@@ -175,7 +176,7 @@ export function HoldingsBreakdown({
             <div className="flex flex-col gap-0.5">
               <dt className="text-label">Issue price per share</dt>
               <dd className="text-body text-mono text-text-1">
-                {formatEUR(portfolio.tokenPriceEur)}
+                {formatEURDecimals(portfolio.tokenPriceEur)}
               </dd>
             </div>
           ) : null}

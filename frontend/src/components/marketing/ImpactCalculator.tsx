@@ -47,6 +47,9 @@ export function ImpactCalculator({ initialRorBps }: ImpactCalculatorProps) {
   const [amount, setAmount] = useState(8000);
   const [city, setCity] = useState<string>("Amsterdam");
   const [rorBps, setRorBps] = useState<number>(initialRorBps ?? DEFAULT_ROR_BPS);
+  // Honesty flag: only true once the figure actually came from the chain (prop
+  // or fetch) — the sub-label must not claim "on-chain" for the seeded default.
+  const [rorIsLive, setRorIsLive] = useState<boolean>(initialRorBps != null);
 
   // Self-fetch the real ROR on mount so /learn resolves standalone. No retry /
   // polling (CLAUDE.md error-handling rule); a failed read just keeps the
@@ -55,7 +58,10 @@ export function ImpactCalculator({ initialRorBps }: ImpactCalculatorProps) {
     let cancelled = false;
     fetchFundStats()
       .then((stats) => {
-        if (!cancelled && typeof stats.rorBps === "number") setRorBps(stats.rorBps);
+        if (!cancelled && typeof stats.rorBps === "number") {
+          setRorBps(stats.rorBps);
+          setRorIsLive(true);
+        }
       })
       .catch(() => {
         /* keep initialRorBps ?? DEFAULT_ROR_BPS — never mask with a wrong value */
@@ -146,7 +152,7 @@ export function ImpactCalculator({ initialRorBps }: ImpactCalculatorProps) {
             <ResultCard
               label="Your return / yr"
               value={`€${fmt(annualReturn)}`}
-              sub="based on the on-chain ROR"
+              sub={rorIsLive ? "based on the on-chain ROR" : "canonical 3% — on-chain ROR not loaded"}
             />
             {/* MODELLED — illustrative ownership share. */}
             <ResultCard

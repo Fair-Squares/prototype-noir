@@ -52,6 +52,10 @@ export async function GET(request: NextRequest) {
       const hasClaimed = address ? proposal.claimedBy.includes(address) : false;
       return {
         ...proposal,
+        // Sim deadlines are unix SECONDS, not block heights. Mark them so
+        // votingWindowFor compares against wall-clock (and the UI never
+        // renders the timestamp as a block number).
+        deadlineKind: "timestamp" as const,
         totalVotes,
         quorumReached: totalVotes >= proposal.quorumRequired,
         claimableAmount,

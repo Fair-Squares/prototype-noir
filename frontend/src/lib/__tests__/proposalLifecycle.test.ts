@@ -68,6 +68,37 @@ describe("votingWindowFor", () => {
     expect(w.deadlineBlock).toBe(30);
     expect(w.blocksRemaining).toBe(20);
   });
+
+  it("labels block deadlines via closesAtLabel ('block N')", () => {
+    const w = votingWindowFor(mkProposal({ deadlineBlock: 1234, currentBlock: 42 }));
+    expect(w.kind).toBe("block");
+    expect(w.closesAtLabel).toBe("block 1,234");
+  });
+
+  // Simulation proposals carry wall-clock deadlines (unix seconds) and no
+  // current block: the window must still open/close and never read as blocks.
+  describe("timestamp deadlines (simulation mode)", () => {
+    it("stays open before the wall-clock deadline, with a duration label", () => {
+      const deadline = Math.floor(Date.now() / 1000) + 125; // ~2m05s out
+      const w = votingWindowFor(mkProposal({ deadline, deadlineKind: "timestamp" }));
+      expect(w.kind).toBe("timestamp");
+      expect(w.unknown).toBe(false);
+      expect(w.closed).toBe(false);
+      expect(w.remainingLabel).toMatch(/^\d+m \d+s$/);
+      // The closes-at label is a clock time, never "block <unix-timestamp>".
+      expect(w.closesAtLabel).not.toMatch(/block/);
+    });
+
+    it("closes once the wall-clock deadline passes (so sim governance can finalise)", () => {
+      const deadline = Math.floor(Date.now() / 1000) - 10;
+      const p = mkProposal({ status: 0, deadline, deadlineKind: "timestamp" });
+      const w = votingWindowFor(p);
+      expect(w.closed).toBe(true);
+      expect(w.remainingLabel).toBe("Closed");
+      expect(isVotingEnded(p)).toBe(true);
+      expect(displayStatus(p)).toEqual({ kind: "pending", label: "Voting ended" });
+    });
+  });
 });
 
 describe("isVotingEnded / displayStatus", () => {

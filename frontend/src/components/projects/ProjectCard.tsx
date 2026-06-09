@@ -6,7 +6,7 @@ import {
   quorumFor,
   votingWindowFor,
 } from "@/lib/proposalLifecycle";
-import { formatEUR } from "@/lib/contracts";
+import { formatEUR, formatFSFT } from "@/lib/contracts";
 import { getProjectDossier } from "@/lib/projectDossier";
 import { ProjectStatusChip } from "./ProjectStatusChip";
 import { distributionClaimedFraction, type ProjectRow } from "./ProjectRow";
@@ -58,6 +58,14 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
     row.distributionOpened &&
     !row.hasClaimed &&
     (row.claimableAmount ?? 0) > 0;
+  // Private depositors: public records show €0 claimable, but their share is
+  // computed in-circuit at claim time — offer the claim instead of denying it.
+  const privateClaim =
+    connected &&
+    row.distributionOpened &&
+    !row.hasClaimed &&
+    !canClaim &&
+    Boolean(row.proposal.hasPrivateDeposits);
 
   // Lead with the project's human identity (name / location / homes / covenant)
   // from the modelled dossier when one is authored; fall back to the on-chain
@@ -75,7 +83,9 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
         ? "You have claimed your share of this distribution."
         : canClaim
           ? null
-          : "You have no claimable share of this distribution.";
+          : privateClaim
+            ? "Your deposits are private — your share is computed in-circuit when you claim."
+            : "You have no claimable share of this distribution.";
 
   return (
     <article className="surface flex flex-col gap-4 p-5">
@@ -124,7 +134,7 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
               />
             </span>
             <span className="text-mono text-text-1">
-              {formatEUR(row.distributionAmount ?? 0)}
+              {formatFSFT(row.distributionAmount ?? 0)}
             </span>
           </div>
           {distFraction !== null ? (
@@ -135,11 +145,11 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
               />
               <p className="text-caption">
                 <span className="text-mono text-text-1">
-                  {formatEUR(row.distributionClaimed ?? 0)}
+                  {formatFSFT(row.distributionClaimed ?? 0)}
                 </span>{" "}
                 of{" "}
                 <span className="text-mono text-text-1">
-                  {formatEUR(row.distributionAmount ?? 0)}
+                  {formatFSFT(row.distributionAmount ?? 0)}
                 </span>{" "}
                 claimed
                 {distFraction >= 1 ? " — fully distributed." : "."}
@@ -164,7 +174,7 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
               {isActive ? window.remainingLabel : "Closed"}
             </dd>
             <dd className="text-caption mt-0.5 text-mono">
-              Closes at block {window.deadlineBlock.toLocaleString()}
+              Closes at {window.closesAtLabel}
             </dd>
           </div>
         </dl>
@@ -179,8 +189,13 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
           {connected && canClaim ? (
             <p className="mt-0.5 inline-flex items-center gap-2">
               <span className="text-mono text-success">
-                {formatEUR(row.claimableAmount ?? 0)} claimable
+                {formatFSFT(row.claimableAmount ?? 0)} claimable
               </span>
+              <StatusChip status="open" label="Claimable" />
+            </p>
+          ) : null}
+          {privateClaim ? (
+            <p className="mt-0.5 inline-flex items-center gap-2">
               <StatusChip status="open" label="Claimable" />
             </p>
           ) : null}
@@ -189,7 +204,7 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
         {/* Exactly one primary action, chosen by the project's current state:
             claim a payout, vote while open, else open the project record. */}
         <div className="flex flex-wrap items-center gap-2">
-          {canClaim ? (
+          {canClaim || privateClaim ? (
             <>
               <Button
                 size="sm"

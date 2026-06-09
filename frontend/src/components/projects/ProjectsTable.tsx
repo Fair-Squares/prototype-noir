@@ -1,5 +1,5 @@
 import { DataTable, EmptyState, type Column } from "@/components/ui";
-import { formatEUR } from "@/lib/contracts";
+import { formatEUR, formatFSFT } from "@/lib/contracts";
 import { votingWindowFor } from "@/lib/proposalLifecycle";
 import type { ProjectRow } from "./ProjectRow";
 import { ProjectStatusChip } from "./ProjectStatusChip";
@@ -60,12 +60,12 @@ export function ProjectsTable({ rows }: ProjectsTableProps) {
     },
     {
       key: "window",
-      header: "Closes (block)",
+      header: "Closes",
       align: "right",
       hideOnMobile: true,
       render: (row) => (
         <span className="text-mono text-text-2">
-          {votingWindowFor(row.proposal).deadlineBlock.toLocaleString()}
+          {votingWindowFor(row.proposal).closesAtLabel}
         </span>
       ),
     },
@@ -74,9 +74,10 @@ export function ProjectsTable({ rows }: ProjectsTableProps) {
       header: "Distribution pool",
       align: "right",
       hideOnMobile: true,
+      // Distributions mint Fund Shares (FSFT), not euros — see formatFSFT.
       render: (row) =>
         row.distributionOpened && row.distributionAmount != null ? (
-          <span className="text-mono">{formatEUR(row.distributionAmount)}</span>
+          <span className="text-mono">{formatFSFT(row.distributionAmount)}</span>
         ) : (
           <Empty />
         ),
@@ -88,7 +89,7 @@ export function ProjectsTable({ rows }: ProjectsTableProps) {
       hideOnMobile: true,
       render: (row) =>
         row.distributionOpened && row.distributionClaimed != null ? (
-          <span className="text-mono text-text-2">{formatEUR(row.distributionClaimed)}</span>
+          <span className="text-mono text-text-2">{formatFSFT(row.distributionClaimed)}</span>
         ) : (
           <Empty />
         ),

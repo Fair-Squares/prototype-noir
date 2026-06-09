@@ -304,7 +304,18 @@ async function initWallet(): Promise<WalletSingleton> {
     };
 
     const walletWithSchnorr = baseWallet as WalletWithSchnorrAccounts;
+    // Hard cap: account creation is unauthenticated (M16 demo posture) and each
+    // create deploys a REAL account on the SponsoredFPC's dime, so an anonymous
+    // caller looping POST /api/accounts/create could otherwise drain the
+    // sponsorship quota and grow the in-memory accounts list without bound.
+    const maxGenerated = Number(process.env.FS_MAX_GENERATED_ACCOUNTS ?? 25);
     createGenerated = async (): Promise<GeneratedAccountResult> => {
+      const generatedCount = accounts.filter((a) => a.isGenerated).length;
+      if (generatedCount >= maxGenerated) {
+        throw new Error(
+          `Generated-account limit reached (${maxGenerated}). Restart the frontend to reset, or raise FS_MAX_GENERATED_ACCOUNTS.`
+        );
+      }
       const secret = Fr.random();
       const salt = Fr.random();
       const manager = await walletWithSchnorr.createSchnorrAccount(secret, salt);

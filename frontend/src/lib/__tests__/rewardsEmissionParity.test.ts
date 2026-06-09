@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { simGetRewardsOverview } from "@/lib/simulationStore";
+import { simGetRewardsOverview, REWARD_EMISSION_SCHEDULE } from "@/lib/simulationStore";
 
 /**
  * Sim ↔ chain parity guard for the protocol-reward emission model.
@@ -38,5 +38,18 @@ describe("reward emission parity (sim mirrors the on-chain schedule)", () => {
 
   it("keeps the claim minimum at 1 (matches the deployed claim_min)", () => {
     expect(overview.claimMin).toBe(1);
+  });
+
+  it("emits a FLAT floor(floor(pool*bps/10000)/12) every epoch of a year (no remainder spreading)", () => {
+    // The contract's epoch_emission_target is the same for all 12 epochs of a
+    // year; the flooring dust stays unminted by design. A remainder-spreading
+    // sim drifts from the chain inside each year (e.g. epoch 11: 86,674 vs
+    // the contract's 86,666).
+    const bps = [1300, 1200, 1100, 1000, 1000, 1000, 900, 900, 800, 800];
+    expect(REWARD_EMISSION_SCHEDULE).toHaveLength(120);
+    for (let epoch = 0; epoch < 120; epoch++) {
+      const yearly = Math.floor((8_000_000 * bps[Math.floor(epoch / 12)]) / 10_000);
+      expect(REWARD_EMISSION_SCHEDULE[epoch]).toBe(Math.floor(yearly / 12));
+    }
   });
 });

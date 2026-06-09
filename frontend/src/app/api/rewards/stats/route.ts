@@ -113,7 +113,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
     }
 
-    const origin = new URL(request.url).origin;
+    // Self-calls must NOT derive their origin from the request URL: behind a
+    // proxy that origin reflects the caller-controlled Host header (steerable
+    // to an arbitrary host) and breaks when the internal port differs from the
+    // public one. Loop back over the server's own listen port instead.
+    const origin =
+      process.env.FS_INTERNAL_API_BASE ?? `http://127.0.0.1:${process.env.PORT ?? "3000"}`;
 
     // The three independent read groups below have no data dependency on one
     // another, so kick them all off concurrently:

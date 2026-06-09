@@ -114,21 +114,17 @@ export function OverviewTab({
         <p className="text-body text-text-1">
           {votingEnded ? (
             <>
-              Voting closed at block{" "}
-              <span className="text-mono">{window.deadlineBlock.toLocaleString()}</span> — this
+              Voting closed at <span className="text-mono">{window.closesAtLabel}</span> — this
               request can now be finalised.
             </>
           ) : isActive ? (
             <>
-              Closes at block{" "}
-              <span className="text-mono">{window.deadlineBlock.toLocaleString()}</span> ·{" "}
-              <span className="text-mono">{window.blocksRemaining.toLocaleString()}</span> block
-              {window.blocksRemaining === 1 ? "" : "s"} remaining
+              Closes at <span className="text-mono">{window.closesAtLabel}</span> ·{" "}
+              <span className="text-mono">{window.remainingLabel}</span> remaining
             </>
           ) : (
             <>
-              Window closed at block{" "}
-              <span className="text-mono">{window.deadlineBlock.toLocaleString()}</span>.
+              Window closed at <span className="text-mono">{window.closesAtLabel}</span>.
             </>
           )}
         </p>
@@ -172,8 +168,8 @@ export function OverviewTab({
           // Quorum was not reached, so finalize_proposal would revert on-chain.
           // Don't offer a button that fails — explain the terminal state instead.
           <Alert tone="warning" title="Can't finalise — not enough votes">
-            Voting closed at block{" "}
-            <span className="text-mono">{window.deadlineBlock.toLocaleString()}</span> with{" "}
+            Voting closed at{" "}
+            <span className="text-mono">{window.closesAtLabel}</span> with{" "}
             {quorum.total.toLocaleString()} of {quorum.required.toLocaleString()} ballots cast. This
             request did not reach quorum, so it can&rsquo;t be finalised or funded.
           </Alert>

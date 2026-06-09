@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { registerKYC } from "@/lib/contracts";
 import { ActionBar, AdvancedDetails, Alert, Button } from "@/components/ui";
 
@@ -32,6 +32,14 @@ export default function KYCFlow({ userAddress, isVerified, isInvestor, onVerifie
   const [loading, setLoading] = useState(false);
   const [phase, setPhase] = useState<VerifyPhase>("idle");
   const [error, setError] = useState<string | null>(null);
+  // The status poll must die with the component — otherwise it keeps firing
+  // (and setting state on an unmounted component) for up to 5 minutes.
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
 
   const completeRegistration = async (devMode = false) => {
     setPhase("registering");
@@ -62,6 +70,10 @@ export default function KYCFlow({ userAddress, isVerified, isInvestor, onVerifie
 
       if (data.devMode || String(data.qrUrl ?? "").startsWith("dev://")) {
         await completeRegistration(true);
+        // Reset locally too: if the parent's refresh doesn't immediately flip
+        // isVerified, the button must not stay stuck on a spinner.
+        setPhase("idle");
+        setLoading(false);
         return;
       }
 
@@ -69,6 +81,7 @@ export default function KYCFlow({ userAddress, isVerified, isInvestor, onVerifie
 
       let attempts = 0;
       const maxAttempts = 100;
+      if (pollRef.current) clearInterval(pollRef.current);
       const interval = setInterval(async () => {
         attempts += 1;
 
@@ -82,6 +95,7 @@ export default function KYCFlow({ userAddress, isVerified, isInvestor, onVerifie
           if (statusData.verified) {
             clearInterval(interval);
             await completeRegistration(false);
+            setPhase("idle");
             setLoading(false);
             return;
           }
@@ -99,6 +113,7 @@ export default function KYCFlow({ userAddress, isVerified, isInvestor, onVerifie
           setError(statusError instanceof Error ? statusError.message : "Could not confirm zkPassport status.");
         }
       }, 3000);
+      pollRef.current = interval;
     } catch (requestError: unknown) {
       setError(requestError instanceof Error ? requestError.message : "Failed to start verification");
       setPhase("idle");

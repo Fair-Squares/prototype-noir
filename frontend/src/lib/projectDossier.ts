@@ -333,7 +333,9 @@ export function modelledRorRent(
   rorPct: number = CAPPED_RETURN_PCT
 ): { annualRentEur: number; monthlyRentEur: number; rorPct: number } {
   const base = Math.max(0, acquisitionEur);
-  const annualRentEur = Math.round((base * rorPct) / 100);
-  const monthlyRentEur = Math.round(annualRentEur / 12);
+  // Floor per step, exactly like the on-chain math (ROR * value / 10000 / 12
+  // with whole-EUR flooring) — the modelled mirror must round the same way.
+  const annualRentEur = Math.floor((base * rorPct) / 100);
+  const monthlyRentEur = Math.floor(annualRentEur / 12);
   return { annualRentEur, monthlyRentEur, rorPct };
 }

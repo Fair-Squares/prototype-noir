@@ -28,11 +28,14 @@ export function PositionSummary({
   return (
     <section className="surface p-5">
       <div className="flex flex-col gap-1">
+        {/* Labelled by its exact formula (shares + cash): "total position value"
+            would overstate scope — deposited capital awaiting share issuance is
+            shown separately below, not in this headline. */}
         <div className="flex items-center gap-1.5">
-          <span className="text-label">Total position value</span>
+          <span className="text-label">Shares &amp; cash value</span>
           <InfoDot
-            label="What is total position value"
-            content="The market value of your fund shares plus the cash held in your wallet. It is not a forecast — both figures come from current on-chain state."
+            label="What is shares and cash value"
+            content="The market value of your fund shares plus the cash held in your wallet. Deposited capital awaiting share issuance is shown separately below. It is not a forecast — all figures come from current on-chain state."
           />
         </div>
         <p className="text-display text-text-1">{formatEUR(totalPositionValue)}</p>

@@ -18,7 +18,7 @@ import { ModelledChip } from "@/components/ui";
  * (real routes — no in-page calculator anchor) and on /learn (in-page anchors).
  */
 export function MarketingHero({
-  rorBps = 300,
+  rorBps,
   ctaCalculatorHref = "#calculator",
   ctaLearnHref = "#how",
 }: {
@@ -26,7 +26,10 @@ export function MarketingHero({
   ctaCalculatorHref?: string;
   ctaLearnHref?: string;
 }) {
-  const rorPct = Math.round((rorBps ?? 300) / 100);
+  // Honesty: the stat is labelled "based on the on-chain ROR", so it may only
+  // ever show a REAL on-chain figure. Before the stats load (or if they fail)
+  // show "—" rather than silently substituting the 300-bps default.
+  const rorValue = rorBps != null ? `~${Math.round(rorBps / 100)}%` : "—";
 
   return (
     <section className="grid items-center gap-10 py-6 md:grid-cols-[1.05fr_0.95fr] md:gap-14 md:py-10">
@@ -58,7 +61,7 @@ export function MarketingHero({
         {/* Stat row */}
         <dl className="mt-10 flex flex-wrap gap-x-10 gap-y-6">
           <Stat
-            value={`~${rorPct}%`}
+            value={rorValue}
             label="Social return on rent"
             sub="based on the on-chain ROR"
           />
@@ -123,7 +126,7 @@ function HeroArt() {
           className="bottom-6 right-5"
           tone="magenta"
           label="Member vote"
-          sub="Passed · 87%"
+          sub="Approved · 87%"
         />
       </div>
 

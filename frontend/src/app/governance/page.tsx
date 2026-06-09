@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { votingWindowFor } from "@/lib/proposalLifecycle";
 import { CreateProposalForm } from "@/components/governance/CreateProposalForm";
 import { GovernanceMemoCard } from "@/components/governance/GovernanceMemoCard";
 import {
@@ -55,16 +56,22 @@ export default function GovernancePage() {
   const [standingLoaded, setStandingLoaded] = useState(false);
   const [eligibility, setEligibility] = useState<GovernanceEligibility | null>(null);
 
+  // Monotonic token so a slow in-flight load for a previous account can never
+  // overwrite the newly selected account's data (account-switch race).
+  const refreshSeqRef = useRef(0);
   const refresh = async () => {
+    const seq = ++refreshSeqRef.current;
     setLoading(true);
     try {
       const next = await fetchProposals(address ?? undefined, accountIndex);
+      if (seq !== refreshSeqRef.current) return;
       setProposals(next);
       setLoadError(null);
     } catch (error: unknown) {
+      if (seq !== refreshSeqRef.current) return;
       setLoadError(error instanceof Error ? error.message : "Could not load proposals.");
     } finally {
-      setLoading(false);
+      if (seq === refreshSeqRef.current) setLoading(false);
     }
   };
 
@@ -95,7 +102,11 @@ export default function GovernancePage() {
   const counts = useMemo(
     () => ({
       total: proposals.length,
-      active: proposals.filter((proposal) => proposal.status === 0).length,
+      // "Open for voting" must agree with the cards: a status-0 proposal whose
+      // window has lapsed displays "Voting ended", so don't count it as open.
+      active: proposals.filter(
+        (proposal) => proposal.status === 0 && !votingWindowFor(proposal).closed
+      ).length,
       passed: proposals.filter((proposal) => proposal.status === 1).length,
       executed: proposals.filter((proposal) => proposal.status === 3).length,
     }),
@@ -149,6 +160,11 @@ export default function GovernancePage() {
       setNotice({ tone: "success", text: "Private Fund Shares check completed." });
       const next = await fetchGovernanceEligibility(address, accountIndex);
       setEligibility(next);
+    } catch (err: unknown) {
+      setNotice({
+        tone: "danger",
+        text: err instanceof Error ? err.message : "Private check failed.",
+      });
     } finally {
       setAttesting(false);
     }

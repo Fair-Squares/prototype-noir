@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, DataTable, EmptyState, ModelledChip, StatusChip, type Column } from "@/components/ui";
-import { formatEUR, type Proposal } from "@/lib/contracts";
+import { formatEUR, formatFSFT, type Proposal } from "@/lib/contracts";
 import { getProjectDossier } from "@/lib/projectDossier";
 
 export interface ClaimableByProposalProps {
@@ -69,9 +69,14 @@ export function ClaimableByProposal({
       key: "claimable",
       header: "Your claimable",
       align: "right",
-      render: (p) => (
-        <span className="text-mono text-text-1">{formatEUR(p.claimableAmount ?? 0)}</span>
-      ),
+      render: (p) =>
+        // Private deposits: the public record reads 0, but the real share is
+        // computed in-circuit at claim time — never show a misleading "0 FSFT".
+        (p.claimableAmount ?? 0) <= 0 && p.hasPrivateDeposits && !p.hasClaimed ? (
+          <span className="text-caption text-text-2">Computed privately at claim</span>
+        ) : (
+          <span className="text-mono text-text-1">{formatFSFT(p.claimableAmount ?? 0)}</span>
+        ),
     },
     {
       key: "action",
@@ -79,13 +84,16 @@ export function ClaimableByProposal({
       align: "right",
       render: (p) => {
         const isClaiming = claimingId === p.id;
+        const privateClaim = Boolean(p.hasPrivateDeposits) && (p.claimableAmount ?? 0) <= 0;
         return (
           <Button
             size="sm"
             variant="secondary"
             onClick={() => onClaim(p.id)}
             loading={isClaiming}
-            disabled={disabled || p.hasClaimed || (p.claimableAmount ?? 0) <= 0}
+            disabled={
+              disabled || Boolean(p.hasClaimed) || ((p.claimableAmount ?? 0) <= 0 && !privateClaim)
+            }
           >
             {p.hasClaimed ? "Claimed" : isClaiming ? "Claiming…" : "Claim"}
           </Button>

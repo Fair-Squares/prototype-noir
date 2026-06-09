@@ -89,7 +89,7 @@ export function ProjectDetailGovernance({
           {isActive
             ? window.closed
               ? "Voting window closed; awaiting finalisation."
-              : `${window.remainingLabel} remaining · closes at block ${window.deadlineBlock.toLocaleString()}.`
+              : `${window.remainingLabel} remaining · closes at ${window.closesAtLabel}.`
             : "Voting has concluded for this request."}
         </p>
       </section>

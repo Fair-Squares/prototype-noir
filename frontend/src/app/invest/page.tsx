@@ -77,6 +77,10 @@ function InvestPageInner() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [result, setResult] = useState<DepositResult | null>(null);
+  // Snapshot of the amount actually deposited, taken before the input is
+  // cleared — the confirmation card must never fall back to the TOTAL position
+  // under an "Added this transaction" label.
+  const [confirmedAmount, setConfirmedAmount] = useState<number | null>(null);
   const [manualStep, setManualStep] = useState<ManualStep>(3);
   const amountInputRef = useRef<HTMLInputElement>(null);
 
@@ -201,6 +205,7 @@ function InvestPageInner() {
         return;
       }
       setResult(res);
+      setConfirmedAmount(amountEur);
       setAmount("");
       await refreshPortfolio();
     } catch (e: unknown) {
@@ -212,6 +217,7 @@ function InvestPageInner() {
 
   const startAnotherDeposit = () => {
     setResult(null);
+    setConfirmedAmount(null);
     setSubmitError(null);
     setAmount("");
     goToManualStep(3);
@@ -459,7 +465,7 @@ function InvestPageInner() {
             <span>After depositing, your Fund Shares (FSFT) can be sold on the secondary market.</span>
             <InfoDot
               label="About secondary liquidity"
-              content="Selling is never required — holding your position funds homes for the long term. When you do sell, the price is constrained to a band around the fund's net asset value (NAV)."
+              content="Selling is never required — holding your position funds homes for the long term. When you do sell, the price is constrained to a band around the last issuance reference price (not current NAV per share)."
               align="right"
             />
           </div>
@@ -489,7 +495,7 @@ function InvestPageInner() {
             <KpiGrid cols={2}>
               <KpiCard
                 label="Deposited"
-                value={formatEURDecimals(amountEur > 0 ? amountEur : portfolio?.depositedAmount ?? 0)}
+                value={formatEURDecimals(confirmedAmount ?? 0)}
                 tone="accent"
                 sub="Added this transaction"
               />

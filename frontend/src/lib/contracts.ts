@@ -192,8 +192,12 @@ export interface Proposal {
   //   1 → "Approved"  ·  2 → "Rejected"  ·  3 → "Funded"
   // Never surface the raw enum words (Active/Passed/Failed/Executed).
   status: number;
-  deadline: number; // block number (legacy alias)
+  deadline: number; // block number (live) or unix seconds (simulation — see deadlineKind)
   createdAt: number; // block number (legacy alias)
+  /** "timestamp" = `deadline` is unix seconds (simulation mode); absent/"block"
+   * = block heights (live mode). proposalLifecycle.votingWindowFor branches on
+   * this so sim windows actually close and timestamps never render as blocks. */
+  deadlineKind?: "block" | "timestamp";
   deadlineBlock?: number;
   createdBlock?: number;
   currentBlock?: number;

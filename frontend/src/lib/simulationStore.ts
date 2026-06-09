@@ -36,33 +36,24 @@ const REWARD_START_MS = Date.UTC(2026, 0, 1, 0, 0, 0);
 // The Noir/TS boundary prevents a shared source -- keep these two in sync.
 const YEAR_SPLITS_BPS = [1300, 1200, 1100, 1000, 1000, 1000, 900, 900, 800, 800];
 
+// EXACT mirror of the contract's epoch_emission_target: every epoch in a year
+// emits floor(floor(pool * bps / 10000) / 12). No remainder-spreading — the
+// contract leaves the flooring dust unminted by design (integer-floor model),
+// so the sim must too or the two layers drift within each year.
 function buildEmissionSchedule(): number[] {
   const schedule: number[] = [];
-  let remainingGlobal = REWARD_DISTRIBUTION_POOL;
-
   for (let year = 0; year < REWARD_YEARS; year++) {
-    const isLastYear = year === REWARD_YEARS - 1;
-    const targetYearAmount = isLastYear
-      ? remainingGlobal
-      : Math.floor((REWARD_DISTRIBUTION_POOL * YEAR_SPLITS_BPS[year]) / 10_000);
-
-    let remainingYear = targetYearAmount;
+    const yearly = Math.floor((REWARD_DISTRIBUTION_POOL * YEAR_SPLITS_BPS[year]) / 10_000);
+    const perEpoch = Math.floor(yearly / EPOCHS_PER_YEAR);
     for (let month = 0; month < EPOCHS_PER_YEAR; month++) {
-      const isLastMonth = month === EPOCHS_PER_YEAR - 1;
-      const monthAmount = isLastMonth
-        ? remainingYear
-        : Math.floor(remainingYear / (EPOCHS_PER_YEAR - month));
-
-      schedule.push(monthAmount);
-      remainingYear -= monthAmount;
-      remainingGlobal -= monthAmount;
+      schedule.push(perEpoch);
     }
   }
-
   return schedule;
 }
 
-const REWARD_EMISSION_SCHEDULE = buildEmissionSchedule();
+// Exported for the rewardsEmissionParity Vitest guard only.
+export const REWARD_EMISSION_SCHEDULE = buildEmissionSchedule();
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

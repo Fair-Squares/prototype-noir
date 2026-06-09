@@ -67,8 +67,13 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    const hintedRewardNote = rewardNotesResult.storage[0] as { amount?: bigint };
-    const claimedAmount = Number(hintedRewardNote.amount ?? 0n);
+    // HintedNote wrapper: the payload lives at .note (same shape as
+    // portfolio/route.ts and scripts/e2e/rewards-claim.e2e.ts read it).
+    const hintedRewardNote = rewardNotesResult.storage[0] as { note: { amount: bigint } };
+    if (typeof hintedRewardNote?.note?.amount !== "bigint") {
+      throw new Error("unexpected HintedNote shape from get_my_reward_notes");
+    }
+    const claimedAmount = Number(hintedRewardNote.note.amount);
 
     const receipt = await rewardsContract.methods
       .claim_reward_private(hintedRewardNote, AztecAddress.fromString(protocolTokenAddr))

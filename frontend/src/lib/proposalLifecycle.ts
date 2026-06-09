@@ -19,14 +19,22 @@ export function statusKindFor(status: number): StatusKind {
 }
 
 export interface VotingWindow {
+  /** Whether the deadline is denominated in blocks (live mode) or unix seconds
+   * (simulation mode). Drives which labels/units the UI may render. */
+  kind: "block" | "timestamp";
   deadlineBlock: number;
   currentBlock: number;
+  /** Remaining window: blocks for kind "block", SECONDS for kind "timestamp". */
   blocksRemaining: number;
   closed: boolean;
-  /** Block-denominated label, e.g. "5 blocks". Locally blocks advance with
-   * activity (a few seconds each), so this is more honest than a wall-clock
-   * estimate. Only meaningful while open. */
+  /** Unit-correct remaining label, e.g. "5 blocks" or "4m 30s". Locally blocks
+   * advance with activity (a few seconds each), so the block label is more
+   * honest than a wall-clock estimate. Only meaningful while open. */
   remainingLabel: string;
+  /** Unit-correct "closes at" label, e.g. "block 1,234" or "14:05". Use this in
+   * copy instead of deadlineBlock — for timestamp deadlines the raw number is a
+   * unix time and must never be rendered as a block height. */
+  closesAtLabel: string;
   /** True locally where blocks advance with activity, not on a wall-clock cadence. */
   onDemand: boolean;
   /** True when the current block height is unknown (not supplied by the caller),
@@ -34,7 +42,48 @@ export interface VotingWindow {
   unknown: boolean;
 }
 
+function formatRemainingSeconds(s: number): string {
+  if (s >= 3600) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+  if (s >= 60) return `${Math.floor(s / 60)}m ${s % 60}s`;
+  return `${s}s`;
+}
+
+function formatWallClockDeadline(deadlineSec: number): string {
+  const deadline = new Date(deadlineSec * 1000);
+  const now = new Date();
+  const sameDay =
+    deadline.getFullYear() === now.getFullYear() &&
+    deadline.getMonth() === now.getMonth() &&
+    deadline.getDate() === now.getDate();
+  const time = deadline.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return sameDay
+    ? time
+    : `${deadline.toLocaleDateString([], { day: "numeric", month: "short" })} ${time}`;
+}
+
 export function votingWindowFor(proposal: Proposal): VotingWindow {
+  // Simulation proposals carry a wall-clock deadline (unix seconds) and no
+  // current block. Without this branch they'd read as "unknown" forever — the
+  // window would never close in the UI (no "Voting ended", no Finalise action)
+  // and the unix timestamp would render as a block height.
+  if (proposal.deadlineKind === "timestamp") {
+    const deadlineSec = proposal.deadline;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const secondsRemaining = Math.max(0, deadlineSec - nowSec);
+    const closed = secondsRemaining === 0;
+    return {
+      kind: "timestamp",
+      deadlineBlock: deadlineSec,
+      currentBlock: nowSec,
+      blocksRemaining: secondsRemaining,
+      closed,
+      remainingLabel: closed ? "Closed" : formatRemainingSeconds(secondsRemaining),
+      closesAtLabel: formatWallClockDeadline(deadlineSec),
+      onDemand: false,
+      unknown: false,
+    };
+  }
+
   const deadlineBlock = proposal.deadlineBlock ?? proposal.deadline;
   // currentBlock may be absent (e.g. the on-chain height wasn't fetched). Don't
   // silently assume block 0 — that would render an arbitrary, wrong countdown.
@@ -44,6 +93,7 @@ export function votingWindowFor(proposal: Proposal): VotingWindow {
   const blocksRemaining = Math.max(0, deadlineBlock - currentBlock);
   const closed = !unknown && blocksRemaining === 0;
   return {
+    kind: "block",
     deadlineBlock,
     currentBlock,
     blocksRemaining,
@@ -53,6 +103,7 @@ export function votingWindowFor(proposal: Proposal): VotingWindow {
       : closed
         ? "Closed"
         : `${blocksRemaining.toLocaleString()} block${blocksRemaining === 1 ? "" : "s"}`,
+    closesAtLabel: `block ${deadlineBlock.toLocaleString()}`,
     onDemand: BLOCK_PRODUCTION_MODE === "on-demand",
     unknown,
   };

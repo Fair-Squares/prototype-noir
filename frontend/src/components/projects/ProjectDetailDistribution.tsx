@@ -2,6 +2,7 @@ import { InfoDot, StatusChip } from "@/components/ui";
 import { quorumFor, votingWindowFor } from "@/lib/proposalLifecycle";
 import {
   formatEUR,
+  formatFSFT,
   type Proposal,
   type PropertyDeed,
 } from "@/lib/contracts";
@@ -46,7 +47,7 @@ export function ProjectDetailDistribution({
                 content="When a funded home's value is realised, the proceeds open as a pool that depositors claim pro-rata against the deposits snapshotted at that moment."
               />
             </h2>
-            <span className="text-mono text-text-1">{formatEUR(pool)}</span>
+            <span className="text-mono text-text-1">{formatFSFT(pool)}</span>
           </div>
 
           {fraction !== null ? (
@@ -56,8 +57,8 @@ export function ProjectDetailDistribution({
                 tone={fraction >= 1 ? "success" : "accent"}
               />
               <p className="text-caption text-text-2">
-                <span className="text-mono text-text-1">{formatEUR(claimed)}</span>{" "}
-                of <span className="text-mono text-text-1">{formatEUR(pool)}</span>{" "}
+                <span className="text-mono text-text-1">{formatFSFT(claimed)}</span>{" "}
+                of <span className="text-mono text-text-1">{formatFSFT(pool)}</span>{" "}
                 claimed
                 {fraction >= 1 ? " — fully distributed." : "."}
               </p>
@@ -113,7 +114,7 @@ export function ProjectDetailDistribution({
                 {isActive ? window.remainingLabel : "Closed"}
               </dd>
               <dd className="text-caption mt-0.5 text-mono text-text-2">
-                Closes at block {window.deadlineBlock.toLocaleString()}
+                Closes at {window.closesAtLabel}
               </dd>
             </div>
           </dl>

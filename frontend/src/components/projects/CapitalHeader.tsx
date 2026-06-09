@@ -1,5 +1,5 @@
 import { InfoDot, KpiCard, KpiGrid, SkeletonKpi, StatusChip } from "@/components/ui";
-import { formatEUR, type FundStats } from "@/lib/contracts";
+import { formatEUR, formatEURDecimals, type FundStats } from "@/lib/contracts";
 
 export interface CapitalHeaderProps {
   stats: FundStats | null;
@@ -42,10 +42,10 @@ export function CapitalHeader({ stats, loading }: CapitalHeaderProps) {
           sub="Uncommitted EUR ready for the next home"
         />
         <KpiCard
-          label="Deployed"
+          label="Parked (idle)"
           value={formatEUR(stats.totalInDefi)}
           tone="accent"
-          sub="Idle — set aside for yield, none active yet"
+          sub="Set aside for a future yield source — none active yet"
         />
         <KpiCard
           label="Committed to projects"
@@ -68,7 +68,7 @@ export function CapitalHeader({ stats, loading }: CapitalHeaderProps) {
             <>
               {" · "}
               <span className="text-mono text-text-1">
-                {formatEUR(stats.navPerFsftEur)}
+                {formatEURDecimals(stats.navPerFsftEur)}
               </span>{" "}
               per Fund Share
             </>

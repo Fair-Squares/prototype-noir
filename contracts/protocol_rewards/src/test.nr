@@ -114,6 +114,15 @@ unconstrained fn test_checkpoint_epoch_rejects_out_of_range() {
     env.call_public(admin, ProtocolRewards::at(addr).checkpoint_epoch(120, 1000, 100, 100, 100));
 }
 
+#[test(should_fail_with = "epoch already checkpointed")]
+unconstrained fn test_checkpoint_epoch_rejects_recheckpoint() {
+    let (env, addr, admin) = setup();
+    env.call_public(admin, ProtocolRewards::at(addr).checkpoint_epoch(0, 1000, 100, 100, 100));
+    // A second checkpoint of the same epoch would double-count total_distributed
+    // and rewrite the denominators under already-recorded user weights.
+    env.call_public(admin, ProtocolRewards::at(addr).checkpoint_epoch(0, 1000, 100, 100, 100));
+}
+
 // -- set_protocol_token lifecycle --------------------------------------------
 
 #[test(should_fail_with = "not admin")]

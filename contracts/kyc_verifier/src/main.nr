@@ -86,6 +86,17 @@ pub contract KYCVerifier {
         self.storage.verifiers.at(verifier).write(false);
     }
 
+    /// ADMIN WARNING -- revocation is a TWO-SURFACE operation. This clears only
+    /// the address-keyed PUBLIC maps (`verified` / `investor_role`), i.e. the
+    /// transparency-mode path. The user's private `KycCredentialNote` (the
+    /// EVERYDAY path: deposit_private / cast_vote_private / DEX place_order)
+    /// stays valid until `revoke_credential(poseidon2([owner, nonce]))` is ALSO
+    /// called -- the verifier must keep the issuance (owner, nonce) off-chain to
+    /// compute it (see compute_revocation_commitment). This split is deliberate:
+    /// an on-chain user->commitment lookup would publicly link an address to its
+    /// credential handle and deanonymize every private action carrying it (the
+    /// M12 handle is only safe while unlinked from addresses). Fully
+    /// deplatforming a user therefore requires BOTH calls.
     #[external("public")]
     fn revoke_kyc(user: AztecAddress) {
         assert_eq(self.msg_sender(), self.storage.admin.read(), "caller is not admin");
@@ -180,6 +191,13 @@ pub contract KYCVerifier {
         );
     }
 
+    /// COUNT SEMANTICS: `verified_count` is an UPPER BOUND on verified subjects,
+    /// not a unique-user count. This tail cannot dedup (the recipient address
+    /// must not cross the private/public boundary), so each issued credential
+    /// adds 1: N credentials to one user count N times, a user who is also
+    /// register_kyc'd is double-counted, and revoke_credential never decrements.
+    /// UI surfaces must label it as issuance/registration volume ("publicly
+    /// registered" + issued credentials), never as an exact headcount.
     #[external("public")]
     #[only_self]
     fn _record_credential_issue() {

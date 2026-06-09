@@ -82,19 +82,30 @@ export async function POST(request: NextRequest) {
     // so it can compute the revocation commitment later via
     // KYCVerifier.compute_revocation_commitment(owner, nonce).
     const credentialNonce = BigInt(Date.now());
-    let credentialTxHash: string | undefined;
-    let credentialError: string | undefined;
+    let credentialTxHash: string;
     try {
       const credentialReceipt = await kycContract.methods
         .issue_credential(userAddr, credentialNonce)
         .send({ from: adminAddress });
       credentialTxHash = requireAztecTxHash(credentialReceipt);
     } catch (err: unknown) {
-      // Do not fail the whole request — public registration already succeeded.
-      // The user can re-issue later; downstream V1 contracts still see them as
-      // verified via the public maps.
-      credentialError = err instanceof Error ? err.message : String(err);
-      console.warn("[kyc/register] private credential issuance failed:", credentialError);
+      // FAIL LOUDLY: the private KycCredentialNote is what every everyday
+      // private flow (deposit_private / cast_vote_private / DEX place_order)
+      // attests — reporting "verified" without it would mask the failure until
+      // the user's next private action rejects with "no credential found".
+      // Public registration already succeeded and register_kyc is idempotent,
+      // so retrying this route is safe.
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[kyc/register] private credential issuance failed:", msg);
+      return NextResponse.json(
+        {
+          error:
+            `Public KYC registration succeeded, but issuing your private credential failed: ${msg}. ` +
+            "Please retry verification.",
+          publicTxHash: requireAztecTxHash(receipt),
+        },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
@@ -102,7 +113,6 @@ export async function POST(request: NextRequest) {
       message: devMode ? "KYC verified instantly (dev mode). Investor role granted." : "KYC verified on-chain. Investor role granted.",
       txHash: requireAztecTxHash(receipt),
       credentialTxHash,
-      credentialError,
       credentialNonce: credentialNonce.toString(),
       verified: true,
       isInvestor: true,

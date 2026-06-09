@@ -1,5 +1,5 @@
 import { AdvancedDetails } from "@/components/ui";
-import { formatEUR, type Proposal, type PropertyDeed } from "@/lib/contracts";
+import { formatEUR, formatFSFT, type Proposal, type PropertyDeed } from "@/lib/contracts";
 import { ProjectDetailNotOnChain } from "./ProjectDetailNotOnChain";
 
 type Field = { label: string; value: string; mono?: boolean };
@@ -74,15 +74,15 @@ export function ProjectDetailProofs({
   }
   if (typeof proposal.distributionAmount === "number") {
     proposalFields.push({
-      label: "Distribution amount (EUR)",
-      value: formatEUR(proposal.distributionAmount),
+      label: "Distribution amount (FSFT)",
+      value: formatFSFT(proposal.distributionAmount),
       mono: true,
     });
   }
   if (typeof proposal.distributionClaimed === "number") {
     proposalFields.push({
-      label: "Distribution claimed (EUR)",
-      value: formatEUR(proposal.distributionClaimed),
+      label: "Distribution claimed (FSFT)",
+      value: formatFSFT(proposal.distributionClaimed),
       mono: true,
     });
   }

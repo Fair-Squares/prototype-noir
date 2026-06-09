@@ -21,6 +21,7 @@ import {
   fetchProperties,
   fetchProposals,
   formatEUR,
+  formatFSFT,
   type FundStats,
 } from "@/lib/contracts";
 
@@ -85,12 +86,17 @@ export default function ProjectsPage() {
           return;
         }
         const claimed =
-          typeof result.claimedAmount === "number" ? ` (${formatEUR(result.claimedAmount)})` : "";
+          typeof result.claimedAmount === "number" ? ` (${formatFSFT(result.claimedAmount)})` : "";
         setNotice({
           tone: "success",
           text: `Distribution claimed for proposal #${proposalId}${claimed}.`,
         });
         await load();
+      } catch (err: unknown) {
+        setNotice({
+          tone: "danger",
+          text: err instanceof Error ? err.message : "Claim failed.",
+        });
       } finally {
         setClaimingId(null);
       }

@@ -108,7 +108,10 @@ export default function OverviewPage() {
       .catch(() => {
         if (active) setKyc(null);
       });
-    fetchPortfolio(address)
+    // accountIndex is required in live mode: /api/portfolio defaults to account 0
+    // and rejects a mismatched address, which would null the portfolio for every
+    // non-admin account and mis-derive the next step ("Make your first deposit").
+    fetchPortfolio(address, activeAccount?.index)
       .then((data) => {
         if (active) setPortfolio(data);
       })
@@ -118,7 +121,7 @@ export default function OverviewPage() {
     return () => {
       active = false;
     };
-  }, [address]);
+  }, [address, activeAccount?.index]);
 
   const nextStep = deriveNextStep(isConnected, kyc, portfolio);
   const isSimulation = stats != null && stats.source !== "live";

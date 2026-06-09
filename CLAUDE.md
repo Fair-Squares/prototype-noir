@@ -135,9 +135,9 @@ Use the wrapper:
 
 By default the script uses the host `aztec` CLI: each contract runs
 `aztec test`, which handles compile + TXE + oracle resolver
-internally. No docker required. The full suite is **77 tests** across the
+internally. No docker required. The full suite is **81 tests** across the
 5 V2 contracts (kyc_verifier 7, housing_fund 29, governance 16,
-protocol_rewards 17, fsft_dex 8) and runs in CI on every push/PR
+protocol_rewards 18, fsft_dex 11) and runs in CI on every push/PR
 (`.github/workflows/tests.yml`).
 
 The script compiles each contract **before** staging cross-contract
@@ -494,10 +494,20 @@ depositors only** — private depositors are invisible there.
     account. **They are EPHEMERAL** — held only in the server PXE's memory, so a
     frontend restart forgets them (the client reconciles stale localStorage entries
     against `/api/accounts` in live mode). The shared PXE now holds these keys too,
-    so the M16 demo-only auth caveat extends to them. NOTE: `/api/kyc/register`'s
+    so the M16 demo-only auth caveat extends to them. Creation is **capped** at
+    `FS_MAX_GENERATED_ACCOUNTS` (default 25) per server lifetime — the endpoint is
+    unauthenticated, so without a cap an anonymous caller could loop it to drain
+    the SponsoredFPC quota / grow server memory. NOTE: `/api/kyc/register`'s
     dev-mode shortcut is gated on `!isLiveModeEnabled()` (it previously fired on
     `NEXT_PUBLIC_DEV_MODE=true`, which the live stack sets, so it wrote a sim flag
     and never issued the on-chain credential while `/api/kyc/status` read the chain).
+    In live mode `/api/kyc/register` now **fails the request (500)** when the
+    private `issue_credential` tail throws, instead of reporting `verified: true`
+    with a swallowed `credentialError` — the private credential is what every
+    everyday private flow attests, and `register_kyc` is idempotent so a retry is
+    safe. Similarly, `/api/zkpassport/request` **fails closed** in production: an
+    SDK error returns a 502 and never substitutes the auto-approving `dev://`
+    bypass (that bypass is issued only on the explicit simulation/dev branch).
 
 ### Confirmed-correct privacy postures (do NOT "fix" these by mistake)
 
@@ -510,7 +520,16 @@ depositors only** — private depositors are invisible there.
   `claim_rent_private` / `reinvest_rent_private` intentionally skip per-user
   attribution for privacy.
 - `KYCVerifier.revocations` are keyed by **credential commitment (hash), not
-  address**.
+  address** — which makes admin revocation a deliberate **TWO-SURFACE operation**:
+  `revoke_kyc(user)` clears only the public maps, and the private credential stays
+  valid until `revoke_credential(commitment)` is ALSO called (the verifier keeps
+  the issuance `(owner, nonce)` off-chain to compute it). Do NOT "fix" this with
+  an on-chain user→commitment lookup: that would publicly link addresses to the
+  M12 credential handle and deanonymize every private action carrying it.
+  Likewise `allocate_reward_private` deliberately has **no once-per-(recipient,
+  epoch) guard** — a public guard key derived from the recipient is brute-forceable
+  over the address space; double allocation is an admin-trust concern bounded by
+  the 8M pool cap. Both documented in-code.
 - `get_my_deposit_notes` / `get_my_kyc_credentials` / `get_deposit_cursor` are
   owner-scoped PXE reads or global params (safe).
 - `defi_vault` is **intentionally deprecated/dormant**: deployed + wired for
@@ -688,6 +707,14 @@ default like "Executed"); `components/projects/ProjectStatusChip.tsx` adds the
 payout states. Never render a proposal/project status without going through these.
 A Vitest guard (`proposalLifecycle.test.ts` → "canonical governance vocabulary")
 fails if `displayStatus` ever emits a raw enum word — keep it green.
+
+Deadline units: live proposals carry **block** deadlines; sim proposals carry
+**unix-seconds** deadlines and are tagged `deadlineKind: "timestamp"` by the
+proposals route. `votingWindowFor` branches on that tag (wall-clock compare, so
+sim voting windows actually close and the Finalise flow works in the default
+demo) and every surface renders the deadline via `window.closesAtLabel` /
+`window.remainingLabel` — never `deadlineBlock.toLocaleString()` directly, which
+would print a unix timestamp as a block height in sim.
 
 ### First-use simplicity
 

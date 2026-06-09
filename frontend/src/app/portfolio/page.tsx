@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AdvancedDetails,
   Alert,
@@ -31,6 +31,7 @@ import {
   claimRewards,
   fetchKYCProfile,
   fetchPortfolio,
+  formatFSFT,
   fetchProposals,
   fetchRewardsStats,
   reinvestRent,
@@ -61,7 +62,11 @@ export default function PortfolioPage() {
   const [claimingRent, setClaimingRent] = useState(false);
   const [reinvestingRent, setReinvestingRent] = useState(false);
 
+  // Monotonic token so a slow in-flight load for a previous account can never
+  // overwrite the newly selected account's data (account-switch race).
+  const loadSeqRef = useRef(0);
   const loadAccountData = async (addr: string) => {
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     try {
       const [nextPortfolio, nextKyc, nextRewards, nextProposals] = await Promise.all([
@@ -70,18 +75,20 @@ export default function PortfolioPage() {
         fetchRewardsStats(addr, accountIndex),
         fetchProposals(addr, accountIndex),
       ]);
+      if (seq !== loadSeqRef.current) return;
       setPortfolio(nextPortfolio);
       setKyc(nextKyc);
       setRewards(nextRewards);
       setProposals(nextProposals);
       setError(null);
     } catch (loadError: unknown) {
+      if (seq !== loadSeqRef.current) return;
       setError(loadError instanceof Error ? loadError.message : "Could not load account data.");
       setPortfolio(null);
       setRewards(null);
       setProposals([]);
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   };
 
@@ -102,7 +109,16 @@ export default function PortfolioPage() {
   const canClaimRewards = rewards?.eligibility?.canClaimNow ?? false;
 
   const claimableProposals = useMemo(
-    () => proposals.filter((p) => (p.claimableAmount ?? 0) > 0 || p.hasClaimed),
+    // Private depositors show €0 in PUBLIC records but hold a real claimable
+    // share (computed in-circuit at claim time) — include them whenever a
+    // distribution is open so /portfolio leads with their actionable money.
+    () =>
+      proposals.filter(
+        (p) =>
+          (p.claimableAmount ?? 0) > 0 ||
+          p.hasClaimed ||
+          (Boolean(p.hasPrivateDeposits) && Boolean(p.distributionOpened))
+      ),
     [proposals]
   );
 
@@ -121,6 +137,8 @@ export default function PortfolioPage() {
         text: `Claimed ${(result.claimed ?? 0).toLocaleString()} ${rewardsSymbol}.`,
       });
       await loadAccountData(address);
+    } catch (err: unknown) {
+      setNotice({ tone: "danger", text: err instanceof Error ? err.message : 'Reward claim failed.' });
     } finally {
       setClaimingRewards(false);
     }
@@ -138,6 +156,8 @@ export default function PortfolioPage() {
       }
       setNotice({ tone: "success", text: "Private fund-shares check completed." });
       await loadAccountData(address);
+    } catch (err: unknown) {
+      setNotice({ tone: "danger", text: err instanceof Error ? err.message : 'Private fund-shares check failed.' });
     } finally {
       setAttesting(false);
     }
@@ -155,9 +175,11 @@ export default function PortfolioPage() {
       }
       setNotice({
         tone: "success",
-        text: `Claimed ${(result.claimedAmount ?? 0).toLocaleString()} from housing proposal #${proposalId}.`,
+        text: `Claimed ${formatFSFT(result.claimedAmount ?? 0)} from housing proposal #${proposalId}.`,
       });
       await loadAccountData(address);
+    } catch (err: unknown) {
+      setNotice({ tone: "danger", text: err instanceof Error ? err.message : 'Distribution claim failed.' });
     } finally {
       setClaimingProposalId(null);
     }
@@ -182,6 +204,8 @@ export default function PortfolioPage() {
       }
       setNotice({ tone: "success", text: result.message ?? "Rent withdrawn to your wallet." });
       await loadAccountData(address);
+    } catch (err: unknown) {
+      setNotice({ tone: "danger", text: err instanceof Error ? err.message : 'Rent withdrawal failed.' });
     } finally {
       setClaimingRent(false);
     }
@@ -199,6 +223,8 @@ export default function PortfolioPage() {
       }
       setNotice({ tone: "success", text: result.message ?? "Rent reinvested into the fund." });
       await loadAccountData(address);
+    } catch (err: unknown) {
+      setNotice({ tone: "danger", text: err instanceof Error ? err.message : 'Reinvest failed.' });
     } finally {
       setReinvestingRent(false);
     }

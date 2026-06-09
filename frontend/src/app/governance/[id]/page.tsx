@@ -61,6 +61,7 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
   );
 
   const [proposal, setProposal] = useState<Proposal | null>(null);
+  const [notFoundFlag, setNotFoundFlag] = useState(false);
   const [eligibility, setEligibility] = useState<GovernanceEligibility | null>(null);
   const [deed, setDeed] = useState<PropertyDeed | null>(null);
   const [isVoting, setIsVoting] = useState(false);
@@ -76,12 +77,22 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
 
   const reloadProposal = useCallback(async () => {
     const proposals = await fetchProposals(address ?? undefined, accountIndex);
-    setProposal(proposals.find((item) => item.id === proposalId) ?? null);
+    const found = proposals.find((item) => item.id === proposalId) ?? null;
+    setProposal(found);
+    // Loaded successfully but the id doesn't exist: render not-found instead
+    // of an eternal "Loading funding request…" skeleton.
+    setNotFoundFlag(found === null);
   }, [address, accountIndex, proposalId]);
 
   useEffect(() => {
     setVoted(address ? hasVotedLocally(address, proposalId) : false);
   }, [address, proposalId]);
+
+  // Real 404 for a syntactically valid id that has no matching proposal
+  // (mirrors /fund/[id]) — never a perpetual loading skeleton.
+  useEffect(() => {
+    if (notFoundFlag) notFound();
+  }, [notFoundFlag]);
 
   useEffect(() => {
     reloadProposal().catch((loadError: unknown) => {
@@ -135,6 +146,8 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
       setVoted(true);
       setNotice({ tone: "success", text: `Ballot recorded (${voteYes ? "in favour" : "against"}).` });
       await reloadProposal();
+    } catch (err: unknown) {
+      setNotice({ tone: "danger", text: err instanceof Error ? err.message : 'Vote failed.' });
     } finally {
       setIsVoting(false);
     }
@@ -155,6 +168,8 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
       });
       setReloadVersion((v) => v + 1);
       await reloadProposal();
+    } catch (err: unknown) {
+      setNotice({ tone: "danger", text: err instanceof Error ? err.message : 'Finalisation failed.' });
     } finally {
       setIsFinalizing(false);
     }
@@ -172,6 +187,8 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
       setNotice({ tone: "success", text: "Request executed and distribution opened." });
       setReloadVersion((v) => v + 1);
       await reloadProposal();
+    } catch (err: unknown) {
+      setNotice({ tone: "danger", text: err instanceof Error ? err.message : 'Execution failed.' });
     } finally {
       setIsExecuting(false);
     }
@@ -193,6 +210,8 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
       setNotice({ tone: "success", text: "Distribution claimed." });
       setReloadVersion((v) => v + 1);
       await reloadProposal();
+    } catch (err: unknown) {
+      setNotice({ tone: "danger", text: err instanceof Error ? err.message : 'Claim failed.' });
     } finally {
       setIsClaiming(false);
     }

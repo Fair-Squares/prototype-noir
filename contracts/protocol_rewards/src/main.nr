@@ -210,6 +210,13 @@ pub contract ProtocolRewards {
         assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
         assert(epoch < self.storage.total_epochs.read(), "invalid epoch");
         assert(emission > 0, "emission must be positive");
+        // Once-only: re-checkpointing an open epoch would double-count
+        // total_distributed (permanently shrinking the 8M pool) and rewrite the
+        // emission/denominators under already-recorded per-user weights.
+        assert(
+            !self.storage.epoch_open.at(epoch as Field).read(),
+            "epoch already checkpointed",
+        );
 
         let target = epoch_emission_target(self.storage.total_distribution_pool.read(), epoch);
         assert(emission <= target, "emission exceeds epoch target");
@@ -327,6 +334,14 @@ pub contract ProtocolRewards {
     // allocation. The full V2 claim flow (private nullifier + private
     // protocol-token mint) is staged for a follow-up.
 
+    /// NOTE (deliberate, do not "fix"): unlike set_user_epoch_weights, this path
+    /// has NO once-per-(recipient, epoch) guard. Enforcing one publicly would
+    /// require a guard key derived from `recipient` (e.g.
+    /// poseidon2([recipient, epoch])) to cross into the public tail -- addresses
+    /// are a small guessable domain, so any such key (storage slot or nullifier)
+    /// is brute-forceable and would deanonymize private reward recipients.
+    /// Double allocation is therefore left as an admin-trust concern, bounded
+    /// fail-closed by the 8M pool ceiling checked in the tail below.
     #[external("private")]
     fn allocate_reward_private(epoch: u32, recipient: AztecAddress, amount: u128) {
         assert(amount > 0, "amount must be positive");

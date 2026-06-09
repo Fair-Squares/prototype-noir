@@ -79,14 +79,16 @@ export async function POST(request: NextRequest) {
       // A production implementation would need a persistent WebSocket service.
       return NextResponse.json({ qrUrl: url, requestId: compositeId, devMode: false });
     } catch (sdkErr) {
-      console.warn("[zkpassport] SDK error, falling back to dev mode:", sdkErr);
-      const requestId = devRequestIdForAddress(userAddress);
-      return NextResponse.json({
-        qrUrl: `dev://bypass?id=${requestId}&address=${userAddress}`,
-        requestId,
-        devMode: true,
-        message: "zkPassport unavailable — using dev bypass",
-      });
+      // FAIL CLOSED: in production a zkPassport outage must never downgrade the
+      // age-verification gate to an auto-approving dev bypass (the frontend
+      // auto-completes dev:// URLs). Surface the error instead; the dev bypass
+      // is only ever issued on the explicit simulation/dev-mode branch above.
+      const msg = sdkErr instanceof Error ? sdkErr.message : String(sdkErr);
+      console.error("[zkpassport] SDK error:", msg);
+      return NextResponse.json(
+        { error: `zkPassport verification is currently unavailable: ${msg}` },
+        { status: 502 }
+      );
     }
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
