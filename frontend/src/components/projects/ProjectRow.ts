@@ -1,15 +1,17 @@
-import type { Proposal, PropertyDeed } from "@/lib/contracts";
+import type { Listing, Proposal, PropertyDeed } from "@/lib/contracts";
 
 /**
  * A housing "project" is the on-chain join of a governance proposal (the funding
  * request) with its property deed (minted when the fund acquires the asset) and
  * the per-proposal distribution state.
  *
- * Titles, locations, unit counts and covenant terms are NOT recorded on-chain,
- * so a project is labelled "Housing proposal #id" and we surface only fields the
- * contracts actually return. The full `Proposal` is carried through so the row
- * can reuse the canonical governance lifecycle helpers (displayStatus,
- * votingWindowFor, quorumFor) rather than re-deriving them.
+ * Titles, locations and unit counts are NOT recorded on-chain, so a project is
+ * labelled "Housing proposal #id" and we surface only fields the contracts
+ * actually return. Covenant terms (rent ceiling, lock) ARE on-chain since W1,
+ * and the market-rent reference comes from the backing listing (J1/J3). The
+ * full `Proposal` is carried through so the row can reuse the canonical
+ * governance lifecycle helpers (displayStatus, votingWindowFor, quorumFor)
+ * rather than re-deriving them.
  */
 export interface ProjectRow {
   id: number;
@@ -35,19 +37,43 @@ export interface ProjectRow {
   /** Address-scoped eligibility for the connected wallet. */
   claimableAmount: number | null;
   hasClaimed: boolean | null;
+  /** J6: on-chain covenant terms (W1/J3), when a covenant is attached.
+   *  cappedMonthlyRentEur uses the same floor math record_rent enforces. */
+  cappedMonthlyRentEur: number | null;
+  /** Appraiser-attested monthly market rent from the backing listing. */
+  marketRentRefEur: number | null;
+  /** Whole-percent discount vs the market reference (needs both figures). */
+  rentDiscountPct: number | null;
+  lockYears: number | null;
 }
 
-/** Join proposals with deeds into project rows. Newest project first. */
+/** Join proposals with deeds (and, when given, their backing listings for the
+ *  covenant/market-rent columns) into project rows. Newest project first. */
 export function buildProjectRows(
   proposals: Proposal[],
-  deeds: PropertyDeed[]
+  deeds: PropertyDeed[],
+  listings: Listing[] = []
 ): ProjectRow[] {
   const deedByProposal = new Map<number, PropertyDeed>();
   for (const deed of deeds) deedByProposal.set(deed.proposalId, deed);
+  const listingByProposal = new Map<number, Listing>();
+  for (const listing of listings) {
+    if (listing.proposalId !== null) listingByProposal.set(listing.proposalId, listing);
+  }
 
   return proposals
     .map((p): ProjectRow => {
       const deed = deedByProposal.get(p.id) ?? null;
+      const listing = listingByProposal.get(p.id) ?? null;
+      const cappedMonthlyRentEur =
+        p.covenant?.isSet === true
+          ? Math.floor(Math.floor((p.amount * p.covenant.rentCeilingBps) / 10000) / 12)
+          : null;
+      const marketRentRefEur = listing ? listing.marketRentRefEur : null;
+      const rentDiscountPct =
+        cappedMonthlyRentEur !== null && marketRentRefEur !== null && marketRentRefEur > 0
+          ? Math.floor(((marketRentRefEur - cappedMonthlyRentEur) / marketRentRefEur) * 100)
+          : null;
       return {
         id: p.id,
         proposal: p,
@@ -64,6 +90,10 @@ export function buildProjectRows(
         distributionSnapshotDeposits: p.distributionSnapshotDeposits ?? null,
         claimableAmount: p.claimableAmount ?? null,
         hasClaimed: p.hasClaimed ?? null,
+        cappedMonthlyRentEur,
+        marketRentRefEur,
+        rentDiscountPct,
+        lockYears: p.covenant?.isSet === true ? p.covenant.lockYears : null,
       };
     })
     .sort((a, b) => b.id - a.id);

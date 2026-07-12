@@ -76,7 +76,7 @@ export default function ProjectsPage() {
         address ? fetchKYCProfile(address) : Promise.resolve(null),
       ]);
       setStats(nextStats);
-      setRows(buildProjectRows(proposals, deeds));
+      setRows(buildProjectRows(proposals, deeds, nextListings));
       setListings(nextListings);
       setQueue(nextQueue);
       setProposalsById(new Map(proposals.map((p) => [p.id, p])));
@@ -206,6 +206,10 @@ export default function ProjectsPage() {
         ) : null}
       </div>
 
+      {/* J6 note: a NAV/FSFT *trend* is deliberately absent — the chain exposes
+          only the latest valuation point (get_valuation.last_valuation_block),
+          no history. Charting one would mean fabricating a series; it lands
+          with the valuation-snapshot work in WEBSITE_ALIGNMENT.md §3.3. */}
       <section aria-label="Fund capital">
         <CapitalHeader stats={stats} loading={loading} />
       </section>
@@ -316,8 +320,9 @@ export default function ProjectsPage() {
       {rows.length > 0 ? (
         <AdvancedDetails summary="All on-chain fields">
           <p className="text-caption mb-3 text-text-2">
-            Every funding request with its raw on-chain fields. Location, unit counts, affordability
-            covenants and capped-return terms are not recorded on-chain, so they are not shown here.
+            Every funding request with its raw on-chain fields, including the voted covenant terms
+            (capped rent, discount vs the attested market reference, lock). Location and unit counts
+            are not recorded on-chain, so they are not shown here.
           </p>
           <ProjectsTable rows={rows} />
         </AdvancedDetails>
