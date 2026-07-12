@@ -125,3 +125,40 @@ the non-fatal seed-deposit failure).
   `bootstrap-local-network.sh generate_typescript` (no longer codegens `fund_token`). Full
   UI verification requires a local-network bootstrap; the committed source edits are
   correct against the new ABIs.
+
+## MultiToken option (added 2026-07-12, owner pointer)
+
+Upstream aztec-standards (`defi-wonderland/aztec-standards`, `dev` branch) now ships a
+`multitoken_contract`: an ERC-1155-like, id-parameterized token with the same
+private/public surface as the AIP-20 Token (`transfer_private_to_private(id, ...)`,
+`mint_to_private(id, ...)`, commitments, etc.), no decimals/total-supply, public
+`TransferSingle` events, and an optional **ARC-403 id-bearing auth hook** that runs
+before every transfer/burn (minting bypasses it).
+
+Fit assessment against this repo:
+
+- **Single minter for ALL ids** — no per-id mint authority. Our three tokens have
+  three different immutable minters (FSFT=HousingFund, ProtocolToken=ProtocolRewards,
+  EUR=Dripper), so one MultiToken cannot host all of them directly. Options: keep
+  three instances (then MultiToken adds little over Token today), or route minting
+  through one coordinator contract (new trust surface — assess carefully).
+- **Where it genuinely shines: per-property exposure ids.** With HousingFund as the
+  single minter, one MultiToken could host FSFT (id 0) plus one id per funded
+  property (id = proposal_id, minted at J4 match/distribution). That would deliver
+  the website's original "fractional ownership per property" (journey step 4 /
+  scorecard row 4 in WEBSITE_ALIGNMENT.md) on top of the fund-share model, and give
+  J6's per-property exposure view a real on-chain balance instead of a derived
+  weight.
+- **ARC-403 hook = token-layer compliance.** A per-id policy could enforce
+  KYC-gated FSFT transfers at the token itself (today only the DEX enforces KYC on
+  trades; raw Token transfers bypass it). Worth evaluating against the M12/M15
+  privacy posture before adopting — the hook sees transfer parties.
+- **Also settles the fund_token question** (2026-07-12 review: `contracts/fund_token`
+  is a source-less prebuilt artifact still deployed by local bootstrap): whichever
+  way we go, replace that artifact with vendored source.
+- **Pin a commit** if vendored — `dev` is a moving branch; our vendor dir pins.
+
+Recommendation: not part of the current journey phases (PR #14). Take it up as the
+next step of THIS phase-3 track, scoped as "FSFT + property-id exposure tokens on
+MultiToken, HousingFund as minter", keeping ProtocolToken and EUR on the vendored
+AIP-20 Token (their minters differ and nothing needs multi-id there).
