@@ -13,18 +13,18 @@ use aztec::macros::aztec;
 ///   3. After deadline, anyone calls finalize_proposal() -- public
 #[aztec]
 pub contract Governance {
-    use deposit_note::DepositNote;
+    use deposit_note::{DepositNote, withdraw_marker_nullifier};
     use kyc_verifier::{KYCVerifier, credential_note::KycCredentialNote};
     use aztec::{
-        history::note::assert_note_existed_by,
+        history::{note::assert_note_existed_by, nullifier::assert_nullifier_did_not_exist_by},
         macros::{
             functions::{external, initializer, only_self, view},
             storage::storage,
         },
-        note::HintedNote,
+        note::{HintedNote, utils::compute_confirmed_note_hash_for_nullification},
         protocol::{
             address::AztecAddress,
-            hash::poseidon2_hash,
+            hash::{compute_siloed_nullifier, poseidon2_hash},
             traits::{Deserialize, Serialize, ToField},
         },
         state_vars::{Map, Owned, PublicMutable, SingleUseClaim},
@@ -200,6 +200,21 @@ pub contract Governance {
         let confirmed_dep = assert_note_existed_by(header, hinted_deposit_note);
         assert(confirmed_dep.owner == caller, "deposit note not owned by caller");
         assert(confirmed_dep.note.owner == caller, "deposit note owner mismatch");
+
+        // H1 mirror: existence alone is HISTORICAL -- a fully-withdrawn note
+        // still "existed by" the anchor block, so without this check a user who
+        // pulled out their entire deposit could keep voting forever. Recompute
+        // the fund's withdraw marker for this exact kernel-verified note and
+        // prove it was absent at the anchor block (siloed to the note's origin
+        // contract, which the public tail pins to the real HousingFund).
+        let dep_note_hash = compute_confirmed_note_hash_for_nullification(confirmed_dep);
+        assert_nullifier_did_not_exist_by(
+            header,
+            compute_siloed_nullifier(
+                confirmed_dep.contract_address,
+                withdraw_marker_nullifier(dep_note_hash),
+            ),
+        );
 
         // Consume the per-(proposal, voter) single-use nullifier.
         let pid = proposal_id as Field;

@@ -29,7 +29,7 @@ use aztec::macros::aztec;
 /// aggregate leak is an accepted trade-off for the prototype.
 #[aztec]
 pub contract HousingFund {
-    use deposit_note::DepositNote;
+    use deposit_note::{DepositNote, withdraw_marker_nullifier};
     use token_contract::Token;
     use governance::Governance;
     use kyc_verifier::{KYCVerifier, credential_note::KycCredentialNote};
@@ -64,7 +64,6 @@ pub contract HousingFund {
     // emits poseidon2([note_hash, this]) so claim/reinvest paths can prove (via
     // nullifier non-existence at a distribution's snapshot block) that a deposit
     // note was not withdrawn by then.
-    global WITHDRAW_NULLIFIER_DOMAIN: Field = 0x1505_5749_5448_4452_4157; // "WITHDRAW" tag
     // Upper bound on public DepositRecords retracted per withdraw() (H2). A public
     // depositor whose withdrawal spans more than this many of their own records must
     // split the withdrawal; the loop is bounded for the public VM.
@@ -280,6 +279,14 @@ pub contract HousingFund {
         c_covenant_set: Map<Field, PublicMutable<bool, Context>, Context>,
         c_rent_ceiling_bps: Map<Field, PublicMutable<u32, Context>, Context>,
         c_lock_years: Map<Field, PublicMutable<u32, Context>, Context>,
+
+        // H2b: per-user index of the first record that may still hold balance.
+        // Advances past the fully-drained prefix on each withdraw so the H2
+        // retraction loop scans [cursor, cursor + MAX_WITHDRAW_RECORDS) instead
+        // of a fixed [0, 64) window -- without it, balance in records at index
+        // >= 64 was permanently unwithdrawable. Appended at the END so existing
+        // slots keep their positions.
+        user_withdraw_cursor: Map<AztecAddress, PublicMutable<u32, Context>, Context>,
     }
 
     // ====================================================================
@@ -341,13 +348,9 @@ pub contract HousingFund {
         deposits - in_defi - allocated
     }
 
-    // H1: the per-note withdraw marker (inner nullifier). withdraw_private pushes
-    // this; claim/reinvest paths recompute it from the same kernel-verified note
-    // and prove its SILOED form was absent at the distribution's snapshot block.
-    #[contract_library_method]
-    fn withdraw_marker_nullifier(note_hash: Field) -> Field {
-        poseidon2_hash([note_hash, WITHDRAW_NULLIFIER_DOMAIN])
-    }
+    // H1: the per-note withdraw marker moved to the deposit_note lib (one
+    // definition next to DepositNote) so Governance can recompute it for the
+    // stale-note vote check. Imported above as withdraw_marker_nullifier.
 
     #[initializer]
     #[external("public")]
@@ -533,27 +536,48 @@ pub contract HousingFund {
         // the "sum of claims <= pool" tiling invariant is preserved (fail-closed:
         // the freed FIFO/small capacity simply becomes dust). The sum of a caller's
         // record amounts always equals their deposit_tickets, so `remaining` reaches
-        // zero unless the withdrawal spans more than MAX_WITHDRAW_RECORDS records.
+        // zero unless the withdrawal spans more than MAX_WITHDRAW_RECORDS live
+        // records in one call (split the withdrawal in that case).
+        //
+        // H2b: the scan starts at the caller's cursor (first possibly-live record),
+        // not index 0 -- a fixed [0, 64) window made balance in records >= 64
+        // permanently unwithdrawable once the first 64 drained. The cursor only
+        // advances past records that are empty NOW (deposits only append), so
+        // skipped records can never hold balance.
         let mut remaining = amount as u128;
         let count = self.storage.user_deposit_count.at(caller).read();
+        let start = self.storage.user_withdraw_cursor.at(caller).read();
+        let mut new_start = start;
+        let mut prefix_live = false; // set once a still-live record is seen
         for i in 0..MAX_WITHDRAW_RECORDS {
-            if (i < count) & (remaining > 0) {
-                let seq = self.storage.user_deposit_seq.at(poseidon2_hash([caller.to_field(), i as Field])).read();
+            let idx = start + i;
+            if idx < count {
+                let seq = self.storage.user_deposit_seq.at(poseidon2_hash([caller.to_field(), idx as Field])).read();
                 let rec_key = poseidon2_hash([caller.to_field(), seq as Field]);
                 let rec = self.storage.deposit_records.at(rec_key).read();
-                if rec.amount > 0 {
+                let mut post_amount = rec.amount;
+                if (rec.amount > 0) & (remaining > 0) {
                     let reduce = if remaining < rec.amount { remaining } else { rec.amount };
+                    post_amount = rec.amount - reduce;
                     self.storage.deposit_records.at(rec_key).write(DepositRecord {
                         owner: rec.owner,
-                        amount: rec.amount - reduce,
+                        amount: post_amount,
                         cum_before: rec.cum_before,
                         is_small: rec.is_small,
                     });
                     remaining -= reduce;
                 }
+                if !prefix_live {
+                    if post_amount == 0 {
+                        new_start = idx + 1;
+                    } else {
+                        prefix_live = true;
+                    }
+                }
             }
         }
         assert(remaining == 0, "withdraw spans too many records");
+        self.storage.user_withdraw_cursor.at(caller).write(new_start);
     }
 
     // -- DeFi management --------------------------------------------------
@@ -1136,7 +1160,13 @@ pub contract HousingFund {
         }
         self.storage.deposit_seq.write(seq + 1);
 
+        // Narrowing `as` casts WRAP in Noir (outside the checked-arithmetic
+        // posture, which covers arithmetic only). Without this round-trip check
+        // a deposit of 2^64 + N advances the u128 cursors by the full amount but
+        // bumps the u64 total by N -- desyncing the aggregates AND minting a
+        // note whose FIFO interval blankets every future distribution.
         let amount_u64 = amount as u64;
+        assert(amount_u64 as u128 == amount, "amount exceeds u64 range");
         let total = self.storage.total_deposits.read();
         self.storage.total_deposits.write(total + amount_u64);
     }
@@ -1180,7 +1210,10 @@ pub contract HousingFund {
     #[external("public")]
     #[only_self]
     fn _record_withdraw_private(amount: u128) {
+        // Round-trip the narrowing cast (wraps, doesn't trap): a note amount
+        // above u64 range must revert here, not under-decrement the aggregate.
         let amount_u64 = amount as u64;
+        assert(amount_u64 as u128 == amount, "amount exceeds u64 range");
         let deposits = self.storage.total_deposits.read();
         let in_defi = self.storage.total_in_defi.read();
         let allocated = self.storage.total_allocated.read();
