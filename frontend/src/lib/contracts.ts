@@ -239,6 +239,40 @@ export async function createProposalFromListing(
   );
 }
 
+// ── J4: funding queue ─────────────────────────────────────────────────────────
+
+export interface FundingQueueEntry {
+  proposalId: number;
+  listingId: number;
+  /** Present in simulation mode only (proposal titles are not on-chain). */
+  title?: string;
+  askEur: number;
+  marketRentRefEur: number;
+  qualityScore: number;
+  /** EUR/mo the covenant rent sits below the 20% baseline cap. */
+  discountEur: number;
+  fundable: boolean;
+}
+
+export async function fetchFundingQueue(): Promise<FundingQueueEntry[]> {
+  const res = await fetch("/api/fund/queue");
+  if (!res.ok) throw await readApiError(res, "Failed to fetch the funding queue");
+  const data = (await res.json()) as { queue?: unknown };
+  if (!Array.isArray(data.queue)) throw new Error("Queue response missing `queue` array");
+  return data.queue as FundingQueueEntry[];
+}
+
+export async function runMatchNext(): Promise<{
+  success: boolean;
+  fundedProposalId?: number | null;
+  askEur?: number | null;
+  message?: string;
+  txHash?: string;
+  error?: string;
+}> {
+  return postJson("/api/fund/queue", { action: "match_next" }, "Matching failed");
+}
+
 // ── Governance ────────────────────────────────────────────────────────────────
 
 /** On-chain affordability covenant attached to a proposal (W1). Present when a
@@ -291,6 +325,9 @@ export interface Proposal {
   hasPrivateDeposits?: boolean;
   /** On-chain affordability covenant (W1), when one is attached + set. */
   covenant?: ProposalCovenant;
+  /** J4: backing listing id (null/absent = legacy direct proposal). Listing-
+   *  backed proposals fund via the matching queue, not admin execution. */
+  listingId?: number | null;
 }
 
 export interface GovernanceEligibility {

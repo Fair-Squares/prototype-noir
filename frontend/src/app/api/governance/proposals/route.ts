@@ -5,6 +5,7 @@ import { getAztecTxHash, getAztecTxOutcome } from "@/lib/txHash";
 import { simResult, humanizeContractError } from "@/lib/aztecSim";
 import {
   simGetProposals,
+  simGetListings,
   simCreateProposal,
   simCreateProposalFromListing,
   simSetCovenant,
@@ -48,10 +49,14 @@ export async function GET(request: NextRequest) {
   const accountIndex = Number(searchParams.get("accountIndex") ?? "0");
 
   if (!isLiveModeEnabled()) {
+    const listings = simGetListings();
     const proposals = simGetProposals().map((proposal) => {
       const totalVotes = proposal.yesVotes + proposal.noVotes;
       const claimableAmount = address ? simGetClaimableAmount(proposal.id, address) : 0;
       const hasClaimed = address ? proposal.claimedBy.includes(address) : false;
+      // J4: listing back-reference — listing-backed proposals fund via the
+      // matching queue, not admin execution.
+      const backingListing = listings.find((l) => l.proposalId === proposal.id);
       return {
         ...proposal,
         // Sim deadlines are unix SECONDS, not block heights. Mark them so
@@ -62,6 +67,7 @@ export async function GET(request: NextRequest) {
         quorumReached: totalVotes >= proposal.quorumRequired,
         claimableAmount,
         hasClaimed,
+        listingId: backingListing ? backingListing.id : null,
       };
     });
     return NextResponse.json({ proposals, source: "simulation" });
@@ -121,7 +127,7 @@ export async function GET(request: NextRequest) {
 
     const proposals = await Promise.all(
       Array.from({ length: count }, async (_, id) => {
-        const [proposal, distribution, covenantRaw] = await Promise.all([
+        const [proposal, distribution, covenantRaw, listingPlusOne] = await Promise.all([
           govContract.methods.get_proposal(id).simulate({ from }).then((r) =>
             simResult<{
               desc_hash: bigint;
@@ -152,6 +158,12 @@ export async function GET(request: NextRequest) {
               target_group: bigint;
               is_set: boolean;
             }>(r)
+          ),
+          // J4: listing back-reference (listing_id + 1; 0 = legacy direct
+          // proposal). Listing-backed proposals fund via the matching queue,
+          // not admin execution — the UI branches on this.
+          govContract.methods.get_proposal_listing_id_plus_one(id).simulate({ from }).then((r) =>
+            Number(simResult(r))
           ),
         ]);
 
@@ -249,6 +261,7 @@ export async function GET(request: NextRequest) {
           hasClaimed,
           claimableAmount,
           hasPrivateDeposits,
+          listingId: listingPlusOne > 0 ? listingPlusOne - 1 : null,
           covenant: covenantRaw.is_set
             ? {
                 isSet: true,

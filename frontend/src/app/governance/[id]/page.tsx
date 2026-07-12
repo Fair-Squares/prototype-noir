@@ -164,7 +164,10 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
       }
       setNotice({
         tone: "success",
-        text: "Voting finalised. If approved, execute it next to open the distribution.",
+        text:
+          proposal?.listingId != null
+            ? "Voting finalised. If approved, the request joins the funding queue and funds by priority matching."
+            : "Voting finalised. If approved, execute it next to open the distribution.",
       });
       setReloadVersion((v) => v + 1);
       await reloadProposal();

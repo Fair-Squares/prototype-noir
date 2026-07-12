@@ -11,6 +11,7 @@ import {
   SkeletonRow,
 } from "@/components/ui";
 import { CapitalHeader } from "@/components/projects/CapitalHeader";
+import { FundingQueue } from "@/components/projects/FundingQueue";
 import { ListingCard } from "@/components/projects/ListingCard";
 import { ProjectCard } from "@/components/projects/ProjectCard";
 import { ProjectsTable } from "@/components/projects/ProjectsTable";
@@ -20,6 +21,7 @@ import {
   claimProposalDistribution,
   createProposalFromListing,
   fetchFundStats,
+  fetchFundingQueue,
   fetchKYCProfile,
   fetchListings,
   fetchProperties,
@@ -27,6 +29,7 @@ import {
   formatEUR,
   formatFSFT,
   type FundStats,
+  type FundingQueueEntry,
   type Listing,
   type Proposal,
 } from "@/lib/contracts";
@@ -51,6 +54,7 @@ export default function ProjectsPage() {
   const [stats, setStats] = useState<FundStats | null>(null);
   const [rows, setRows] = useState<ProjectRow[]>([]);
   const [listings, setListings] = useState<Listing[]>([]);
+  const [queue, setQueue] = useState<FundingQueueEntry[]>([]);
   const [proposalsById, setProposalsById] = useState<Map<number, Proposal>>(new Map());
   const [isInvestor, setIsInvestor] = useState(false);
   const [openingVoteId, setOpeningVoteId] = useState<number | null>(null);
@@ -63,16 +67,18 @@ export default function ProjectsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [nextStats, proposals, deeds, nextListings, profile] = await Promise.all([
+      const [nextStats, proposals, deeds, nextListings, nextQueue, profile] = await Promise.all([
         fetchFundStats(),
         fetchProposals(address ?? undefined, accountIndex),
         fetchProperties(),
         fetchListings(),
+        fetchFundingQueue(),
         address ? fetchKYCProfile(address) : Promise.resolve(null),
       ]);
       setStats(nextStats);
       setRows(buildProjectRows(proposals, deeds));
       setListings(nextListings);
+      setQueue(nextQueue);
       setProposalsById(new Map(proposals.map((p) => [p.id, p])));
       setIsInvestor(Boolean(profile?.isInvestor));
     } catch (e: unknown) {
@@ -254,6 +260,8 @@ export default function ProjectsPage() {
           </div>
         )}
       </section>
+
+      <FundingQueue entries={queue} loading={loading} onMatched={load} />
 
       <section aria-labelledby="funding-requests-heading" className="flex flex-col gap-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">

@@ -47,8 +47,12 @@ export function OverviewTab({
   const votingEnded = isActive && window.closed;
   const wouldPass = quorum.reached && quorum.majorityYes;
   // A passed-but-not-executed proposal (status 1) is what the execute action
-  // acts on; failed (2) and executed (3) are terminal.
-  const canExecute = proposal.status === 1;
+  // acts on; failed (2) and executed (3) are terminal. J4: listing-backed
+  // proposals fund via the permissionless matching queue instead — the admin
+  // execute path stays for legacy direct proposals only.
+  const isListingBacked = proposal.listingId != null;
+  const canExecute = proposal.status === 1 && !isListingBacked;
+  const isQueuedForMatching = proposal.status === 1 && isListingBacked;
 
   return (
     <div className="space-y-6">
@@ -174,6 +178,17 @@ export function OverviewTab({
             request did not reach quorum, so it can&rsquo;t be finalised or funded.
           </Alert>
         )
+      ) : null}
+
+      {isQueuedForMatching ? (
+        <Section
+          title="Approved — queued for funding"
+          description="This request passed its investor vote and joined the funding queue automatically. It funds by priority — best council score first, deeper affordability discount second — as soon as the pool can afford it. Anyone can run the matcher from the deal room."
+        >
+          <a href="/fund" className="btn btn-secondary btn-sm">
+            View the funding queue
+          </a>
+        </Section>
       ) : null}
 
       {canExecute ? (

@@ -218,6 +218,15 @@ interface SimState {
   // J1/J2: optional so a pre-existing in-memory state lazily initializes.
   listings?: SimListing[];
   nextListingId?: number;
+  // J4: funding queue of PASSED listing-backed proposal ids, appended at
+  // finalize and drained by simMatchNext — mirrors Governance.fq_* + the
+  // head-advance (settled entries are pruned once matched past). Optional for
+  // lazy init like listings.
+  fundingQueue?: number[];
+  // J4: acquisition value recorded at the ask when a proposal is matched —
+  // mirrors HousingFund.acquisition_value_by_property (property_id ==
+  // proposal_id by convention).
+  acquisitionByProperty?: Record<number, number>;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -1106,7 +1115,128 @@ export function simFinalizeProposal(proposalId: number): { success: boolean; err
   }
 
   proposal.status = proposal.yesVotes > proposal.noVotes ? 1 : 2;
+  // J4: listing-backed PASSED proposals queue for priority matching instead of
+  // admin execution (contract parity: finalize_proposal enqueues on-chain).
+  if (proposal.status === 1) {
+    const s = getState();
+    const listing = getListings(s).find((l) => l.proposalId === proposalId);
+    if (listing) {
+      if (!s.fundingQueue) s.fundingQueue = [];
+      s.fundingQueue.push(proposalId);
+    }
+  }
   return { success: true };
+}
+
+// ── J4: funding queue + permissionless priority matching ─────────────────────
+
+export interface SimQueueEntry {
+  proposalId: number;
+  listingId: number;
+  title: string;
+  askEur: number;
+  marketRentRefEur: number;
+  qualityScore: number;
+  /** EUR/mo the covenant sits below the 20% baseline cap (0 without covenant). */
+  discountEur: number;
+  fundable: boolean;
+}
+
+/** Priority exactly as Governance.get_proposal_priority_public packs it:
+ *  quality score (dominant) * 1e9 + covenant discount depth, saturated. */
+function simQueuePriority(entry: { qualityScore: number; discountEur: number }): number {
+  return entry.qualityScore * 1_000_000_000 + Math.min(entry.discountEur, 999_999_999);
+}
+
+function buildQueueEntry(s: SimState, proposalId: number): SimQueueEntry | null {
+  const proposal = s.proposals.find((p) => p.id === proposalId);
+  if (!proposal || proposal.status !== 1) return null; // only PASSED entries are live
+  const listing = getListings(s).find((l) => l.proposalId === proposalId);
+  if (!listing) return null;
+
+  const qualityScore =
+    listing.approvals > 0 ? Math.floor(listing.scoreSum / listing.approvals) : 0;
+  let discountEur = 0;
+  if (proposal.covenant?.isSet) {
+    const ceilingMonthly = Math.floor(
+      Math.floor((proposal.amount * proposal.covenant.rentCeilingBps) / 10000) / 12
+    );
+    const baselineCap = Math.floor(
+      (listing.marketRentRefEur * (10000 - AFFORDABILITY_BASELINE_BPS)) / 10000
+    );
+    // >= 0 by the baseline check at covenant attach.
+    discountEur = baselineCap - ceilingMonthly;
+  }
+  const available = s.fund.totalDeposits - s.fund.totalInDefi - s.fund.totalAllocated;
+  return {
+    proposalId,
+    listingId: listing.id,
+    title: proposal.title,
+    askEur: proposal.amount,
+    marketRentRefEur: listing.marketRentRefEur,
+    qualityScore,
+    discountEur,
+    fundable: proposal.amount <= available,
+  };
+}
+
+export function simGetFundingQueue(): SimQueueEntry[] {
+  const s = getState();
+  return (s.fundingQueue ?? [])
+    .map((pid) => buildQueueEntry(s, pid))
+    .filter((e): e is SimQueueEntry => e !== null);
+}
+
+/** Mirrors HousingFund.match_next: fund the best affordable PASSED
+ *  listing-backed proposal — quality score, then covenant discount depth,
+ *  then FIFO (strictly greater displaces). Records the acquisition at the ask
+ *  and opens the distribution via the existing lifecycle. */
+export function simMatchNext(): {
+  success: boolean;
+  error?: string;
+  fundedProposalId?: number;
+  askEur?: number;
+  qualityScore?: number;
+} {
+  const s = getState();
+  if (s.fund.isPaused) return { success: false, error: "Fund is paused" };
+  const queue = s.fundingQueue ?? [];
+  if (queue.length === 0) return { success: false, error: "Funding queue is empty" };
+
+  let best: SimQueueEntry | null = null;
+  for (const pid of queue) {
+    const entry = buildQueueEntry(s, pid);
+    if (!entry || !entry.fundable) continue;
+    if (!best || simQueuePriority(entry) > simQueuePriority(best)) best = entry;
+  }
+  if (!best) return { success: false, error: "No fundable proposal in queue" };
+
+  const winner = best;
+  const proposal = s.proposals.find((p) => p.id === winner.proposalId)!;
+  proposal.status = 3; // EXECUTED via matching
+  if (!s.acquisitionByProperty) s.acquisitionByProperty = {};
+  s.acquisitionByProperty[winner.proposalId] = winner.askEur;
+
+  const opened = simOpenDistribution(winner.proposalId);
+  if (!opened.success) {
+    // Fail closed like the on-chain tx: roll the status flip back.
+    proposal.status = 1;
+    delete s.acquisitionByProperty[winner.proposalId];
+    return { success: false, error: opened.error };
+  }
+
+  // Head advance: drop settled entries (matched or otherwise no longer PASSED).
+  s.fundingQueue = queue.filter((pid) => {
+    const p = s.proposals.find((x) => x.id === pid);
+    return p !== undefined && p.status === 1;
+  });
+
+  return {
+    success: true,
+    fundedProposalId: winner.proposalId,
+    askEur: winner.askEur,
+    qualityScore: winner.qualityScore,
+  };
 }
 
 export function simExecuteProposal(proposalId: number): { success: boolean; error?: string; fsftMinted?: number } {
