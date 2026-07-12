@@ -29,12 +29,15 @@ import { AffordabilityProblem } from "@/components/marketing/AffordabilityProble
 import { HowItWorks } from "@/components/marketing/HowItWorks";
 import { ImpactCalculator } from "@/components/marketing/ImpactCalculator";
 import { MarketingCTA } from "@/components/marketing/MarketingCTA";
+import { JourneyStepper } from "@/components/journey/JourneyStepper";
+import { PositionSnapshot } from "@/components/journey/PositionSnapshot";
 import { getProjectDossier } from "@/lib/projectDossier";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   fetchChainParams,
   fetchFundStats,
   fetchKYCProfile,
+  fetchListings,
   fetchPortfolio,
   fetchProperties,
   fetchProposals,
@@ -42,6 +45,7 @@ import {
   type ChainParams,
   type FundStats,
   type KYCProfile,
+  type Listing,
   type PortfolioData,
   type PropertyDeed,
   type Proposal,
@@ -55,6 +59,7 @@ export default function OverviewPage() {
   const [stats, setStats] = useState<FundStats | null>(null);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [properties, setProperties] = useState<PropertyDeed[]>([]);
+  const [listings, setListings] = useState<Listing[]>([]);
   const [chain, setChain] = useState<ChainParams | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,13 +75,15 @@ export default function OverviewPage() {
       fetchFundStats(),
       fetchProposals(),
       fetchProperties(),
+      fetchListings(),
       fetchChainParams(),
     ])
-      .then(([nextStats, nextProposals, nextProps, nextChain]) => {
+      .then(([nextStats, nextProposals, nextProps, nextListings, nextChain]) => {
         if (!active) return;
         setStats(nextStats);
         setProposals(nextProposals);
         setProperties(nextProps);
+        setListings(nextListings);
         setChain(nextChain);
         setError(null);
       })
@@ -158,15 +165,26 @@ export default function OverviewPage() {
       {isConnected ? (
         <>
           <header className="max-w-2xl">
-            <p className="text-label mb-1.5">Your fund</p>
+            <p className="text-label mb-1.5">Your journey</p>
             <h1 className="text-display text-text-1">
               {activeAccount?.alias ? `Welcome back, ${activeAccount.alias}` : "Welcome back"}
             </h1>
             <p className="text-body mt-2 text-text-2">
-              Your position and the single next action are below. The featured
-              project and full fund metrics follow.
+              The five steps of the journey, your live position, and the single
+              next action — the full fund picture follows below.
             </p>
           </header>
+          {/* J5: the journey stepper — each step derived from real on-chain
+              state, one deep-link action on the active step. */}
+          <JourneyStepper
+            kyc={kyc}
+            portfolio={portfolio}
+            listings={listings}
+            proposals={proposals}
+          />
+          {/* J6: the position snapshot answers "what do I own?" right under
+              "where am I?". */}
+          {portfolio ? <PositionSnapshot portfolio={portfolio} /> : null}
           <OverviewNextStep step={nextStep} portfolio={portfolio} />
         </>
       ) : (
