@@ -67,7 +67,13 @@ pub contract HousingFund {
     // Upper bound on public DepositRecords retracted per withdraw() (H2). A public
     // depositor whose withdrawal spans more than this many of their own records must
     // split the withdrawal; the loop is bounded for the public VM.
-    global MAX_WITHDRAW_RECORDS: u32 = 64;
+    // Records drained per withdraw call. Deliberately small: each drained
+    // record is a multi-slot public write, and the AVM caps data writes per tx
+    // (the previous value of 64 could never actually execute -- draining 64
+    // records blows the SSTORE budget). With the H2b cursor, splitting a wide
+    // withdrawal across calls is sound: each call drains up to this many
+    // records and the cursor slides forward.
+    global MAX_WITHDRAW_RECORDS: u32 = 8;
     // J4: funding-queue candidates examined per match_next crank. Each
     // candidate costs up to 4 cross-contract view frames, so the window is
     // deliberately small; the head cursor slides it forward across cranks.

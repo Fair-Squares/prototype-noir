@@ -377,3 +377,35 @@ unconstrained fn test_match_next_respects_pause() {
     env.call_public(admin, HousingFund::at(hf).pause());
     env.call_public(admin, HousingFund::at(hf).match_next());
 }
+
+// -- H2b: withdraw cursor (regression for the 64-record lockout) ---------------
+
+#[test]
+unconstrained fn test_withdraw_past_window_of_records() {
+    let (mut env, hf, _admin, user) = setup_with_investor();
+    // 10 deposits -> records 0..9, two records past the 8-wide drain window.
+    // Before H2b the retraction loop only ever scanned a FIXED window from
+    // index 0, so balance past it was permanently stuck (and splitting the
+    // withdrawal did not help). With the cursor, splitting works by design.
+    for _i in 0..10 {
+        env.call_public(user, HousingFund::at(hf).deposit(10));
+    }
+    // Drain exactly the first 8 records; the cursor advances past them.
+    env.call_public(user, HousingFund::at(hf).withdraw(80));
+    // Pre-fix this reverted "withdraw spans too many records" forever.
+    env.call_public(user, HousingFund::at(hf).withdraw(20));
+    assert_eq(env.execute_utility(HousingFund::at(hf).get_total_deposits()), 0);
+    assert_eq(env.execute_utility(HousingFund::at(hf).get_user_deposit_ticket(user)), 0);
+}
+
+#[test]
+unconstrained fn test_withdraw_partial_record_keeps_cursor_on_live_record() {
+    let (mut env, hf, _admin, user) = setup_with_investor();
+    env.call_public(user, HousingFund::at(hf).deposit(100));
+    env.call_public(user, HousingFund::at(hf).deposit(100));
+    // Drains record 0 and half of record 1: the cursor must stop AT record 1.
+    env.call_public(user, HousingFund::at(hf).withdraw(150));
+    // The remaining 50 in record 1 stays withdrawable.
+    env.call_public(user, HousingFund::at(hf).withdraw(50));
+    assert_eq(env.execute_utility(HousingFund::at(hf).get_user_deposit_ticket(user)), 0);
+}
