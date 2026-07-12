@@ -68,6 +68,10 @@ pub contract HousingFund {
     // depositor whose withdrawal spans more than this many of their own records must
     // split the withdrawal; the loop is bounded for the public VM.
     global MAX_WITHDRAW_RECORDS: u32 = 64;
+    // J4: funding-queue candidates examined per match_next crank. Each
+    // candidate costs up to 4 cross-contract view frames, so the window is
+    // deliberately small; the head cursor slides it forward across cranks.
+    global MAX_MATCH_SCAN: u32 = 8;
 
     #[derive(Serialize, Deserialize)]
     pub struct FundStatsView {
@@ -643,6 +647,78 @@ pub contract HousingFund {
         assert(amount <= available, "insufficient available balance");
 
         self.storage.total_allocated.write(allocated + amount);
+    }
+
+    // -- J4: permissionless priority matching (journey step 4) ---------------
+    //
+    // Funds the best PASSED listing-backed proposal the fund can afford:
+    // highest council quality score, then deepest covenant discount, then
+    // FIFO (see Governance.get_proposal_priority_public). Anyone may crank
+    // this; authority comes from the vote (PASSED) and the balance check, not
+    // the caller. Lives here rather than in Governance because the dependency
+    // edge is housing_fund -> governance (the reverse import would be
+    // circular), and the money checks are local reads this way.
+
+    #[external("public")]
+    fn match_next() {
+        assert(!self.storage.is_paused.read(), "fund is paused");
+        let gov = Governance::at(self.storage.governance.read());
+        let head = self.view(gov.get_funding_queue_head_public());
+        let tail = self.view(gov.get_funding_queue_tail_public());
+        assert(head < tail, "funding queue is empty");
+
+        let deposits = self.storage.total_deposits.read();
+        let in_defi = self.storage.total_in_defi.read();
+        let allocated = self.storage.total_allocated.read();
+        let available = available_balance(deposits, in_defi, allocated);
+
+        // Bounded scan window; entries beyond it wait for the next crank
+        // (head advances past settled prefixes, so the window slides).
+        let mut found = false;
+        let mut best_pid: u32 = 0;
+        let mut best_amount: u64 = 0;
+        let mut best_priority: u64 = 0;
+        let mut new_head = head;
+        let mut prefix_live = false;
+        for i in 0..MAX_MATCH_SCAN {
+            let idx = head + i;
+            if idx < tail {
+                let pid = self.view(gov.get_funding_queue_entry_public(idx));
+                let status = self.view(gov.get_proposal_status_public(pid));
+                if status == 1 {
+                    // PASSED and still awaiting funding: the head must not
+                    // advance past a live entry, funded or not this round.
+                    prefix_live = true;
+                    let amount = self.view(gov.get_proposal_amount_public(pid));
+                    if amount <= available {
+                        let priority = self.view(gov.get_proposal_priority_public(pid));
+                        // Strictly greater displaces: FIFO wins ties.
+                        if (!found) | (priority > best_priority) {
+                            found = true;
+                            best_pid = pid;
+                            best_amount = amount;
+                            best_priority = priority;
+                        }
+                    }
+                } else if !prefix_live {
+                    // Settled (EXECUTED via a prior match or admin path).
+                    new_head = idx + 1;
+                }
+            }
+        }
+        assert(found, "no fundable proposal in queue");
+
+        // Flip PASSED -> EXECUTED on governance and advance the queue head.
+        self.call(gov.mark_matched(best_pid, new_head));
+
+        // Record the acquisition at the ask (property_id == proposal_id by
+        // convention) so rent expectations and covenant enforcement bind to
+        // the funded value immediately.
+        self.storage.acquisition_value_by_property.at(best_pid as Field).write(best_amount);
+
+        // Reserve + snapshot via the existing permissionless lifecycle (its
+        // own available-balance and double-open guards still apply).
+        self.call(HousingFund::at(self.context.this_address()).open_distribution(best_pid));
     }
 
     // -- Permissionless settlement + investor claims ------------------------

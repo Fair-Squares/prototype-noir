@@ -153,6 +153,15 @@ pub contract Governance {
         // Proposal -> listing back-reference, stored as listing_id + 1 so an
         // unwritten slot (0) means "no listing" (legacy direct proposals).
         p_listing_id_plus_one: Map<Field, PublicMutable<u32, Context>, Context>,
+
+        // J4: funding queue of PASSED listing-backed proposals, appended by
+        // finalize_proposal and drained by HousingFund.match_next (the call
+        // direction is fund -> governance because housing_fund imports this
+        // crate, never the reverse). head advances past settled entries the
+        // same way the H2b withdraw cursor does.
+        fq_head: PublicMutable<u32, Context>,
+        fq_tail: PublicMutable<u32, Context>,
+        fq_pids: Map<Field, PublicMutable<u32, Context>, Context>,
     }
 
     #[initializer]
@@ -515,9 +524,107 @@ pub contract Governance {
         // opposition. (L33)
         if yes_votes > no_votes {
             self.storage.p_status.at(pid).write(STATUS_PASSED);
+            // J4: listing-backed proposals queue for priority matching instead
+            // of ad-hoc admin execution. Legacy direct proposals keep the
+            // admin execute_proposal path.
+            if self.storage.p_listing_id_plus_one.at(pid).read() > 0 {
+                let tail = self.storage.fq_tail.read();
+                self.storage.fq_pids.at(tail as Field).write(proposal_id);
+                self.storage.fq_tail.write(tail + 1);
+            }
         } else {
             self.storage.p_status.at(pid).write(STATUS_FAILED);
         }
+    }
+
+    // -- J4: funding-queue primitives for HousingFund.match_next --------------
+    //
+    // Same W1b pattern as the covenant accessors: primitive #[view] functions
+    // (no structs across the crate boundary) that the fund reads while scanning
+    // the queue, plus the fund-authorized status flip.
+
+    #[external("public")]
+    #[view]
+    fn get_funding_queue_head_public() -> pub u32 {
+        self.storage.fq_head.read()
+    }
+
+    #[external("public")]
+    #[view]
+    fn get_funding_queue_tail_public() -> pub u32 {
+        self.storage.fq_tail.read()
+    }
+
+    #[external("public")]
+    #[view]
+    fn get_funding_queue_entry_public(index: u32) -> pub u32 {
+        assert(index < self.storage.fq_tail.read(), "queue index out of range");
+        self.storage.fq_pids.at(index as Field).read()
+    }
+
+    /// J4: the proposal's matching priority, packed into one u64 so the fund
+    /// reads a single view per candidate: council quality score (dominant,
+    /// 0..=100) * 1e9 + covenant discount depth in EUR/mo below the baseline
+    /// cap (secondary, saturated at 1e9-1). FIFO order is the implicit
+    /// tie-break (the fund scans oldest-first and only a strictly greater
+    /// priority displaces the incumbent). Proposals without a covenant score
+    /// zero discount; only listing-backed proposals are ever enqueued.
+    #[external("public")]
+    #[view]
+    fn get_proposal_priority_public(proposal_id: u32) -> pub u64 {
+        let pid = proposal_id as Field;
+        let listing_plus_one = self.storage.p_listing_id_plus_one.at(pid).read();
+        assert(listing_plus_one > 0, "proposal has no listing");
+        let lid = (listing_plus_one - 1) as Field;
+
+        let approvals = self.storage.l_approvals.at(lid).read();
+        let score = if approvals > 0 {
+            (self.storage.l_score_sum.at(lid).read() / approvals as u64)
+        } else {
+            0
+        };
+
+        let mut discount: u64 = 0;
+        if self.storage.p_covenant_set.at(pid).read() {
+            let market_rent_ref = self.storage.l_market_rent_ref_eur.at(lid).read();
+            let ask = self.storage.p_amount.at(pid).read();
+            let ceiling_bps = self.storage.p_rent_ceiling_bps.at(pid).read();
+            let ceiling_monthly = ((ask * ceiling_bps as u64) / 10000) / 12;
+            let baseline_cap =
+                (market_rent_ref * (10000 - AFFORDABILITY_BASELINE_BPS)) / 10000;
+            // >= 0 by the J3 baseline assert at covenant attach.
+            discount = baseline_cap - ceiling_monthly;
+            if discount > 999_999_999 {
+                discount = 999_999_999;
+            }
+        }
+        score * 1_000_000_000 + discount
+    }
+
+    /// J4: HousingFund.match_next flips the matched proposal to EXECUTED and
+    /// advances the queue head past the settled prefix it scanned. Only the
+    /// wired fund may call this (the fund performs the balance check and the
+    /// distribution open in the same tx). new_head is trusted within bounds --
+    /// the fund is protocol-owned, wired at deploy, and only ever advances
+    /// head past non-PASSED entries.
+    #[external("public")]
+    fn mark_matched(proposal_id: u32, new_head: u32) {
+        assert_eq(
+            self.msg_sender(),
+            self.storage.housing_fund.read(),
+            "only the housing fund can match",
+        );
+        let pid = proposal_id as Field;
+        assert(
+            self.storage.p_status.at(pid).read() == STATUS_PASSED,
+            "proposal must be in PASSED state",
+        );
+        self.storage.p_status.at(pid).write(STATUS_EXECUTED);
+
+        let head = self.storage.fq_head.read();
+        let tail = self.storage.fq_tail.read();
+        assert((new_head >= head) & (new_head <= tail), "invalid queue head");
+        self.storage.fq_head.write(new_head);
     }
 
     // -- Execute a passed proposal (marks as EXECUTED, triggers FSFT mint) ----

@@ -359,3 +359,21 @@ unconstrained fn test_sync_requires_a_covenant() {
     env.call_public(proposer, Governance::at(gov).create_proposal(Field::from(2), 500));
     env.call_public(proposer, HousingFund::at(hf).sync_proposal_covenant(1));
 }
+
+// -- J4: funding-queue matching guards -----------------------------------------
+// The PASSED->match happy path needs the private secret-ballot tally (deferred
+// with the other private-note E2Es under Task 22); simulation-mode mirrors the
+// full selection semantics. These cover the public guards.
+
+#[test(should_fail_with = "funding queue is empty")]
+unconstrained fn test_match_next_reverts_on_empty_queue() {
+    let (mut env, hf, _gov, admin, _proposer) = setup_with_covenant();
+    env.call_public(admin, HousingFund::at(hf).match_next());
+}
+
+#[test(should_fail_with = "fund is paused")]
+unconstrained fn test_match_next_respects_pause() {
+    let (mut env, hf, _gov, admin, _proposer) = setup_with_covenant();
+    env.call_public(admin, HousingFund::at(hf).pause());
+    env.call_public(admin, HousingFund::at(hf).match_next());
+}
