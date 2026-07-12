@@ -94,6 +94,28 @@ interface SimAccountState {
   // change; read with `?? 0`. claimable = earned - withdrawn - reinvested.
   rentWithdrawn?: number;
   rentReinvested?: number;
+  // J1/J2 journey roles. Optional so existing account literals need no change;
+  // read with `?? false`. Mirrors KYCVerifier.property_owner_role/council_role.
+  propertyOwnerRole?: boolean;
+  councilRole?: boolean;
+}
+
+/** J1/J2: a property listing in the pre-proposal onboarding + council stage.
+ *  Mirrors Governance's listing storage: statuses are the contract's nonzero
+ *  codes, quality score is the floor average of council scores. */
+export interface SimListing {
+  id: number;
+  proposer: string;
+  askEur: number;
+  /** Appraiser-attested MONTHLY market rent (EUR) — the J3 baseline anchor. */
+  marketRentRefEur: number;
+  dossierHash: string;
+  status: number; // 1=submitted, 2=council approved, 3=proposed, 4=rejected
+  approvals: number;
+  scoreSum: number;
+  approvedBy: string[];
+  proposalId?: number;
+  createdAt: number;
 }
 
 export interface SimProposal {
@@ -193,6 +215,9 @@ interface SimState {
   nextProposalId: number;
   dex: SimDexState;
   rewards: SimRewardsState;
+  // J1/J2: optional so a pre-existing in-memory state lazily initializes.
+  listings?: SimListing[];
+  nextListingId?: number;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -821,16 +846,30 @@ export function simGetKYCStatus(address: string): boolean {
 export function simGetKYCProfile(address: string): {
   verified: boolean;
   isInvestor: boolean;
+  isPropertyOwner: boolean;
+  isCouncil: boolean;
   roles: string[];
 } {
   const acct = getOrCreateAccount(address);
   const roles: string[] = [];
   if (acct.investorRole) roles.push("investor");
+  if (acct.propertyOwnerRole ?? false) roles.push("property owner");
+  if (acct.councilRole ?? false) roles.push("council");
   return {
     verified: acct.kycVerified,
     isInvestor: acct.investorRole,
+    isPropertyOwner: acct.propertyOwnerRole ?? false,
+    isCouncil: acct.councilRole ?? false,
     roles,
   };
+}
+
+/** J1/J2: grant a journey role (mirrors KYCVerifier.register_property_owner /
+ *  set_council_role — verifier/admin gating is the API route's concern). */
+export function simGrantJourneyRole(address: string, role: "property_owner" | "council"): void {
+  const acct = getOrCreateAccount(address);
+  if (role === "property_owner") acct.propertyOwnerRole = true;
+  else acct.councilRole = true;
 }
 
 export function simSetKYCVerified(address: string): void {
@@ -846,6 +885,145 @@ export function simRevokeKYC(address: string): void {
   const acct = getOrCreateAccount(address);
   acct.kycVerified = false;
   acct.investorRole = false;
+}
+
+// ── J1/J2: property listings (journey steps 2 + 3a) ─────────────────────────
+
+/** The protocol's affordability baseline (J3): covenant rent ceilings on
+ *  listing-backed proposals must sit at least 20% below the appraiser-attested
+ *  market rent. Mirrors Governance.AFFORDABILITY_BASELINE_BPS. */
+export const AFFORDABILITY_BASELINE_BPS = 2000;
+
+function getListings(s: SimState): SimListing[] {
+  if (!s.listings) s.listings = [];
+  return s.listings;
+}
+
+export function simGetListings(): SimListing[] {
+  return getListings(getState());
+}
+
+export function simSubmitListing(
+  proposerAddress: string,
+  askEur: number,
+  marketRentRefEur: number,
+  dossierHash: string
+): { success: boolean; listing?: SimListing; error?: string } {
+  const s = getState();
+  const proposer = getOrCreateAccount(proposerAddress);
+  if (!(proposer.propertyOwnerRole ?? false)) {
+    return { success: false, error: "Property owner role required to submit a listing" };
+  }
+  if (askEur <= 0) return { success: false, error: "Ask must be positive" };
+  if (marketRentRefEur <= 0) return { success: false, error: "Market rent reference required" };
+  if (!dossierHash || dossierHash === "0x0") return { success: false, error: "Dossier hash required" };
+
+  const id = s.nextListingId ?? 0;
+  s.nextListingId = id + 1;
+  const listing: SimListing = {
+    id,
+    proposer: proposerAddress,
+    askEur,
+    marketRentRefEur,
+    dossierHash,
+    status: 1, // LISTING_SUBMITTED
+    approvals: 0,
+    scoreSum: 0,
+    approvedBy: [],
+    createdAt: nowSeconds(),
+  };
+  getListings(s).push(listing);
+  return { success: true, listing };
+}
+
+export function simCouncilReview(
+  councillorAddress: string,
+  listingId: number,
+  action: "approve" | "reject",
+  qualityScore?: number
+): { success: boolean; error?: string } {
+  const s = getState();
+  const councillor = getOrCreateAccount(councillorAddress);
+  if (!(councillor.councilRole ?? false)) {
+    return { success: false, error: "Council role required" };
+  }
+  const listing = getListings(s).find((l) => l.id === listingId);
+  if (!listing) return { success: false, error: "Unknown listing" };
+  if (listing.status !== 1) return { success: false, error: "Listing not under review" };
+
+  if (action === "reject") {
+    listing.status = 4; // LISTING_REJECTED — a single rejection is final
+    return { success: true };
+  }
+
+  if (qualityScore == null || qualityScore < 0 || qualityScore > 100) {
+    return { success: false, error: "Quality score must be 0-100" };
+  }
+  if (listing.approvedBy.includes(councillorAddress)) {
+    return { success: false, error: "Councillor already approved" };
+  }
+  listing.approvedBy.push(councillorAddress);
+  listing.approvals += 1;
+  listing.scoreSum += Math.floor(qualityScore);
+  // min_council_approvals defaults to 1 on-chain; sim mirrors the default.
+  if (listing.approvals >= 1) listing.status = 2; // LISTING_COUNCIL_APPROVED
+  return { success: true };
+}
+
+export function simCreateProposalFromListing(
+  proposerAddress: string,
+  listingId: number,
+  title: string,
+  description: string
+): { success: boolean; proposal?: SimProposal; error?: string } {
+  const s = getState();
+  const listing = getListings(s).find((l) => l.id === listingId);
+  if (!listing) return { success: false, error: "Unknown listing" };
+  if (listing.status !== 2) return { success: false, error: "Listing not council-approved" };
+
+  // Inherits the ask so proposal and dossier can't drift (contract parity).
+  const created = simCreateProposal(proposerAddress, title, description, listing.askEur);
+  if (!created.success || !created.proposal) return created;
+  listing.status = 3; // LISTING_PROPOSED
+  listing.proposalId = created.proposal.id;
+  return created;
+}
+
+/** W1/J3: attach the affordability covenant to a sim proposal, mirroring
+ *  Governance.set_proposal_covenant including the listing-backed baseline
+ *  check (integer math, floor at each step, exactly like the contract). */
+export function simSetCovenant(
+  callerAddress: string,
+  proposalId: number,
+  rentCeilingBps: number,
+  lockYears: number
+): { success: boolean; error?: string } {
+  const s = getState();
+  const proposal = s.proposals.find((p) => p.id === proposalId);
+  if (!proposal) return { success: false, error: "Unknown proposal" };
+  if (proposal.proposer !== callerAddress) {
+    return { success: false, error: "Only the proposer can attach a covenant" };
+  }
+  if (proposal.status !== 0) return { success: false, error: "Proposal is not active" };
+  if (proposal.covenant?.isSet) return { success: false, error: "Covenant already set" };
+  if (proposal.yesVotes + proposal.noVotes > 0) {
+    return { success: false, error: "Covenant must be set before voting begins" };
+  }
+  if (rentCeilingBps <= 0 || rentCeilingBps > 10000) {
+    return { success: false, error: "Rent ceiling out of range" };
+  }
+  if (lockYears <= 0 || lockYears > 100) return { success: false, error: "Lock years out of range" };
+
+  const listing = getListings(s).find((l) => l.proposalId === proposalId);
+  if (listing) {
+    const ceilingMonthly = Math.floor(Math.floor((listing.askEur * rentCeilingBps) / 10000) / 12);
+    const baselineCap = Math.floor((listing.marketRentRefEur * (10000 - AFFORDABILITY_BASELINE_BPS)) / 10000);
+    if (ceilingMonthly > baselineCap) {
+      return { success: false, error: "Covenant above affordability baseline" };
+    }
+  }
+  proposal.covenant = { isSet: true, rentCeilingBps, lockYears };
+  return { success: true };
 }
 
 // ── Governance ────────────────────────────────────────────────────────────────

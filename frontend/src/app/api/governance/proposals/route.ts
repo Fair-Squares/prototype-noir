@@ -6,6 +6,8 @@ import { simResult, humanizeContractError } from "@/lib/aztecSim";
 import {
   simGetProposals,
   simCreateProposal,
+  simCreateProposalFromListing,
+  simSetCovenant,
   simFinalizeProposal,
   simExecuteProposal,
   simOpenDistribution,
@@ -290,6 +292,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, proposal: result.proposal });
     }
 
+    // J1: open the investor vote on a council-approved listing (the ask is
+    // inherited from the listing — amount is deliberately not a parameter).
+    if (action === "create_from_listing") {
+      const { listingId } = body;
+      if (listingId === undefined || !title) {
+        return NextResponse.json({ error: "listingId and title required" }, { status: 400 });
+      }
+      const result = simCreateProposalFromListing(
+        address ?? "0x0",
+        Number(listingId),
+        title,
+        description ?? ""
+      );
+      if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
+      return NextResponse.json({ success: true, proposal: result.proposal });
+    }
+
+    // W1/J3: sim covenant attach, mirroring Governance.set_proposal_covenant
+    // including the listing-backed affordability-baseline check.
+    if (action === "set_covenant") {
+      const { rentCeilingBps, lockYears } = body;
+      if (rentCeilingBps == null || lockYears == null) {
+        return NextResponse.json({ error: "rentCeilingBps, lockYears required" }, { status: 400 });
+      }
+      const result = simSetCovenant(
+        address ?? "0x0",
+        Number(proposalId),
+        Number(rentCeilingBps),
+        Number(lockYears)
+      );
+      if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
+      return NextResponse.json({ success: true, message: "Covenant attached" });
+    }
+
     if (action === "finalize") {
       const result = simFinalizeProposal(Number(proposalId));
       if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
@@ -373,6 +409,36 @@ export async function POST(request: NextRequest) {
         success: true,
         message: `Proposal \"${title}\" created`,
         txHash: createOutcome.txHash,
+      });
+    }
+
+    // J1: open the investor vote on a council-approved listing. The contract
+    // inherits the ask from the listing and flips it to PROPOSED, so the only
+    // inputs are the listing id and the human title for the desc hash.
+    if (action === "create_from_listing") {
+      const { listingId } = body;
+      if (listingId === undefined || !title) {
+        return NextResponse.json({ error: "listingId and title required" }, { status: 400 });
+      }
+      const actorAddress = AztecAddress.fromString(actor.address);
+      const descHashBytes = Buffer.from(title.slice(0, 31), "utf-8");
+      const descHash = BigInt("0x" + descHashBytes.toString("hex").padStart(64, "0"));
+      const receipt = await govContract.methods
+        .create_proposal_from_listing(Number(listingId), descHash)
+        .send({ from: actorAddress });
+      const outcome = getAztecTxOutcome(receipt);
+      if (outcome.reverted) {
+        const mapped = humanizeContractError(outcome.error ?? "");
+        if (mapped) return NextResponse.json({ error: mapped.message }, { status: mapped.status });
+        return NextResponse.json(
+          { error: `Proposal creation from listing reverted: ${outcome.error ?? "see contract assertion."}` },
+          { status: 409 }
+        );
+      }
+      return NextResponse.json({
+        success: true,
+        message: `Investor vote opened for \"${title}\"`,
+        txHash: outcome.txHash,
       });
     }
 

@@ -101,6 +101,9 @@ export async function withdrawFunds(
 export interface KYCProfile {
   verified: boolean;
   isInvestor: boolean;
+  /** J1/J2 journey roles (property listings + council review). */
+  isPropertyOwner?: boolean;
+  isCouncil?: boolean;
   roles: string[];
   canTradeDex?: boolean;
   canVote?: boolean;
@@ -137,9 +140,12 @@ export async function fetchKYCProfile(address: string): Promise<KYCProfile> {
     throw new Error("KYC profile response missing `roles` string array");
   }
 
+  const record = data as Record<string, unknown>;
   return {
     verified: data.verified,
     isInvestor: data.isInvestor,
+    isPropertyOwner: typeof record.isPropertyOwner === "boolean" ? record.isPropertyOwner : undefined,
+    isCouncil: typeof record.isCouncil === "boolean" ? record.isCouncil : undefined,
     roles: data.roles,
     canTradeDex: typeof data.canTradeDex === "boolean" ? data.canTradeDex : undefined,
     canVote: typeof data.canVote === "boolean" ? data.canVote : undefined,
@@ -159,9 +165,78 @@ export async function fetchKYCStatus(address: string): Promise<boolean> {
 
 export async function registerKYC(
   userAddress: string,
-  devMode = false
+  devMode = false,
+  journeyRoles: Array<"property_owner" | "council"> = []
 ): Promise<{ success: boolean; error?: string; message?: string; verified?: boolean; isInvestor?: boolean; roles?: string[] }> {
-  return postJson("/api/kyc/register", { userAddress, devMode }, "KYC registration failed");
+  return postJson("/api/kyc/register", { userAddress, devMode, journeyRoles }, "KYC registration failed");
+}
+
+// ── J1/J2: property listings + council review ────────────────────────────────
+
+export interface Listing {
+  id: number;
+  proposer: string;
+  askEur: number;
+  /** Appraiser-attested MONTHLY market rent (EUR) — the affordability baseline anchor. */
+  marketRentRefEur: number;
+  dossierHash: string;
+  status: number; // 1=submitted, 2=council approved, 3=proposed, 4=rejected
+  statusName: string;
+  approvals: number;
+  qualityScore: number;
+  proposalId: number | null;
+}
+
+export async function fetchListings(): Promise<Listing[]> {
+  const res = await fetch("/api/property/listings");
+  if (!res.ok) throw await readApiError(res, "Failed to fetch listings");
+  const data = (await res.json()) as { listings?: unknown };
+  if (!Array.isArray(data.listings)) {
+    throw new Error("Listings response missing `listings` array");
+  }
+  return data.listings as Listing[];
+}
+
+export async function submitListing(
+  address: string,
+  askEur: number,
+  marketRentRefEur: number,
+  dossierHash: string,
+  accountIndex = 0
+): Promise<{ success: boolean; listingId?: number; message?: string; txHash?: string; error?: string }> {
+  return postJson(
+    "/api/property/listings",
+    { address, askEur, marketRentRefEur, dossierHash, accountIndex },
+    "Listing submission failed"
+  );
+}
+
+export async function councilReview(
+  address: string,
+  listingId: number,
+  action: "approve" | "reject",
+  qualityScore?: number,
+  accountIndex = 0
+): Promise<{ success: boolean; message?: string; txHash?: string; error?: string }> {
+  return postJson(
+    "/api/governance/council",
+    { address, listingId, action, qualityScore, accountIndex },
+    `Council ${action} failed`
+  );
+}
+
+export async function createProposalFromListing(
+  address: string,
+  listingId: number,
+  title: string,
+  description: string,
+  accountIndex = 0
+): Promise<{ success: boolean; proposal?: Proposal; message?: string; txHash?: string; error?: string }> {
+  return postJson(
+    "/api/governance/proposals",
+    { action: "create_from_listing", address, listingId, title, description, accountIndex },
+    "Opening the investor vote failed"
+  );
 }
 
 // ── Governance ────────────────────────────────────────────────────────────────

@@ -1,13 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
-import { simSetKYCVerified } from "@/lib/simulationStore";
+import { simGrantJourneyRole, simSetKYCVerified } from "@/lib/simulationStore";
 import { getAztecTxOutcome } from "@/lib/txHash";
 
+// J1/J2: journey roles a demo persona can request alongside verification.
+// Property owner is a verifier grant (register_property_owner); council is an
+// admin grant (set_council_role). test0 is both admin and seeded verifier.
+type JourneyRole = "property_owner" | "council";
+
+function parseJourneyRoles(value: unknown): JourneyRole[] {
+  if (value == null) return [];
+  if (!Array.isArray(value)) throw new Error("journeyRoles must be an array");
+  return value.map((r) => {
+    if (r !== "property_owner" && r !== "council") {
+      throw new Error(`Unknown journey role: ${String(r)}`);
+    }
+    return r;
+  });
+}
+
 export async function POST(request: NextRequest) {
-  const { userAddress, accountIndex = 0, devMode = false } = await request.json();
+  const { userAddress, accountIndex = 0, devMode = false, journeyRoles: rawRoles } = await request.json();
 
   if (!userAddress) {
     return NextResponse.json({ error: "userAddress required" }, { status: 400 });
+  }
+  let journeyRoles: JourneyRole[];
+  try {
+    journeyRoles = parseJourneyRoles(rawRoles);
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 400 }
+    );
   }
 
   // Dev/sim shortcut ONLY when NOT in live mode. Previously this fired whenever
@@ -26,12 +51,13 @@ export async function POST(request: NextRequest) {
   // This keeps local KYC flows usable even when a live PXE/node is not running.
   if (forceDevMode) {
     simSetKYCVerified(userAddress);
+    for (const role of journeyRoles) simGrantJourneyRole(userAddress, role);
     return NextResponse.json({
       success: true,
       message: "KYC verified instantly (dev mode). Investor role granted.",
       verified: true,
       isInvestor: true,
-      roles: ["investor"],
+      roles: ["investor", ...journeyRoles.map((r) => (r === "property_owner" ? "property owner" : r))],
       source: "dev",
     });
   }
@@ -39,6 +65,7 @@ export async function POST(request: NextRequest) {
   // ── Simulation mode ──────────────────────────────────────────────────────
   if (!isLiveModeEnabled()) {
     simSetKYCVerified(userAddress);
+    for (const role of journeyRoles) simGrantJourneyRole(userAddress, role);
     return NextResponse.json({
       success: true,
       message: devMode
@@ -46,7 +73,7 @@ export async function POST(request: NextRequest) {
         : "KYC verified (simulation). Investor role granted.",
       verified: true,
       isInvestor: true,
-      roles: ["investor"],
+      roles: ["investor", ...journeyRoles.map((r) => (r === "property_owner" ? "property owner" : r))],
     });
   }
 
@@ -124,6 +151,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // J1/J2: grant any requested journey roles as the admin/verifier (test0 is
+    // both). Sequential sends from the same admin account; each outcome is
+    // checked — a reverted grant fails the request rather than reporting a
+    // role the chain does not have.
+    const grantedRoles: string[] = ["investor"];
+    for (const role of journeyRoles) {
+      const grantReceipt =
+        role === "property_owner"
+          ? await kycContract.methods.register_property_owner(userAddr).send({ from: adminAddress })
+          : await kycContract.methods.set_council_role(userAddr, true).send({ from: adminAddress });
+      const grantOutcome = getAztecTxOutcome(grantReceipt);
+      if (grantOutcome.reverted) {
+        return NextResponse.json(
+          {
+            error:
+              `KYC registration succeeded, but granting the ${role.replace("_", " ")} role ` +
+              `was mined and reverted on-chain: ${grantOutcome.error ?? "no revert reason in receipt"}. Retry the role grant.`,
+            publicTxHash: registerOutcome.txHash,
+          },
+          { status: 409 }
+        );
+      }
+      grantedRoles.push(role === "property_owner" ? "property owner" : "council");
+    }
+
     return NextResponse.json({
       success: true,
       message: devMode ? "KYC verified instantly (dev mode). Investor role granted." : "KYC verified on-chain. Investor role granted.",
@@ -132,7 +184,7 @@ export async function POST(request: NextRequest) {
       credentialNonce: credentialNonce.toString(),
       verified: true,
       isInvestor: true,
-      roles: ["investor"],
+      roles: grantedRoles,
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
