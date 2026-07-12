@@ -45,6 +45,10 @@ pub contract Governance {
     global LISTING_REJECTED: u8 = 4;
     // Council quality scores are 0..=100 (price-quality judgment, J4 ranking input).
     global MAX_QUALITY_SCORE: u32 = 100;
+    // J3: the protocol's affordability baseline -- covenant rent ceilings on
+    // listing-backed proposals must sit at least this far below the
+    // appraiser-attested market rent ("at least 20% below market").
+    global AFFORDABILITY_BASELINE_BPS: u64 = 2000;
 
     #[derive(Serialize, Deserialize)]
     pub struct ProposalView {
@@ -569,6 +573,26 @@ pub contract Governance {
         assert(rent_ceiling_bps <= 10000, "rent ceiling out of range");
         assert(lock_years > 0, "lock years must be positive");
         assert(lock_years <= 100, "lock years out of range");
+
+        // J3: the "at least 20% below market" BASELINE, enforced on-chain.
+        // For a listing-backed proposal the covenant's monthly EUR ceiling
+        // (ask * ceiling_bps / 10000 / 12 -- the same formula HousingFund
+        // enforces at record_rent, with ask standing in for acquisition value)
+        // must not exceed (100% - baseline) of the appraiser-attested monthly
+        // market rent from the dossier. A covenant may promise MORE discount,
+        // never less. Legacy direct proposals have no market reference
+        // (listing_plus_one == 0) and skip the check -- they are retired with
+        // the direct path. Integer bps math per house rules; u64 products are
+        // safe (ask <= ~1.8e15 EUR before ask * ceiling_bps could overflow).
+        let listing_plus_one = self.storage.p_listing_id_plus_one.at(pid).read();
+        if listing_plus_one > 0 {
+            let lid = (listing_plus_one - 1) as Field;
+            let market_rent_ref = self.storage.l_market_rent_ref_eur.at(lid).read();
+            let ask = self.storage.p_amount.at(pid).read();
+            let ceiling_monthly = ((ask * rent_ceiling_bps as u64) / 10000) / 12;
+            let baseline_cap = (market_rent_ref * (10000 - AFFORDABILITY_BASELINE_BPS)) / 10000;
+            assert(ceiling_monthly <= baseline_cap, "covenant above affordability baseline");
+        }
 
         self.storage.p_rent_ceiling_bps.at(pid).write(rent_ceiling_bps);
         self.storage.p_lock_years.at(pid).write(lock_years);

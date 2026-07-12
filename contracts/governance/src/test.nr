@@ -362,3 +362,28 @@ unconstrained fn test_listing_backs_at_most_one_proposal() {
     // Listing is now PROPOSED; a second proposal from it must fail.
     env.call_public(proposer, Governance::at(gov).create_proposal_from_listing(0, Field::from(43)));
 }
+
+// -- J3: affordability baseline (listing-backed covenants) ---------------------
+// ask 250000 EUR, market rent 1200 EUR/mo -> baseline cap = 1200 * 80% = 960/mo.
+// ceiling 350 bps/yr -> 250000*350/10000/12 = 729/mo (within baseline).
+// ceiling 500 bps/yr -> 250000*500/10000/12 = 1041/mo (above the cap).
+
+#[test]
+unconstrained fn test_covenant_within_baseline_accepted() {
+    let (mut env, gov, _admin, proposer, owner, councillor) = setup_with_listing_roles();
+    env.call_public(owner, Governance::at(gov).submit_listing(250000, 1200, Field::from(77)));
+    env.call_public(councillor, Governance::at(gov).council_approve(0, 82));
+    env.call_public(proposer, Governance::at(gov).create_proposal_from_listing(0, Field::from(42)));
+    env.call_public(proposer, Governance::at(gov).set_proposal_covenant(0, 350, 20, Field::from(0)));
+    assert_eq(env.view_public(Governance::at(gov).get_proposal_covenant_set_public(0)), true);
+}
+
+#[test(should_fail_with = "covenant above affordability baseline")]
+unconstrained fn test_covenant_above_baseline_rejected() {
+    let (mut env, gov, _admin, proposer, owner, councillor) = setup_with_listing_roles();
+    env.call_public(owner, Governance::at(gov).submit_listing(250000, 1200, Field::from(77)));
+    env.call_public(councillor, Governance::at(gov).council_approve(0, 82));
+    env.call_public(proposer, Governance::at(gov).create_proposal_from_listing(0, Field::from(42)));
+    // 500 bps/yr on a 250k ask is ~1041 EUR/mo -- above the 960 baseline cap.
+    env.call_public(proposer, Governance::at(gov).set_proposal_covenant(0, 500, 20, Field::from(0)));
+}
