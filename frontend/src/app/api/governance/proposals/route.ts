@@ -357,10 +357,22 @@ export async function POST(request: NextRequest) {
         .create_proposal(descHash, BigInt(amount))
         .send({ from: actorAddress });
 
+      // Mirror the other actions below: a mined create can still revert in the
+      // public leg — never report a proposal that does not exist as created.
+      const createOutcome = getAztecTxOutcome(receipt);
+      if (createOutcome.reverted) {
+        const mapped = humanizeContractError(createOutcome.error ?? "");
+        if (mapped) return NextResponse.json({ error: mapped.message }, { status: mapped.status });
+        return NextResponse.json(
+          { error: `Proposal creation reverted: ${createOutcome.error ?? "see contract assertion."}` },
+          { status: 409 }
+        );
+      }
+
       return NextResponse.json({
         success: true,
         message: `Proposal \"${title}\" created`,
-        txHash: getAztecTxHash(receipt),
+        txHash: createOutcome.txHash,
       });
     }
 

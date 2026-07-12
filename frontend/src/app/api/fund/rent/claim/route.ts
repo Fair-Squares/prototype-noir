@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simClaimRent } from "@/lib/simulationStore";
-import { requireAztecTxHash } from "@/lib/txHash";
+import { getAztecTxOutcome } from "@/lib/txHash";
 import { simResult, isDuplicateNullifierError } from "@/lib/aztecSim";
 
 /**
@@ -99,7 +99,19 @@ export async function POST(request: NextRequest) {
         const receipt = await hfContract.methods
           .claim_rent_private(epoch, depositsResult.storage[i], eur, smallPool, smallTotal, fifoCap, suppliedSnapshotBlock)
           .send({ from: actorAddress });
-        lastTx = requireAztecTxHash(receipt);
+        // A mined claim can still revert in the public tail. Apply the SAME
+        // benign-skip filter as the thrown path below — an unexpected revert is
+        // a real failure and must surface, not read as "nothing to claim".
+        const outcome = getAztecTxOutcome(receipt);
+        if (outcome.reverted) {
+          const m = outcome.error ?? "";
+          if (isDuplicateNullifierError(m) || m.includes("share is zero")) continue;
+          return NextResponse.json(
+            { error: `Rent claim was mined but reverted on-chain: ${m || "no revert reason in receipt"}` },
+            { status: 409 }
+          );
+        }
+        lastTx = outcome.txHash;
         claimedNotes++;
       } catch (err: unknown) {
         const m = err instanceof Error ? err.message : String(err);

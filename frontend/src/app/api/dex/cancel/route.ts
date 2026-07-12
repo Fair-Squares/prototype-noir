@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simCancelDexOrder } from "@/lib/simulationStore";
-import { requireAztecTxHash } from "@/lib/txHash";
+import { getAztecTxOutcome } from "@/lib/txHash";
 
 // FSFTDex V3: cancel an order by its public `seq`. We locate the caller's
 // private OrderOwnerNote for that seq (in their PXE) and prove it to the
@@ -53,10 +53,19 @@ export async function POST(request: NextRequest) {
     }
 
     const receipt = await dex.methods.cancel_order(hinted).send({ from });
+    // A mined cancel can still revert in the public leg (order already filled
+    // or expired-and-refunded) — inspect the receipt.
+    const outcome = getAztecTxOutcome(receipt);
+    if (outcome.reverted) {
+      return NextResponse.json(
+        { error: `Cancel was mined but reverted on-chain: ${outcome.error ?? "no revert reason in receipt"}` },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({
       success: true,
       message: "Order cancelled - unfilled escrow moved to your claimable balance.",
-      txHash: requireAztecTxHash(receipt),
+      txHash: outcome.txHash,
       source: "live",
     });
   } catch (error: unknown) {

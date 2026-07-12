@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simWithdraw } from "@/lib/simulationStore";
-import { requireAztecTxHash } from "@/lib/txHash";
+import { getAztecTxOutcome } from "@/lib/txHash";
 import { simResult } from "@/lib/aztecSim";
 
 export async function POST(request: NextRequest) {
@@ -80,10 +80,21 @@ export async function POST(request: NextRequest) {
       .withdraw_private(target)
       .send({ from: accountAddress });
 
+    // send() resolves even when the mined tx reverted (e.g. the public tail's
+    // "insufficient available balance" assert) — never report a reverted
+    // withdrawal as success.
+    const outcome = getAztecTxOutcome(receipt);
+    if (outcome.reverted) {
+      return NextResponse.json(
+        { error: `Withdrawal was mined but reverted on-chain: ${outcome.error ?? "no revert reason in receipt"}` },
+        { status: 409 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       message: `Privately withdrew €${amount.toLocaleString()} from housing fund`,
-      txHash: requireAztecTxHash(receipt),
+      txHash: outcome.txHash,
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);

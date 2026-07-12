@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simRecordRent } from "@/lib/simulationStore";
-import { getAztecTxMeta } from "@/lib/txHash";
+import { getAztecTxOutcome } from "@/lib/txHash";
 
 /**
  * POST /api/fund/rent — record collected rent for a funded property (Phase 1.1,
@@ -63,7 +63,17 @@ export async function POST(request: NextRequest) {
     const receipt = await hfContract.methods
       .record_rent(pid, BigInt(amt))
       .send({ from: AztecAddress.fromString(account.address) });
-    const meta = getAztecTxMeta(receipt);
+
+    // record_rent can revert post-mining (pause, authorization, the W1c
+    // covenant ceiling) — inspect the receipt, never report a reverted
+    // booking as recorded.
+    const meta = getAztecTxOutcome(receipt);
+    if (meta.reverted) {
+      return NextResponse.json(
+        { error: `Rent booking was mined but reverted on-chain: ${meta.error ?? "no revert reason in receipt"}` },
+        { status: 409 }
+      );
+    }
 
     return NextResponse.json({
       success: true,

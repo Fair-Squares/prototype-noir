@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simSetKYCVerified } from "@/lib/simulationStore";
-import { requireAztecTxHash } from "@/lib/txHash";
+import { getAztecTxOutcome } from "@/lib/txHash";
 
 export async function POST(request: NextRequest) {
   const { userAddress, accountIndex = 0, devMode = false } = await request.json();
@@ -76,6 +76,15 @@ export async function POST(request: NextRequest) {
     const receipt = await kycContract.methods
       .register_kyc(userAddr)
       .send({ from: adminAddress });
+    // A mined registration can still revert (verifier authorization) — do not
+    // proceed to credential issuance on a failed registration.
+    const registerOutcome = getAztecTxOutcome(receipt);
+    if (registerOutcome.reverted) {
+      return NextResponse.json(
+        { error: `KYC registration was mined but reverted on-chain: ${registerOutcome.error ?? "no revert reason in receipt"}` },
+        { status: 409 }
+      );
+    }
 
     // 2. V2 private credential: deliver a KycCredentialNote to the user's PXE.
     // Nonce is a current-ms timestamp; verifier records it off-chain at issuance
@@ -87,7 +96,14 @@ export async function POST(request: NextRequest) {
       const credentialReceipt = await kycContract.methods
         .issue_credential(userAddr, credentialNonce)
         .send({ from: adminAddress });
-      credentialTxHash = requireAztecTxHash(credentialReceipt);
+      const credentialOutcome = getAztecTxOutcome(credentialReceipt);
+      if (credentialOutcome.reverted) {
+        // Route into the same fail-loudly path as a thrown send below.
+        throw new Error(
+          `credential issuance was mined but reverted on-chain: ${credentialOutcome.error ?? "no revert reason in receipt"}`
+        );
+      }
+      credentialTxHash = credentialOutcome.txHash;
     } catch (err: unknown) {
       // FAIL LOUDLY: the private KycCredentialNote is what every everyday
       // private flow (deposit_private / cast_vote_private / DEX place_order)
@@ -102,7 +118,7 @@ export async function POST(request: NextRequest) {
           error:
             `Public KYC registration succeeded, but issuing your private credential failed: ${msg}. ` +
             "Please retry verification.",
-          publicTxHash: requireAztecTxHash(receipt),
+          publicTxHash: registerOutcome.txHash,
         },
         { status: 500 }
       );
@@ -111,7 +127,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: devMode ? "KYC verified instantly (dev mode). Investor role granted." : "KYC verified on-chain. Investor role granted.",
-      txHash: requireAztecTxHash(receipt),
+      txHash: registerOutcome.txHash,
       credentialTxHash,
       credentialNonce: credentialNonce.toString(),
       verified: true,

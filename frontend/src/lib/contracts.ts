@@ -22,6 +22,20 @@ async function readApiError(res: Response, fallbackMessage: string): Promise<Err
   }
 }
 
+/** POST JSON and parse the response. Non-2xx responses throw with the API's
+ * error message (same convention as the GET helpers) — so an HTML error page
+ * or proxy failure surfaces as a clear Error instead of a JSON SyntaxError,
+ * and callers never act on an error body as if it were a success payload. */
+async function postJson<T>(url: string, body: unknown, fallbackMessage: string): Promise<T> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw await readApiError(res, fallbackMessage);
+  return res.json() as Promise<T>;
+}
+
 // ── Fund Stats ────────────────────────────────────────────────────────────────
 
 export interface FundStats {
@@ -71,12 +85,7 @@ export async function depositFunds(
   amount: number,
   accountIndex = 0
 ): Promise<DepositResult> {
-  const res = await fetch("/api/fund/deposit", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, amount, accountIndex }),
-  });
-  return res.json();
+  return postJson("/api/fund/deposit", { address, amount, accountIndex }, "Deposit failed");
 }
 
 export async function withdrawFunds(
@@ -84,12 +93,7 @@ export async function withdrawFunds(
   amount: number,
   accountIndex = 0
 ): Promise<{ success: boolean; message?: string; error?: string }> {
-  const res = await fetch("/api/fund/withdraw", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, amount, accountIndex }),
-  });
-  return res.json();
+  return postJson("/api/fund/withdraw", { address, amount, accountIndex }, "Withdrawal failed");
 }
 
 // ── KYC Status ────────────────────────────────────────────────────────────────
@@ -157,12 +161,7 @@ export async function registerKYC(
   userAddress: string,
   devMode = false
 ): Promise<{ success: boolean; error?: string; message?: string; verified?: boolean; isInvestor?: boolean; roles?: string[] }> {
-  const res = await fetch("/api/kyc/register", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userAddress, devMode }),
-  });
-  return res.json();
+  return postJson("/api/kyc/register", { userAddress, devMode }, "KYC registration failed");
 }
 
 // ── Governance ────────────────────────────────────────────────────────────────
@@ -248,12 +247,7 @@ export async function castVote(
   voteYes: boolean,
   accountIndex = 0
 ): Promise<{ success: boolean; message?: string; error?: string }> {
-  const res = await fetch("/api/governance/vote", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, proposalId, voteYes, accountIndex }),
-  });
-  return res.json();
+  return postJson("/api/governance/vote", { address, proposalId, voteYes, accountIndex }, "Vote failed");
 }
 
 export async function fetchGovernanceEligibility(
@@ -281,12 +275,11 @@ export async function attestFsftForVoting(
   privateFsftProofMode?: "none" | "aztec-private-proven" | "recursive-verified";
   recursiveVkConfigured?: boolean;
 }> {
-  const res = await fetch("/api/governance/eligibility", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "attestFsftForVoting", address, accountIndex, recursiveProof }),
-  });
-  return res.json();
+  return postJson(
+    "/api/governance/eligibility",
+    { action: "attestFsftForVoting", address, accountIndex, recursiveProof },
+    "FSFT voting attestation failed"
+  );
 }
 
 export async function createProposal(
@@ -296,24 +289,22 @@ export async function createProposal(
   amount: number,
   accountIndex = 0
 ): Promise<{ success: boolean; proposal?: Proposal; error?: string }> {
-  const res = await fetch("/api/governance/proposals", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "create", address, title, description, amount, accountIndex }),
-  });
-  return res.json();
+  return postJson(
+    "/api/governance/proposals",
+    { action: "create", address, title, description, amount, accountIndex },
+    "Proposal creation failed"
+  );
 }
 
 export async function finalizeProposal(
   proposalId: number,
   accountIndex = 0
 ): Promise<{ success: boolean; message?: string; error?: string }> {
-  const res = await fetch("/api/governance/proposals", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "finalize", proposalId, accountIndex }),
-  });
-  return res.json();
+  return postJson(
+    "/api/governance/proposals",
+    { action: "finalize", proposalId, accountIndex },
+    "Proposal finalisation failed"
+  );
 }
 
 export async function executeProposal(
@@ -321,12 +312,11 @@ export async function executeProposal(
   amount = 0,
   accountIndex = 0
 ): Promise<{ success: boolean; message?: string; fsftMinted?: number; error?: string }> {
-  const res = await fetch("/api/governance/proposals", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "execute", proposalId, amount, accountIndex }),
-  });
-  return res.json();
+  return postJson(
+    "/api/governance/proposals",
+    { action: "execute", proposalId, amount, accountIndex },
+    "Proposal execution failed"
+  );
 }
 
 export async function claimProposalDistribution(
@@ -334,12 +324,11 @@ export async function claimProposalDistribution(
   address: string,
   accountIndex = 0
 ): Promise<{ success: boolean; message?: string; claimedAmount?: number; txHash?: string; error?: string }> {
-  const res = await fetch("/api/governance/claim", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ proposalId, address, accountIndex }),
-  });
-  return res.json();
+  return postJson(
+    "/api/governance/claim",
+    { proposalId, address, accountIndex },
+    "Distribution claim failed"
+  );
 }
 
 // ── Portfolio ─────────────────────────────────────────────────────────────────
@@ -399,12 +388,7 @@ export async function claimRent(
   address: string,
   accountIndex = 0
 ): Promise<{ success: boolean; claimed?: number; error?: string; message?: string }> {
-  const res = await fetch("/api/fund/rent/claim", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, accountIndex }),
-  });
-  return res.json();
+  return postJson("/api/fund/rent/claim", { address, accountIndex }, "Rent withdrawal failed");
 }
 
 /** Reinvest the holder's claimable rent back into the fund (HousingFund.reinvest_rent). */
@@ -412,12 +396,7 @@ export async function reinvestRent(
   address: string,
   accountIndex = 0
 ): Promise<{ success: boolean; reinvested?: number; error?: string; message?: string }> {
-  const res = await fetch("/api/fund/rent/reinvest", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, accountIndex }),
-  });
-  return res.json();
+  return postJson("/api/fund/rent/reinvest", { address, accountIndex }, "Rent reinvest failed");
 }
 
 // ── EUR / Token Balances ──────────────────────────────────────────────────────
@@ -596,7 +575,12 @@ export async function fetchMyDexOrders(
   const res = await fetch(`/api/dex/my-orders?${query.toString()}`);
   if (!res.ok) throw await readApiError(res, "Failed to fetch your DEX orders");
   const data = (await res.json()) as { orders?: MyDexOrder[] };
-  return data.orders ?? [];
+  // A missing field is a malformed response, not "no orders" — don't render an
+  // empty book over a broken API (no fallback that lies).
+  if (!Array.isArray(data.orders)) {
+    throw new Error("Malformed response from /api/dex/my-orders: missing orders");
+  }
+  return data.orders;
 }
 
 export async function placeDexOrder(
@@ -607,12 +591,11 @@ export async function placeDexOrder(
   accountIndex = 0,
   ttlBlocks?: number
 ): Promise<{ success: boolean; message?: string; error?: string; order?: DexOrder }> {
-  const res = await fetch("/api/dex/orders", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, side, amount, limitPriceEur, accountIndex, ttlBlocks }),
-  });
-  return res.json();
+  return postJson(
+    "/api/dex/orders",
+    { address, side, amount, limitPriceEur, accountIndex, ttlBlocks },
+    "Order placement failed"
+  );
 }
 
 /**
@@ -626,12 +609,11 @@ export async function claimDexProceeds(
   token: "eur" | "fsft",
   accountIndex = 0
 ): Promise<{ success: boolean; message?: string; error?: string; txHash?: string }> {
-  const res = await fetch("/api/dex/claim", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, orderId: seq, token, accountIndex }),
-  });
-  return res.json();
+  return postJson(
+    "/api/dex/claim",
+    { address, orderId: seq, token, accountIndex },
+    "Claiming DEX proceeds failed"
+  );
 }
 
 export async function cancelDexOrder(
@@ -639,12 +621,7 @@ export async function cancelDexOrder(
   orderId: number,
   accountIndex = 0
 ): Promise<{ success: boolean; message?: string; error?: string }> {
-  const res = await fetch("/api/dex/cancel", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, orderId, accountIndex }),
-  });
-  return res.json();
+  return postJson("/api/dex/cancel", { address, orderId, accountIndex }, "Order cancel failed");
 }
 
 export async function fetchRewardsStats(address: string, accountIndex = 0): Promise<RewardsStats> {
@@ -661,12 +638,7 @@ export async function fetchRewardsOverview(): Promise<RewardsOverview> {
 }
 
 export async function claimRewards(address: string, accountIndex = 0): Promise<RewardsClaim> {
-  const res = await fetch("/api/rewards/claim", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, accountIndex }),
-  });
-  return res.json();
+  return postJson("/api/rewards/claim", { address, accountIndex }, "Rewards claim failed");
 }
 
 export async function attestFsftForRewards(
@@ -681,12 +653,11 @@ export async function attestFsftForRewards(
   fsftProofMode?: "none" | "aztec-private-proven" | "recursive-verified";
   recursiveVkConfigured?: boolean;
 }> {
-  const res = await fetch("/api/rewards/attest", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, accountIndex, recursiveProof }),
-  });
-  return res.json();
+  return postJson(
+    "/api/rewards/attest",
+    { address, accountIndex, recursiveProof },
+    "FSFT rewards attestation failed"
+  );
 }
 
 export interface PropertyDeed {
@@ -702,7 +673,11 @@ export async function fetchProperties(): Promise<PropertyDeed[]> {
   const res = await fetch("/api/property", { cache: "no-store" });
   if (!res.ok) throw await readApiError(res, "Failed to fetch properties");
   const data = await res.json();
-  return (data.properties ?? []) as PropertyDeed[];
+  // A missing field is a malformed response, not "no properties".
+  if (!Array.isArray(data.properties)) {
+    throw new Error("Malformed response from /api/property: missing properties");
+  }
+  return data.properties as PropertyDeed[];
 }
 
 export async function fetchTokenInfo(address?: string): Promise<TokenInfo> {
@@ -723,13 +698,9 @@ export async function requestTestEur(
   amount: number,
   accountIndex = 0
 ): Promise<{ success: boolean; message?: string; error?: string; txHash?: string }> {
-  const res = await fetch("/api/fund/tokens", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, amount, accountIndex }),
-  });
-  return res.json();
+  return postJson("/api/fund/tokens", { address, amount, accountIndex }, "EUR faucet drip failed");
 }
+
 
 // ── Wallet ────────────────────────────────────────────────────────────────────
 

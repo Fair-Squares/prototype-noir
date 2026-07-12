@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simSetRorConfig } from "@/lib/simulationStore";
-import { getAztecTxMeta } from "@/lib/txHash";
+import { getAztecTxOutcome } from "@/lib/txHash";
 
 /**
  * POST /api/fund/ror — admin config for the capped-return parameters: the
@@ -57,14 +57,32 @@ export async function POST(request: NextRequest) {
     const from = AztecAddress.fromString(account.address);
 
     const rorReceipt = await hfContract.methods.set_ror_bps(BigInt(bps)).send({ from });
-    const rorMeta = getAztecTxMeta(rorReceipt);
+    // Both calls are admin-gated public functions that can revert post-mining —
+    // inspect each receipt, never report a reverted config change as applied.
+    const rorMeta = getAztecTxOutcome(rorReceipt);
+    if (rorMeta.reverted) {
+      return NextResponse.json(
+        { error: `set_ror_bps was mined but reverted on-chain: ${rorMeta.error ?? "no revert reason in receipt"}` },
+        { status: 409 }
+      );
+    }
 
     let acqTxHash: string | null = null;
     if (hasAcq) {
       const acqReceipt = await hfContract.methods
         .set_acquisition_value(Number(propertyId), BigInt(Number(acquisitionValue)))
         .send({ from });
-      acqTxHash = getAztecTxMeta(acqReceipt).txHash;
+      const acqOutcome = getAztecTxOutcome(acqReceipt);
+      if (acqOutcome.reverted) {
+        return NextResponse.json(
+          {
+            error: `ROR was set, but set_acquisition_value reverted on-chain: ${acqOutcome.error ?? "no revert reason in receipt"}`,
+            txHash: rorMeta.txHash,
+          },
+          { status: 409 }
+        );
+      }
+      acqTxHash = acqOutcome.txHash;
     }
 
     return NextResponse.json({
