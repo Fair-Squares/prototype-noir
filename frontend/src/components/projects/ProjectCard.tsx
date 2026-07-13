@@ -139,9 +139,9 @@ export function ProjectCard({ row, address, claiming, onClaim, lifecycle, queueR
         <div className="border-t border-border pt-4">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
             <span className="text-label inline-flex items-center gap-1">
-              Distribution to depositors
+              Payout to depositors
               <InfoDot
-                label="What is the distribution"
+                label="What is a payout"
                 content="When a funded home's value is realised, the proceeds open as a pool depositors claim pro-rata against the deposits snapshotted at that moment."
               />
             </span>
@@ -172,12 +172,12 @@ export function ProjectCard({ row, address, claiming, onClaim, lifecycle, queueR
       ) : (
         <dl className="grid grid-cols-1 gap-x-4 gap-y-3 border-t border-border pt-4 sm:grid-cols-2">
           <div>
-            <dt className="text-label">Quorum</dt>
+            <dt className="text-label">Votes</dt>
             <dd className="text-body mt-0.5 text-mono text-text-1">
               {quorum.total.toLocaleString()} / {quorum.required.toLocaleString()}
             </dd>
             <dd className="text-caption mt-0.5">
-              {quorum.reached ? "Quorum met" : "Quorum not yet met"}
+              {quorum.reached ? "Enough votes to count" : `Needs ${quorum.required.toLocaleString()} total votes to count`}
             </dd>
           </div>
           <div>

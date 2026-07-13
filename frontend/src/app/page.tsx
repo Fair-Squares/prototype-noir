@@ -30,6 +30,7 @@ import { HowItWorks } from "@/components/marketing/HowItWorks";
 import { ImpactCalculator } from "@/components/marketing/ImpactCalculator";
 import { MarketingCTA } from "@/components/marketing/MarketingCTA";
 import { JourneyStepper } from "@/components/journey/JourneyStepper";
+import { PersonaHandOff } from "@/components/journey/PersonaHandOff";
 import { PositionSnapshot } from "@/components/journey/PositionSnapshot";
 import { getProjectDossier } from "@/lib/projectDossier";
 import { useWallet } from "@/contexts/WalletContext";
@@ -174,6 +175,16 @@ export default function OverviewPage() {
               next action — the full fund picture follows below.
             </p>
           </header>
+          {/* S9: first-run hand-off — one question, three paths. Hidden as
+              soon as the account shows any position or role. */}
+          <PersonaHandOff
+            hasSignal={Boolean(
+              (portfolio?.depositedAmount ?? 0) > 0 ||
+                (portfolio?.balance ?? 0) > 0 ||
+                kyc?.isPropertyOwner ||
+                kyc?.isCouncil
+            )}
+          />
           {/* J5: the journey stepper — each step derived from real on-chain
               state, one deep-link action on the active step. */}
           <JourneyStepper

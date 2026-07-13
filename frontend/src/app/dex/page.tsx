@@ -216,8 +216,9 @@ export default function DexPage() {
           The order book below is <strong>public</strong>, but <strong>who</strong> posted each order is not —
           orders carry no owner on chain. Matching is <strong>automatic, on-chain</strong>: when you place an
           order that crosses a resting one at the same price, it settles in the same transaction (no bot, no
-          waiting). Settlement is over <strong>private balances</strong> — to <strong>buy</strong> {fundSymbol} you
-          must shield {eurSymbol} into your private balance first; to <strong>sell</strong> you need private {fundSymbol}.
+          waiting). Settlement is over <strong>private balances</strong> — buying uses the private part of your
+          {eurSymbol} (the app moves the needed amount there for you when you place an order); selling uses
+          your private {fundSymbol}.
           Proceeds accrue to your order and you <strong>claim</strong> them from <strong>Your orders</strong> below.
         </p>
       </AdvancedDetails>

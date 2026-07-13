@@ -31,8 +31,8 @@ export default function RuntimeModeChip({
 
   const chip =
     mode === "unknown" ? (
-      <span className={`chip chip-neutral ${className}`.trim()} aria-label="Runtime mode: unknown">
-        Mode unknown
+      <span className={`chip chip-neutral ${className}`.trim()} aria-label="Runtime mode: checking">
+        Checking network…
       </span>
     ) : isSimulation ? (
       <span className={`chip chip-sim ${className}`.trim()} aria-label="Runtime mode: simulation">
@@ -51,7 +51,7 @@ export default function RuntimeModeChip({
 
   const hint =
     mode === "unknown"
-      ? "Mode unknown: the runtime could not be determined yet. Reads will resolve once the network responds."
+      ? "Checking which network this app is connected to — figures appear as soon as it responds."
       : isSimulation
         ? "Simulation: no real funds move. Figures are read from a local network so you can explore the flow safely."
         : "Demo network: connected to an Aztec test network with test accounts — no real funds move.";

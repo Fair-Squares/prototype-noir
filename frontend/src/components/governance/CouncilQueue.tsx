@@ -106,7 +106,7 @@ export function CouncilQueue({ address, accountIndex, listings, onReviewed }: Co
   return (
     <Section
       title="Council review queue"
-      description="Score each listing's price-quality (0-100) and approve it for an investor vote, or reject it. A rejection is final; owners can resubmit an amended dossier as a new listing."
+      description="Score each listing 0–100 — your price-quality judgment. The score sets the home's funding priority once approved: higher-scored homes are funded first. Approving opens the way to a community vote; a rejection is final (owners can resubmit an amended dossier as a new listing)."
     >
       {notice && <Alert tone={notice.tone} className="mb-3">{notice.text}</Alert>}
       <DataTable

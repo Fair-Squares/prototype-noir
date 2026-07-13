@@ -98,6 +98,11 @@ interface SimAccountState {
   // read with `?? false`. Mirrors KYCVerifier.property_owner_role/council_role.
   propertyOwnerRole?: boolean;
   councilRole?: boolean;
+  // S6: individual deposits ("lots"), newest last. Live withdrawals consume a
+  // whole DepositNote, so the sim mirrors that shape: the withdraw UI offers
+  // whole lots, never a free amount. Optional for pre-existing/seeded accounts;
+  // simGetDepositLots migrates depositedAmount into one lot on first read.
+  depositLots?: number[];
 }
 
 /** J1/J2: a property listing in the pre-proposal onboarding + council stage.
@@ -795,6 +800,9 @@ export function simReinvestRent(address: string): { success: boolean; error?: st
   const claimable = simClaimableRent(s, acct);
   if (claimable <= 0) return { success: false, error: "No claimable rent" };
   acct.depositedAmount += claimable;
+  // S6: reinvested rent re-enters as its own deposit lot (mirrors the on-chain
+  // path, where reinvest_rent appends a new deposit record/note).
+  acct.depositLots = [...depositLotsOf(acct), claimable];
   s.fund.totalDeposits += claimable;
   acct.rentReinvested = (acct.rentReinvested ?? 0) + claimable;
   // Keep the parked-capital allocation consistent with simDeposit.
@@ -890,6 +898,7 @@ export function simDeposit(address: string, amount: number): { success: boolean;
 
   acct.eurBalance -= amount;
   acct.depositedAmount += amount;
+  acct.depositLots = [...depositLotsOf(acct), amount];
   s.fund.totalDeposits += amount;
 
   const targetInDefi = Math.floor((s.fund.totalDeposits * s.fund.parkedAllocationBps) / 10_000);
@@ -897,6 +906,19 @@ export function simDeposit(address: string, amount: number): { success: boolean;
 
   recalcInvestorCount(s);
   return { success: true };
+}
+
+/** S6: an account's deposit lots, migrating legacy/seeded aggregate-only
+ *  accounts (whole balance = one lot) on first read. */
+function depositLotsOf(acct: SimAccountState): number[] {
+  if (acct.depositLots === undefined) {
+    acct.depositLots = acct.depositedAmount > 0 ? [acct.depositedAmount] : [];
+  }
+  return acct.depositLots;
+}
+
+export function simGetDepositLots(address: string): number[] {
+  return [...depositLotsOf(getOrCreateAccount(address))];
 }
 
 export function simWithdraw(address: string, amount: number): { success: boolean; error?: string } {
@@ -907,9 +929,21 @@ export function simWithdraw(address: string, amount: number): { success: boolean
   if (amount <= 0) return { success: false, error: "Amount must be positive" };
   if (acct.depositedAmount < amount) return { success: false, error: "Insufficient deposited balance" };
 
+  // S6 parity with the live whole-note constraint: a withdrawal takes one
+  // whole deposit, picked from the lots the UI listed.
+  const lots = depositLotsOf(acct);
+  const lotIndex = lots.indexOf(amount);
+  if (lotIndex === -1) {
+    return {
+      success: false,
+      error: "No deposit of that exact amount — pick one of your deposits to withdraw.",
+    };
+  }
+
   const available = s.fund.totalDeposits - s.fund.totalInDefi - s.fund.totalAllocated;
   if (amount > available) return { success: false, error: "Insufficient available fund balance" };
 
+  lots.splice(lotIndex, 1);
   acct.depositedAmount -= amount;
   acct.eurBalance += amount;
   s.fund.totalDeposits -= amount;

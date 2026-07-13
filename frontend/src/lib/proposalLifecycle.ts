@@ -152,7 +152,7 @@ export function fundingCaption(p: {
     return "Capital the fund committed to acquire this home.";
   if (p.status === 1)
     return "Approved — capital is committed when the acquisition executes.";
-  return "Capital the fund commits to acquire this home if the committee approves.";
+  return "Capital the fund commits to acquire this home if the community approves.";
 }
 
 export interface Quorum {

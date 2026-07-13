@@ -14,13 +14,11 @@ import {
   SkeletonKpi,
 } from "@/components/ui";
 import {
-  ClaimableByProposal,
   FaucetPanel,
   HoldingsBreakdown,
   PositionSummary,
   ReadinessSummary,
-  RentEarningsPanel,
-  RewardsPanel,
+  ReadyToClaim,
   WithdrawPanel,
 } from "@/components/portfolio";
 import { DepositFlow } from "@/components/portfolio/DepositFlow";
@@ -34,6 +32,7 @@ import {
   claimRewards,
   fetchKYCProfile,
   fetchPortfolio,
+  fetchWithdrawableDeposits,
   formatFSFT,
   fetchProperties,
   fetchProposals,
@@ -307,35 +306,36 @@ export default function PortfolioPage() {
         </div>
       ) : portfolio ? (
         <>
-          {/* 1 · Money you can act on now — rent and claimable distributions
-              lead, shown only when there is actually something to claim. */}
-          {(portfolio.balance ?? 0) > 0 || (portfolio.rentEarned ?? 0) > 0 ? (
-            <RentEarningsPanel
-              earned={portfolio.rentEarned ?? portfolio.estimatedYield}
-              claimable={portfolio.rentClaimable ?? portfolio.estimatedYield}
-              withdrawn={portfolio.rentWithdrawn ?? 0}
-              reinvested={portfolio.rentReinvested ?? 0}
-              claiming={claimingRent}
-              reinvesting={reinvestingRent}
-              reinvestAvailable={true}
-              onWithdraw={handleWithdrawRent}
-              onReinvest={handleReinvestRent}
-            />
-          ) : null}
-
-          {claimableProposals.length > 0 ? (
+          {/* 1 · S5: ONE "Ready to claim" list — rent, home payouts, rewards. */}
+          <div id="claims" className="scroll-mt-24">
             <Section
-              title="Claimable by project"
-              description="Distributions you can claim from housing proposals you backed."
+              title="Ready to claim"
+              description="Everything you can collect right now — rent earnings, home payouts, and participation rewards — in one place."
             >
-              <ClaimableByProposal
+              <ReadyToClaim
+                rentClaimable={portfolio.rentClaimable ?? portfolio.estimatedYield}
+                rentEarned={portfolio.rentEarned ?? portfolio.estimatedYield}
+                rentWithdrawn={portfolio.rentWithdrawn ?? 0}
+                rentReinvested={portfolio.rentReinvested ?? 0}
+                claimingRent={claimingRent}
+                reinvestingRent={reinvestingRent}
+                onClaimRent={handleWithdrawRent}
+                onReinvestRent={handleReinvestRent}
                 proposals={claimableProposals}
-                claimingId={claimingProposalId}
-                onClaim={handleClaimProposal}
+                claimingProposalId={claimingProposalId}
+                onClaimProposal={handleClaimProposal}
+                rewardsSymbol={rewardsSymbol}
+                rewardsClaimable={rewardsClaimable}
+                canClaimRewards={canClaimRewards}
+                rewardsNextStep={rewards?.eligibility?.nextSteps?.[0]}
+                claimingRewards={claimingRewards}
+                attesting={attesting}
+                onClaimRewards={handleClaimRewards}
+                onRunRewardsCheck={handleAttestRewards}
                 disabled={loading}
               />
             </Section>
-          ) : null}
+          </div>
 
           {/* 2 · Total position */}
           <PositionSummary
@@ -384,25 +384,13 @@ export default function PortfolioPage() {
           {/* 3c · J6: DEX orders overview (self-contained; claim/cancel on /dex). */}
           <DexOrdersPanel address={address} accountIndex={accountIndex} />
 
-          {/* 4 · Participation rewards (claim stays in the portfolio) */}
-          <RewardsPanel
-            rewardsSymbol={rewardsSymbol}
-            rewardsClaimable={rewardsClaimable}
-            canClaim={canClaimRewards}
-            nextStep={rewards?.eligibility?.nextSteps?.[0]}
-            claiming={claimingRewards}
-            attesting={attesting}
-            onClaim={handleClaimRewards}
-            onRunCheck={handleAttestRewards}
-          />
-
           {/* 5 · Withdraw + history */}
           <Section
             title="Withdraw capital"
-            description="Move deposited capital back to your wallet."
+            description="Pick a deposit to take back — each withdrawal returns one whole deposit to your wallet."
           >
             <WithdrawPanel
-              depositedAmount={portfolio.depositedAmount}
+              fetchDeposits={() => fetchWithdrawableDeposits(address, accountIndex)}
               onWithdraw={handleWithdraw}
             />
           </Section>

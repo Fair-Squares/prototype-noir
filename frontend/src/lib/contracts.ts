@@ -88,6 +88,21 @@ export async function depositFunds(
   return postJson("/api/fund/deposit", { address, amount, accountIndex }, "Deposit failed");
 }
 
+/** S6: the caller's individual deposits — the withdrawable units (a live
+ *  withdrawal consumes a whole deposit note). */
+export async function fetchWithdrawableDeposits(
+  address: string,
+  accountIndex = 0
+): Promise<number[]> {
+  const res = await fetch(
+    `/api/fund/withdraw?address=${encodeURIComponent(address)}&accountIndex=${accountIndex}`
+  );
+  if (!res.ok) throw await readApiError(res, "Could not load your deposits");
+  const data = await res.json();
+  if (!Array.isArray(data.deposits)) throw new Error("Malformed deposits response");
+  return data.deposits.map((d: { amount: number }) => d.amount);
+}
+
 export async function withdrawFunds(
   address: string,
   amount: number,
