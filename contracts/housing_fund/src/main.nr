@@ -722,6 +722,18 @@ pub contract HousingFund {
         // the funded value immediately.
         self.storage.acquisition_value_by_property.at(best_pid as Field).write(best_amount);
 
+        // Bind the voted covenant to enforcement at funding time. record_rent's
+        // ceiling only engages once the covenant is synced into the fund, and
+        // no keeper was cranking sync_proposal_covenant -- matching is the
+        // moment the property becomes rentable, so the terms bind here.
+        // Conditional because sync reverts on covenant-less proposals.
+        let cov_set = self.view(gov.get_proposal_covenant_set_public(best_pid));
+        if cov_set {
+            self.call(
+                HousingFund::at(self.context.this_address()).sync_proposal_covenant(best_pid),
+            );
+        }
+
         // Reserve + snapshot via the existing permissionless lifecycle (its
         // own available-balance and double-open guards still apply).
         self.call(HousingFund::at(self.context.this_address()).open_distribution(best_pid));
