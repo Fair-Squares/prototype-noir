@@ -24,11 +24,7 @@ import {
 import { ProjectsPreview } from "@/components/overview/ProjectsPreview";
 import { ImpactStrip } from "@/components/overview/ImpactStrip";
 import { FeaturedProject } from "@/components/overview/FeaturedProject";
-import { MarketingHero } from "@/components/marketing/MarketingHero";
-import { AffordabilityProblem } from "@/components/marketing/AffordabilityProblem";
-import { HowItWorks } from "@/components/marketing/HowItWorks";
-import { ImpactCalculator } from "@/components/marketing/ImpactCalculator";
-import { MarketingCTA } from "@/components/marketing/MarketingCTA";
+import { PrototypeIntro } from "@/components/marketing/PrototypeIntro";
 import { JourneyStepper } from "@/components/journey/JourneyStepper";
 import { PersonaHandOff } from "@/components/journey/PersonaHandOff";
 import { PositionSnapshot } from "@/components/journey/PositionSnapshot";
@@ -170,10 +166,6 @@ export default function OverviewPage() {
             <h1 className="text-display text-text-1">
               {activeAccount?.alias ? `Welcome back, ${activeAccount.alias}` : "Welcome back"}
             </h1>
-            <p className="text-body mt-2 text-text-2">
-              The five steps of the journey, your live position, and the single
-              next action — the full fund picture follows below.
-            </p>
           </header>
           {/* S9: first-run hand-off — one question, three paths. Hidden as
               soon as the account shows any position or role. */}
@@ -199,22 +191,11 @@ export default function OverviewPage() {
           <OverviewNextStep step={nextStep} portfolio={portfolio} />
         </>
       ) : (
-        // Disconnected lead — the mission-first marketing stack. It stays inside
-        // main's max-w-6xl column (in-column, not full-bleed): hero → problem
-        // (mint card) → how-it-works → impact calculator. The existing
-        // FeaturedProject block below is the bridge into the live fund sections,
-        // and MarketingCTA closes the disconnected page (after FeaturedProject).
-        // rorBps is passed from the already-loaded `stats` (no new fetch).
-        <div className="space-y-12">
-          <MarketingHero
-            rorBps={stats?.rorBps}
-            ctaCalculatorHref="/learn#calculator"
-            ctaLearnHref="/learn#how"
-          />
-          <AffordabilityProblem band={false} />
-          <HowItWorks />
-          <ImpactCalculator initialRorBps={stats?.rorBps} />
-        </div>
+        // Disconnected lead — the prototype front door, not the mission
+        // brochure (that lives on /learn and fair-squares.nl). What this is,
+        // the three things you can do, one action. The FeaturedProject block
+        // below bridges into the live fund sections.
+        <PrototypeIntro isSimulation={stats == null ? null : isSimulation} />
       )}
 
       {/* FEATURED PROJECT — the housing-first hero (the product). For the
@@ -243,8 +224,7 @@ export default function OverviewPage() {
               label="Fund value"
               value={stats.navEur != null ? formatEUR(stats.navEur) : "—"}
               tone="accent"
-              sub="Capital backing every share"
-              hint="Net asset value — the pooled capital (deposit principal, and property once marked) backing every Fund Share. Rent is a separate claimable earnings stream and does not inflate NAV; no DeFi yield is included."
+                            hint="Net asset value — the pooled capital (deposit principal, and property once marked) backing every Fund Share. Rent is a separate claimable earnings stream and does not inflate NAV; no DeFi yield is included."
             />
             <KpiCard
               label="Available to deploy"
@@ -255,8 +235,7 @@ export default function OverviewPage() {
             <KpiCard
               label="Committed to homes"
               value={formatEUR(stats.totalAllocated)}
-              sub="Acquisitions funded"
-              hint="Capital committed to acquiring property through approved funding requests."
+                            hint="Capital committed to acquiring property through approved funding requests."
             />
           </KpiGrid>
         )}
@@ -376,10 +355,6 @@ export default function OverviewPage() {
         </AdvancedDetails>
       ) : null}
 
-      {/* CLOSING CTA — disconnected only. The marketing page's final call to
-          action (single magenta highlight); the connected experience ends on
-          the fund sections, not a marketing CTA. */}
-      {!isConnected ? <MarketingCTA /> : null}
     </div>
   );
 }

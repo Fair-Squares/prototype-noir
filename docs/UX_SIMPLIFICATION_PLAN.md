@@ -148,3 +148,43 @@ connected-only surfaces (portfolio sections, council queue, hand-off card)
 render client-side behind the wallet context, so they are covered by the type
 system and build rather than SSR grep — the sim-mode journey walkthrough in
 DEMO_RUNBOOK.md §journey remains the end-to-end check.
+
+## 8. Subtraction pass — the prototype front door (2026-07-13)
+
+Owner directives: the disconnected homepage must present the prototype (not
+mirror fair-squares.nl); every page states plainly what it is and what the
+user is doing; remove words rather than adding.
+
+**Rendered visible words per page** (production build, sim mode, scripts/styles
+stripped; connected content renders client-side so counts reflect the SSR frame
+each visitor actually meets first):
+
+| Page | Before | After | Δ |
+|---|---|---|---|
+| / (disconnected) | 522 | 145 | −72% |
+| /fund | 106 | 92 | −13% |
+| /portfolio | 159 | 154 | −3% |
+| /governance | 121 | 87 | −28% |
+| /kyc | 121 | 115 | −5% |
+| /learn | 1227 | 1129 | −8% |
+| /dex | 420 | 380 | −10% |
+
+**Homepage:** the marketing stack (hero, affordability problem, how-it-works
+cards, impact calculator, closing CTA) is gone from `/` — it duplicated
+fair-squares.nl and /learn. The disconnected lead is now `PrototypeIntro`:
+what this is (a working prototype on Aztec), the three things you can do,
+what to expect (three-state environment sentence — no claim until the mode is
+known, "simulated euros / nothing here is real money" in sim), one action
+(pick a demo account), one link out to fair-squares.nl for the mission.
+/learn keeps the full mission experience minus its duplicated how-it-works
+cards and closing CTA (the explainer covers the mechanics).
+
+**Per-page purpose lines (replacing longer descriptions):**
+- Homes — "Every home the community is buying — from first review to owned."
+- Vote — "Decide which homes we buy. Your ballot is private."
+- Portfolio — "Your money: what you put in, what it's worth, what you can take out."
+- Trade — "Move fund shares to another verified investor. Optional — most people never need it."
+- Verification — "Prove once who you are; everything else stays private."
+
+Honesty devices, error messages, and state-bearing captions kept; all pages
+200; the four legacy redirects verified.

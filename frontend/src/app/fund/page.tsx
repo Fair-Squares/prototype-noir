@@ -185,7 +185,7 @@ export default function HomesPage() {
       <PageHeader
         eyebrow="Homes"
         title="Homes"
-        description="Every home the community is working on, from first submission to owned by the fund — one card per home, its whole story on one timeline."
+        description="Every home the community is buying — from first review to owned."
         actions={
           <div className="flex items-center gap-2">
             <Button variant="secondary" onClick={() => void load()} disabled={loading}>

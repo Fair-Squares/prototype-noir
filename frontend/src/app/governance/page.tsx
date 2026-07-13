@@ -158,7 +158,7 @@ export default function GovernancePage() {
       <PageHeader
         eyebrow="Community vote"
         title="Vote on homes"
-        description="Each ballot asks the community to commit capital toward one affordable home. Review the ask and the votes needed, then cast a private ballot — nobody can see how you voted. New homes enter the vote from the Homes page, after council review."
+        description="Decide which homes we buy. Your ballot is private."
       />
 
       {loadError ? <Alert tone="danger" title="Something went wrong">{loadError}</Alert> : null}

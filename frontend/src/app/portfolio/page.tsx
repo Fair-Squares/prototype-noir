@@ -243,7 +243,7 @@ export default function PortfolioPage() {
       <PageHeader
         eyebrow="Your account"
         title="Portfolio"
-        description="What you own in the housing fund, what it is worth, what is verified, and what you can do next."
+        description="Your money: what you put in, what it's worth, what you can take out."
         actions={
           address ? (
             <>

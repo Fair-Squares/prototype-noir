@@ -77,7 +77,7 @@ export default function VerificationPage() {
         <PageHeader
           eyebrow="Verification"
           title="Investor readiness"
-          description="Verify your identity once to unlock investing in housing proposals and voting on the fund. Connect a wallet to see where you stand."
+          description="Prove once who you are; everything else stays private. Connect a wallet to see where you stand."
         />
         <Section>
           <EmptyState
@@ -152,7 +152,7 @@ export default function VerificationPage() {
       <PageHeader
         eyebrow="Verification"
         title="Investor readiness"
-        description="Verify your identity once to unlock investing in housing proposals and voting on the fund. Everything below reflects your current on-chain standing."
+        description="Prove once who you are; everything else stays private."
         actions={
           verified ? (
             <Link href="/portfolio#deposit" className="btn btn-primary">
@@ -214,7 +214,7 @@ export default function VerificationPage() {
       {/* Readiness checklist */}
       <Section
         title="Readiness checklist"
-        description="Each item below is checked against the network. Verified items are ready to use; the rest show what unlocks them."
+        description="Checked against the network: green is ready; the rest shows what unlocks it."
       >
         {loading && !eligibility ? (
           <LoadingSkeleton lines={6} />
