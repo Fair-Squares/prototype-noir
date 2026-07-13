@@ -288,7 +288,7 @@ export default function PortfolioPage() {
           <div className="mt-5">
             <p className="text-label mb-2">What you&apos;ll see</p>
             <KpiGrid cols={4}>
-              <KpiCard label="Position value" value="—" sub="Your stake (NAV)" />
+              <KpiCard label="Position value" value="—" sub="Your stake, at value per share" />
               <KpiCard label="Fund shares" value="—" sub="FSFT you hold" />
               <KpiCard label="Rent earnings" value="—" sub="Claim or reinvest" />
               <KpiCard label="Rewards" value="—" sub="FSP participation" />

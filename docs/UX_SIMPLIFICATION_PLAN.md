@@ -119,3 +119,32 @@ Cuts and merges first; each item names the persona sentence it serves.
   without a plain-language primary label.
 - Nav ≤ 7 destinations; footer ≤ 4 links; build + tsc green; sim walkthrough
   (DEMO_RUNBOOK journey section) still passes end to end.
+
+## 7. Result (implemented 2026-07-12, this branch)
+
+All ten items landed (commits `2e14e8b`, `b06dd46` + follow-up). Verified against
+the production build in sim mode:
+
+| Measure | Before | After |
+|---|---|---|
+| Destinations | 11 | **7** (route manifest: / · /fund · /fund/submit+[id] · /portfolio · /governance+[id] · /dex · /kyc · /learn) |
+| Footer links | 14 (nav mirror, "Invest" twice) | **4** (About · GitHub · fair-squares.nl · runtime chip) |
+| Names for one home | 4 (listing / project / funding request / queue entry) | **1** — one card, one lifecycle strip (council review → community vote → funding → owned) |
+| Saver: get earnings | 4 claim verbs on 3 surfaces | **one "Ready to claim" list** on Portfolio |
+| Saver: money out | free-amount field, exact-note guessing | **pick-list of your actual deposits** (live notes / sim lots, incl. reinvested rent) |
+| Saver: money in | 4 pages (/kyc → faucet → /invest) | guided flow ON Portfolio (same real-state gating), home stepper deep-links to it |
+| Default-path headlines using NAV / quorum / distribution / shield | throughout | **zero in rendered HTML** (terms live on in tooltips and the About parameters panel) |
+| First frame | "Mode unknown: the runtime could not be determined…" | "Checking network…" |
+| First-run | no orientation | "What brings you here?" hand-off (3 paths, dismissible, auto-hides once the account has a position or role) |
+| Old URLs | — | /invest, /rewards, /explain, /reference all 307-redirect to their new homes (verified) |
+
+Council score input now explains itself (S10); the vote page speaks community
+("Community vote / Vote on homes / Ballots"), not committee. The legacy direct
+proposal form left /governance — homes enter the vote from the Homes page only.
+
+Verification: `tsc --noEmit` and `npm run build` clean; redirects, page renders,
+voice, and jargon counts checked against the running production build. The
+connected-only surfaces (portfolio sections, council queue, hand-off card)
+render client-side behind the wallet context, so they are covered by the type
+system and build rather than SSR grep — the sim-mode journey walkthrough in
+DEMO_RUNBOOK.md §journey remains the end-to-end check.

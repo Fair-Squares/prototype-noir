@@ -22,7 +22,7 @@ export function FundHealthKpis({ stats }: { stats: FundStats }) {
   return (
     <KpiGrid cols={4}>
       <KpiCard
-        label="Fund value (NAV)"
+        label="Fund value"
         value={stats.navEur != null ? formatEUR(stats.navEur) : "—"}
         sub="Capital backing every share"
         tone="accent"

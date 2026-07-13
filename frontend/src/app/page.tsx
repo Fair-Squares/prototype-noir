@@ -240,7 +240,7 @@ export default function OverviewPage() {
         ) : (
           <KpiGrid cols={3}>
             <KpiCard
-              label="Fund value (NAV)"
+              label="Fund value"
               value={stats.navEur != null ? formatEUR(stats.navEur) : "—"}
               tone="accent"
               sub="Capital backing every share"
