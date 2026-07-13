@@ -53,6 +53,13 @@ export async function POST(request: NextRequest) {
     // V2 path: withdraw_private consumes a whole DepositNote. Fetch the
     // caller's first note whose amount matches the requested withdraw.
     // Partial-withdraw / change-note minting is a follow-up.
+    //
+    // NOTE for future wiring: the PUBLIC transparency-mode path
+    // (HousingFund.withdraw) is deliberately NOT used here. It drains at most
+    // MAX_WITHDRAW_RECORDS (= 8) deposit records per call behind the H2b
+    // cursor — a caller whose ticket spans more records must split the
+    // withdrawal across multiple calls ("withdraw spans too many records"
+    // otherwise). Do not naively pass a full ticket to it.
     const depositsResult = simResult<{
       len: bigint;
       storage: { note: { amount: bigint } }[];

@@ -227,6 +227,11 @@ interface SimState {
   // mirrors HousingFund.acquisition_value_by_property (property_id ==
   // proposal_id by convention).
   acquisitionByProperty?: Record<number, number>;
+  // W1c: covenant terms pulled into the fund at funding time — mirrors
+  // HousingFund.c_covenant_set / c_rent_ceiling_bps / c_lock_years. Rent
+  // ceiling enforcement in simRecordRent only engages once synced, exactly
+  // like record_rent on-chain (unsynced covenant = no enforcement).
+  covenantSyncedByProperty?: Record<number, { rentCeilingBps: number; lockYears: number }>;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -676,8 +681,78 @@ export function simRecordRent(
   }
   const s = getState();
   if (s.fund.isPaused) return { success: false, error: "fund is paused" };
+  // W1c: enforce the affordability covenant ceiling, mirroring record_rent's
+  // contract-identical integer floor math (acq * ceiling_bps / 10000 / 12,
+  // floored at each division). Engages only for synced covenants with a known
+  // acquisition value, exactly like the contract.
+  const synced = s.covenantSyncedByProperty?.[propertyId];
+  const acq = s.acquisitionByProperty?.[propertyId] ?? 0;
+  if (synced && acq > 0) {
+    const monthlyCap = Math.floor(Math.floor((acq * synced.rentCeilingBps) / 10000) / 12);
+    if (amount > monthlyCap) {
+      return {
+        success: false,
+        error: `Rent exceeds the affordability covenant ceiling — this property is capped at €${monthlyCap.toLocaleString()}/month (${(synced.rentCeilingBps / 100).toFixed(2)}%/yr of its €${acq.toLocaleString()} acquisition value).`,
+      };
+    }
+  }
   s.fund.rentIncome += amount;
   s.fund.rentByProperty[propertyId] = (s.fund.rentByProperty[propertyId] ?? 0) + amount;
+  return { success: true };
+}
+
+/**
+ * W1c: pull a proposal's covenant terms into the fund — mirrors
+ * HousingFund.sync_proposal_covenant (permissionless, idempotent, reverts on
+ * covenant-less proposals). property_id == proposal_id by convention. On-chain
+ * this happens inside match_next at funding time (9d1b219) and via the admin
+ * execute API step for legacy proposals.
+ */
+export function simSyncProposalCovenant(proposalId: number): { success: boolean; error?: string } {
+  const s = getState();
+  const proposal = s.proposals.find((p) => p.id === proposalId);
+  if (!proposal) return { success: false, error: "Proposal not found" };
+  if (!proposal.covenant?.isSet) return { success: false, error: "Proposal has no covenant" };
+  if (!s.covenantSyncedByProperty) s.covenantSyncedByProperty = {};
+  s.covenantSyncedByProperty[proposalId] = {
+    rentCeilingBps: proposal.covenant.rentCeilingBps,
+    lockYears: proposal.covenant.lockYears,
+  };
+  return { success: true };
+}
+
+/** W1c/J4: the enforced rent status for a property — mirrors the fund's
+ *  get_property_covenant + get_acquisition_value read pair. */
+export function simGetPropertyRentPolicy(propertyId: number): {
+  covenantSynced: boolean;
+  rentCeilingBps: number;
+  lockYears: number;
+  acquisitionValue: number;
+  maxMonthlyRent: number | null;
+} {
+  const s = getState();
+  const synced = s.covenantSyncedByProperty?.[propertyId];
+  const acq = s.acquisitionByProperty?.[propertyId] ?? 0;
+  return {
+    covenantSynced: Boolean(synced),
+    rentCeilingBps: synced?.rentCeilingBps ?? 0,
+    lockYears: synced?.lockYears ?? 0,
+    acquisitionValue: acq,
+    maxMonthlyRent:
+      synced && acq > 0 ? Math.floor(Math.floor((acq * synced.rentCeilingBps) / 10000) / 12) : null,
+  };
+}
+
+/** Admin/keeper acquisition override — mirrors HousingFund.set_acquisition_value.
+ *  Matched properties already carry acquisition = ask (simMatchNext); this
+ *  explicitly overwrites it, like the on-chain admin call. */
+export function simSetAcquisitionValue(propertyId: number, value: number): { success: boolean; error?: string } {
+  if (!Number.isInteger(propertyId) || propertyId < 0 || !Number.isFinite(value) || value < 0) {
+    return { success: false, error: "propertyId and a non-negative value are required" };
+  }
+  const s = getState();
+  if (!s.acquisitionByProperty) s.acquisitionByProperty = {};
+  s.acquisitionByProperty[propertyId] = value;
   return { success: true };
 }
 
@@ -1223,6 +1298,18 @@ export function simMatchNext(): {
     proposal.status = 1;
     delete s.acquisitionByProperty[winner.proposalId];
     return { success: false, error: opened.error };
+  }
+
+  // W1c: bind the voted covenant to rent enforcement at funding time —
+  // mirrors match_next's on-chain conditional sync (9d1b219). Runs after the
+  // distribution opened; on-chain the whole tx is atomic, so post-open sync
+  // yields the identical final state without needing a rollback branch.
+  if (proposal.covenant?.isSet) {
+    if (!s.covenantSyncedByProperty) s.covenantSyncedByProperty = {};
+    s.covenantSyncedByProperty[winner.proposalId] = {
+      rentCeilingBps: proposal.covenant.rentCeilingBps,
+      lockYears: proposal.covenant.lockYears,
+    };
   }
 
   // Head advance: drop settled entries (matched or otherwise no longer PASSED).

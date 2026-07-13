@@ -12,6 +12,7 @@ import {
   simFinalizeProposal,
   simExecuteProposal,
   simOpenDistribution,
+  simSyncProposalCovenant,
   simGetClaimableAmount,
 } from "@/lib/simulationStore";
 
@@ -350,6 +351,15 @@ export async function POST(request: NextRequest) {
       if (!executeResult.success) return NextResponse.json({ error: executeResult.error }, { status: 400 });
       const openResult = simOpenDistribution(Number(proposalId));
       if (!openResult.success) return NextResponse.json({ error: openResult.error }, { status: 400 });
+      // W1c: bind the covenant to rent enforcement, mirroring the live branch
+      // below. match-funded proposals sync inside simMatchNext; this admin
+      // path must do it explicitly (only when a covenant is attached — sync
+      // rejects covenant-less proposals, like the contract).
+      const simProposal = simGetProposals().find((p) => p.id === Number(proposalId));
+      if (simProposal?.covenant?.isSet) {
+        const syncResult = simSyncProposalCovenant(Number(proposalId));
+        if (!syncResult.success) return NextResponse.json({ error: syncResult.error }, { status: 400 });
+      }
       return NextResponse.json({
         success: true,
         message: "Proposal executed and distribution opened",
@@ -511,11 +521,44 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // W1c: bind the voted covenant to rent enforcement. match_next syncs
+      // on-chain at funding time, but proposals executed via this admin path
+      // never reach match_next — without this step record_rent's ceiling
+      // silently never engages (unsynced covenant = no enforcement by
+      // design). sync is permissionless + idempotent; only called when a
+      // covenant is attached (it reverts on covenant-less proposals).
+      let covenantSyncTxHash: string | null = null;
+      const covenant = simResult<{ is_set: boolean }>(
+        await govAsAdmin.methods.get_proposal_covenant(Number(proposalId)).simulate({ from: adminAddress })
+      );
+      if (covenant.is_set) {
+        const syncReceipt = await hfAsAdmin.methods
+          .sync_proposal_covenant(Number(proposalId))
+          .send({ from: adminAddress });
+        const syncOutcome = getAztecTxOutcome(syncReceipt);
+        if (syncOutcome.reverted) {
+          // Partial-state honesty (same shape as fund/ror): execution and the
+          // distribution ARE live; only the rent-ceiling binding failed.
+          return NextResponse.json(
+            {
+              error: `Proposal executed and distribution opened, but the covenant sync reverted — the rent ceiling is NOT yet enforced for this property: ${syncOutcome.error ?? "see contract assertion."}`,
+              txHash: executeOutcome.txHash,
+              openDistributionTxHash: openOutcome.txHash,
+            },
+            { status: 409 }
+          );
+        }
+        covenantSyncTxHash = syncOutcome.txHash;
+      }
+
       return NextResponse.json({
         success: true,
         txHash: executeOutcome.txHash,
         openDistributionTxHash: openOutcome.txHash,
-        message: "Proposal executed and distribution opened",
+        covenantSyncTxHash,
+        message: covenantSyncTxHash
+          ? "Proposal executed, distribution opened, and the affordability covenant is now enforced"
+          : "Proposal executed and distribution opened",
       });
     }
 

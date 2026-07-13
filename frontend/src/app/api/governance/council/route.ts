@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { getAztecTxOutcome } from "@/lib/txHash";
+import { humanizeContractError } from "@/lib/aztecSim";
 import { simCouncilReview } from "@/lib/simulationStore";
 
 // J2: Housing Council review actions (journey step 3a). A council member
@@ -64,6 +65,8 @@ export async function POST(request: NextRequest) {
         : await gov.methods.council_reject(Number(listingId)).send({ from });
     const outcome = getAztecTxOutcome(receipt);
     if (outcome.reverted) {
+      const mapped = humanizeContractError(outcome.error ?? "");
+      if (mapped) return NextResponse.json({ error: mapped.message }, { status: mapped.status });
       return NextResponse.json(
         { error: `Council ${action} was mined but reverted on-chain: ${outcome.error ?? "no revert reason in receipt"}` },
         { status: 409 }

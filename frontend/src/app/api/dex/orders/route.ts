@@ -108,6 +108,12 @@ export async function POST(request: NextRequest) {
   if (!address || !side || !amount) {
     return NextResponse.json({ error: "address, side and amount are required" }, { status: 400 });
   }
+  // The DEX enforces a TTL risk policy on placement (0 < ttl <= max_ttl_blocks).
+  // The clamp below handles the upper bound; reject a nonsensical explicit TTL
+  // here instead of letting Math.min(0, max) send a guaranteed revert.
+  if (ttlBlocks !== undefined && (!Number.isInteger(ttlBlocks) || ttlBlocks <= 0)) {
+    return NextResponse.json({ error: "ttlBlocks must be a positive integer when provided" }, { status: 400 });
+  }
 
   if (!isLiveModeEnabled()) {
     const result = simPlaceDexOrder(address, side, Number(amount), limitPriceEur ? Number(limitPriceEur) : undefined);

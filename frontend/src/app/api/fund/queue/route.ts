@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { getAztecTxOutcome } from "@/lib/txHash";
-import { simResult } from "@/lib/aztecSim";
+import { simResult, humanizeContractError } from "@/lib/aztecSim";
 import { simGetFundingQueue, simMatchNext } from "@/lib/simulationStore";
 
 // J4: the funding queue — PASSED listing-backed proposals awaiting capital,
@@ -182,6 +182,8 @@ export async function POST(request: NextRequest) {
     const receipt = await hf.methods.match_next().send({ from });
     const outcome = getAztecTxOutcome(receipt);
     if (outcome.reverted) {
+      const mapped = humanizeContractError(outcome.error ?? "");
+      if (mapped) return NextResponse.json({ error: mapped.message }, { status: mapped.status });
       return NextResponse.json(
         { error: `match_next was mined but reverted on-chain: ${outcome.error ?? "no revert reason in receipt"}` },
         { status: 409 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { getAztecTxOutcome } from "@/lib/txHash";
-import { simResult } from "@/lib/aztecSim";
+import { simResult, humanizeContractError } from "@/lib/aztecSim";
 import { simGetListings, simSubmitListing } from "@/lib/simulationStore";
 
 // J1: property listings — the pre-proposal onboarding stage (journey step 2).
@@ -181,6 +181,8 @@ export async function POST(request: NextRequest) {
       .send({ from });
     const outcome = getAztecTxOutcome(receipt);
     if (outcome.reverted) {
+      const mapped = humanizeContractError(outcome.error ?? "");
+      if (mapped) return NextResponse.json({ error: mapped.message }, { status: mapped.status });
       return NextResponse.json(
         { error: `Listing submission was mined but reverted on-chain: ${outcome.error ?? "no revert reason in receipt"}` },
         { status: 409 }
