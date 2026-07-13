@@ -356,7 +356,7 @@ export default function OverviewPage() {
             </dl>
             <p className="text-caption text-text-3">
               See{" "}
-              <Link href="/reference" className="text-fs-teal-dark hover:underline">
+              <Link href="/learn#parameters" className="text-fs-teal-dark hover:underline">
                 Reference
               </Link>{" "}
               for the full parameter set, contract addresses, and verifier keys.

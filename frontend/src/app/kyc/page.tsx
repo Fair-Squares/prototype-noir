@@ -155,7 +155,7 @@ export default function VerificationPage() {
         description="Verify your identity once to unlock investing in housing proposals and voting on the fund. Everything below reflects your current on-chain standing."
         actions={
           verified ? (
-            <Link href="/invest" className="btn btn-primary">
+            <Link href="/portfolio#deposit" className="btn btn-primary">
               Go to Invest
             </Link>
           ) : null

@@ -7,6 +7,8 @@ import { AffordabilityProblem } from "@/components/marketing/AffordabilityProble
 import { HowItWorks } from "@/components/marketing/HowItWorks";
 import { ImpactCalculator } from "@/components/marketing/ImpactCalculator";
 import { MarketingCTA } from "@/components/marketing/MarketingCTA";
+import { HowItWorksExplainer } from "@/components/about/HowItWorksExplainer";
+import { ParametersPanel } from "@/components/about/ParametersPanel";
 
 /**
  * /learn — the public "About Fair Squares" marketing site.
@@ -69,7 +71,20 @@ export default function LearnPage() {
         <ImpactCalculator initialRorBps={rorBps} />
       </section>
 
-      <MarketingCTA primaryHref="/invest" secondaryHref="/explain" />
+      <MarketingCTA primaryHref="/portfolio#deposit" secondaryHref="#how-it-works" />
+
+      {/* S4: one About door — mission above, the protocol explainer and the
+          parameters/transparency panel below (moved from the retired /explain
+          and /reference routes, which now redirect here). */}
+      <section id="how-it-works" className="scroll-mt-24">
+        <h2 className="text-title mb-4 text-text-1">How the protocol works</h2>
+        <HowItWorksExplainer />
+      </section>
+
+      <section id="parameters" className="scroll-mt-24">
+        <h2 className="text-title mb-4 text-text-1">Parameters &amp; transparency</h2>
+        <ParametersPanel />
+      </section>
     </div>
   );
 }

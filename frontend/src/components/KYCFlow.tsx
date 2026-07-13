@@ -140,7 +140,7 @@ export default function KYCFlow({ userAddress, isVerified, isInvestor, onVerifie
       <Alert tone="success" title="You are verified">
         <div className="space-y-3">
           <p>Status: {isInvestor ? "Investor" : "Verified"}</p>
-          <Link href="/invest" className="btn btn-primary btn-sm">
+          <Link href="/portfolio#deposit" className="btn btn-primary btn-sm">
             Go to Invest
           </Link>
         </div>

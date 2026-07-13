@@ -1,12 +1,11 @@
 import Link from "next/link";
 
-import { PageHeader, Section } from "@/components/ui";
+import { Section } from "@/components/ui";
 
 /**
- * Static "How it works" / explainer route. Pure copy — no on-chain reads — so
- * it deliberately renders no live figures. Ordered to match the design-doc
- * Copy Guidelines hierarchy: housing outcome → financing structure → investor
- * position → protocol proof / privacy → token mechanics.
+ * S4 (UX_SIMPLIFICATION_PLAN.md): the protocol explainer, moved from the
+ * retired /explain route onto the single About page. Pure copy -- no on-chain
+ * reads. The #privacy anchor is preserved for the shell TrustChip link.
  */
 
 interface Step {
@@ -104,32 +103,9 @@ const PRIVACY: Privacy[] = [
   },
 ];
 
-export default function ExplainPage() {
+export function HowItWorksExplainer() {
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="How it works"
-        title="A private fund for affordable housing"
-        description={
-          <>
-            Fair Squares pools member capital to acquire and hold affordable
-            homes. Members vote to approve each acquisition, and every position
-            is held and verified privately. This page explains how it works,
-            end to end.
-          </>
-        }
-        actions={
-          <Link
-            href="https://fair-squares.nl/how-it-works"
-            target="_blank"
-            rel="noreferrer"
-            className="btn btn-primary"
-          >
-            Public project guide
-          </Link>
-        }
-      />
-
       <Section
         title="How the fund works"
         description="From a home that needs funding to a member position you can hold, vote with, and value."

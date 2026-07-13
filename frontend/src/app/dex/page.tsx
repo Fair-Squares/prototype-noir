@@ -369,7 +369,7 @@ export default function DexPage() {
 
       <p className="text-caption text-text-3">
         New to the fund? Building your position starts in the{" "}
-        <Link href="/invest" className="text-fs-teal hover:underline">primary deposit flow</Link>, not here.
+        <Link href="/portfolio#deposit" className="text-fs-teal hover:underline">primary deposit flow</Link>, not here.
       </p>
     </div>
   );

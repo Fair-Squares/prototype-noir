@@ -24,9 +24,9 @@ export interface MarketingCTAProps {
  * not introduce a second one.
  */
 export function MarketingCTA({
-  primaryHref = "/invest",
+  primaryHref = "/portfolio#deposit",
   primaryLabel = "Get started",
-  secondaryHref = "/explain",
+  secondaryHref = "/learn#how-it-works",
   secondaryLabel = "How it works",
 }: MarketingCTAProps) {
   return (

@@ -39,7 +39,7 @@ const COPY: Record<NextStep, { title: string; body: string; href: string; cta: s
   invest: {
     title: "Make your first deposit",
     body: "You are verified. Deposit EUR to take a position in the housing fund.",
-    href: "/invest",
+    href: "/portfolio#deposit",
     cta: "Go to deposit",
   },
   portfolio: {

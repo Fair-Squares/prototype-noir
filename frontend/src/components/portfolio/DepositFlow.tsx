@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaucetPanel } from "@/components/invest/FaucetPanel";
 import { InvestQuote } from "@/components/invest/InvestQuote";
 import {
@@ -15,9 +14,7 @@ import {
   InfoDot,
   KpiCard,
   KpiGrid,
-  PageHeader,
   Section,
-  SkeletonKpi,
   StatusChip,
   Stepper,
 } from "@/components/ui";
@@ -57,13 +54,17 @@ function shortHash(hash?: string | null): string {
   return hash.length > 16 ? `${hash.slice(0, 10)}…${hash.slice(-6)}` : hash;
 }
 
-function InvestPageInner() {
+/**
+ * S3 (UX_SIMPLIFICATION_PLAN.md): the guided deposit flow, moved from the
+ * retired /invest route into Portfolio -- the money hub. Same real-state
+ * gating (connect -> verify -> fund -> amount -> review -> confirm); the step
+ * tail is local state now (no URL sync -- /invest redirects to
+ * /portfolio#deposit).
+ */
+export function DepositFlow({ onDeposited }: { onDeposited?: () => void }) {
   const { activeAccount, connect, isConnecting } = useWallet();
   const address = activeAccount?.address ?? null;
   const accountIndex = activeAccount?.index ?? 0;
-
-  const router = useRouter();
-  const searchParams = useSearchParams();
 
   const [kycProfile, setKycProfile] = useState<KYCProfile | null>(null);
   const [stats, setStats] = useState<FundStats | null>(null);
@@ -147,23 +148,9 @@ function InvestPageInner() {
     return manualStep;
   }, [result, isConnected, isInvestor, hasCash, manualStep]);
 
-  // ── URL ?step= sync (reflect the manual tail only) ──────────────────────────
-  useEffect(() => {
-    const raw = searchParams.get("step");
-    if (!raw) return;
-    const n = Number.parseInt(raw, 10);
-    if (n === 3 || n === 4 || n === 5) setManualStep(n as ManualStep);
-  }, [searchParams]);
-
-  const goToManualStep = useCallback(
-    (next: ManualStep) => {
-      setManualStep(next);
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("step", String(next));
-      router.replace(`/invest?${params.toString()}`, { scroll: false });
-    },
-    [router, searchParams]
-  );
+  const goToManualStep = useCallback((next: ManualStep) => {
+    setManualStep(next);
+  }, []);
 
   // ── Amount validation ───────────────────────────────────────────────────────
   const validateAmount = (): boolean => {
@@ -208,6 +195,7 @@ function InvestPageInner() {
       setConfirmedAmount(amountEur);
       setAmount("");
       await refreshPortfolio();
+      onDeposited?.();
     } catch (e: unknown) {
       setSubmitError(e instanceof Error ? e.message : "Deposit failed.");
     } finally {
@@ -232,53 +220,21 @@ function InvestPageInner() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Invest"
-        title="Deposit into the housing fund"
-        description="Add cash to the fund to help finance affordable homes and receive a private position. The steps below confirm you are connected and verified, then settle your deposit on-chain."
-      />
-
       {loadError ? <Alert tone="danger" title="Could not load data">{loadError}</Alert> : null}
 
       <Section padding="tight">
         <Stepper steps={STEP_LABELS.map((label) => ({ label }))} current={currentStep} />
       </Section>
 
-      {/* Position summary */}
-      <KpiGrid cols={4}>
-        {accountLoading && !portfolio ? (
-          <>
-            <SkeletonKpi />
-            <SkeletonKpi />
-            <SkeletonKpi />
-            <SkeletonKpi />
-          </>
-        ) : (
-          <>
-            <KpiCard
-              label="Available cash"
-              value={formatEUR(eurBalance)}
-              sub="EUR in your wallet"
-            />
-            <KpiCard
-              label="Current position"
-              value={formatEUR(portfolio?.depositedAmount ?? 0)}
-              sub="Deposited in the fund"
-            />
-            <KpiCard
-              label="NAV per share"
-              value={navPerFsftEur > 0 ? `€${navPerFsftEur.toFixed(4)}` : "—"}
-              tone="accent"
-              sub={navPerFsftEur > 0 ? "Net asset value per FSFT" : "Set at distribution"}
-            />
-            <KpiCard
-              label="Verification"
-              value={isInvestor ? "Ready" : "Required"}
-              tone={isInvestor ? "success" : "warning"}
-              sub="Investor eligibility"
-            />
-          </>
-        )}
+      {/* S7: one compact context row -- available cash and value per share
+          (the full KPI story lives in the surrounding portfolio page). */}
+      <KpiGrid cols={2}>
+        <KpiCard label="Available cash" value={formatEUR(eurBalance)} sub="EUR in your wallet" />
+        <KpiCard
+          label="Value per share"
+          value={navPerFsftEur > 0 ? `€${navPerFsftEur.toFixed(4)}` : "—"}
+          sub={navPerFsftEur > 0 ? "Fund value ÷ shares in circulation" : "Set at first payout"}
+        />
       </KpiGrid>
 
       {/* ── Step 1: Connect ─────────────────────────────────────────────────── */}
@@ -462,7 +418,7 @@ function InvestPageInner() {
           ) : null}
 
           <div className="text-caption mt-4 flex items-center gap-1.5 text-text-3">
-            <span>After depositing, your Fund Shares (FSFT) can be sold on the secondary market.</span>
+            <span>After depositing, your fund shares can be sold to other members if you ever need out.</span>
             <InfoDot
               label="About secondary liquidity"
               content="Selling is never required — holding your position funds homes for the long term. When you do sell, the price is constrained to a band around the last issuance reference price (not current NAV per share)."
@@ -489,7 +445,7 @@ function InvestPageInner() {
               }
             >
               Your cash has been transferred and your private position recorded.
-              FSFT shares are issued when the fund distributes.
+              Fund shares are issued when the fund distributes.
             </Alert>
 
             <KpiGrid cols={2}>
@@ -542,33 +498,5 @@ function InvestPageInner() {
         </Section>
       ) : null}
     </div>
-  );
-}
-
-// useSearchParams() forces a client bailout during static prerender, so the
-// page that reads it must sit under a Suspense boundary (Next.js App Router).
-function InvestPageFallback() {
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        eyebrow="Invest"
-        title="Deposit into the housing fund"
-        description="Add cash to the fund to help finance affordable homes and receive a private position."
-      />
-      <KpiGrid cols={4}>
-        <SkeletonKpi />
-        <SkeletonKpi />
-        <SkeletonKpi />
-        <SkeletonKpi />
-      </KpiGrid>
-    </div>
-  );
-}
-
-export default function InvestPage() {
-  return (
-    <Suspense fallback={<InvestPageFallback />}>
-      <InvestPageInner />
-    </Suspense>
   );
 }

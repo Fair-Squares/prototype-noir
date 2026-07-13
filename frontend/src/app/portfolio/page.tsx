@@ -23,6 +23,7 @@ import {
   RewardsPanel,
   WithdrawPanel,
 } from "@/components/portfolio";
+import { DepositFlow } from "@/components/portfolio/DepositFlow";
 import { DexOrdersPanel } from "@/components/portfolio/DexOrdersPanel";
 import { PropertyExposure } from "@/components/portfolio/PropertyExposure";
 import { useWallet } from "@/contexts/WalletContext";
@@ -247,8 +248,8 @@ export default function PortfolioPage() {
         actions={
           address ? (
             <>
-              <Link href="/invest" className="btn btn-secondary">
-                Add to position
+              <Link href="#deposit" className="btn btn-secondary">
+                Deposit
               </Link>
               <Link href="/dex" className="btn btn-ghost">
                 Trade shares
@@ -342,6 +343,16 @@ export default function PortfolioPage() {
             rewardsClaimable={rewardsClaimable}
             rewardsSymbol={rewardsSymbol}
           />
+
+          {/* 2b · S3: deposit lives here now — Portfolio is the money hub. */}
+          <div id="deposit" className="scroll-mt-24">
+            <Section
+              title="Add to your position"
+              description="Deposit cash into the fund to help finance affordable homes. Your deposit and position stay private to your account."
+            >
+              <DepositFlow onDeposited={() => void loadAccountData(address)} />
+            </Section>
+          </div>
 
           {/* 3 · Holdings + readiness */}
           <div className="grid gap-6 lg:grid-cols-3">

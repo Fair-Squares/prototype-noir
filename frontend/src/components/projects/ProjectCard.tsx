@@ -19,6 +19,10 @@ export interface ProjectCardProps {
   claiming: boolean;
   /** Invoke the on-chain claim for this project's distribution. */
   onClaim: (proposalId: number) => void;
+  /** S1: the shared home-lifecycle strip, rendered under the header. */
+  lifecycle?: React.ReactNode;
+  /** S1: 1-based funding-queue rank while the home waits for capital. */
+  queueRank?: number | null;
 }
 
 /** A labelled progress meter; status is always carried in adjacent text. */
@@ -46,7 +50,7 @@ function Meter({ fraction, tone }: { fraction: number; tone: "accent" | "success
  * shown — no location, unit counts, covenant terms or capped-return figures,
  * because none of those are recorded on-chain.
  */
-export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProps) {
+export function ProjectCard({ row, address, claiming, onClaim, lifecycle, queueRank }: ProjectCardProps) {
   const connected = Boolean(address);
   const window = votingWindowFor(row.proposal);
   const quorum = quorumFor(row.proposal);
@@ -104,7 +108,7 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
             </>
           ) : (
             <>
-              <p className="text-label">Funding request</p>
+              <p className="text-label">Home</p>
               <h3 className="text-heading mt-0.5 text-text-1">{displayName}</h3>
             </>
           )}
@@ -116,6 +120,14 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
         </div>
         <ProjectStatusChip row={row} />
       </header>
+
+      {lifecycle ? <div className="-mt-1">{lifecycle}</div> : null}
+      {queueRank != null && row.status === 1 ? (
+        <p className="text-caption -mt-1 text-text-2">
+          In the funding queue at rank #{queueRank} — funded automatically when
+          capital allows, best-ranked first.
+        </p>
+      ) : null}
 
       <div>
         <p className="text-kpi-sm text-text-1">{formatEUR(row.requestedAmount)}</p>
@@ -253,7 +265,7 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
                 className="btn btn-ghost btn-sm"
                 aria-label={`Open the governance memo for ${displayName}`}
               >
-                Governance memo
+                Vote record
               </Link>
             </>
           )}

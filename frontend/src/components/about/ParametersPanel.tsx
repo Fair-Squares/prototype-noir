@@ -1,14 +1,17 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+/**
+ * S4 (UX_SIMPLIFICATION_PLAN.md): the protocol parameters panel, moved from the
+ * retired /reference route onto the single About page (/learn#parameters).
+ */
+
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   EmptyState,
   KpiCard,
   KpiGrid,
   LoadingSkeleton,
-  PageHeader,
   Section,
   StatusChip,
   Tabs,
@@ -114,7 +117,6 @@ const TABS: TabItem[] = [
   { value: "rewards", label: "Rewards" },
   { value: "formulas", label: "Formulas" },
 ];
-const TAB_VALUES = new Set(TABS.map((t) => t.value));
 
 function timingRows(p: ChainParams): ParamRow[] {
   const t = p.timing;
@@ -199,13 +201,10 @@ function formatFreshness(at: number | null): string {
   return `${m}m ago`;
 }
 
-function ReferencePageInner() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
-  const tabParam = searchParams.get("tab");
-  const activeTab = tabParam && TAB_VALUES.has(tabParam) ? tabParam : "chain";
+export function ParametersPanel() {
+  // S4: tabs are local state now that this renders as a section of /learn
+  // (the old /reference?tab= URLs redirect to /learn#parameters).
+  const [activeTab, setActiveTab] = useState<string>("chain");
 
   const [params, setParams] = useState<ChainParams | null>(null);
   const [overview, setOverview] = useState<RewardsOverview | null>(null);
@@ -255,14 +254,7 @@ function ReferencePageInner() {
     };
   }, []);
 
-  const setTab = useCallback(
-    (value: string) => {
-      const next = new URLSearchParams(searchParams.toString());
-      next.set("tab", value);
-      router.replace(`${pathname}?${next.toString()}`, { scroll: false });
-    },
-    [pathname, router, searchParams]
-  );
+  const setTab = setActiveTab;
 
   // Source comes straight from the overview read ("live" | "simulation").
   // Fall back to "unknown" only when no overview loaded — never invent "live".
@@ -291,12 +283,13 @@ function ReferencePageInner() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Protocol reference"
-        title="Parameters & transparency"
-        description="Chain timing, governance and market limits, deployed contract addresses, the reward schedule, and the exact distribution, NAV, and reward formulas this network runs."
-        actions={headerActions}
-      />
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <p className="text-caption max-w-2xl text-text-2">
+          Chain timing, governance and market limits, deployed contract addresses, the reward
+          schedule, and the exact formulas this network runs.
+        </p>
+        {headerActions}
+      </div>
 
       {paramsError ? (
         <Alert tone="danger" title="Chain parameters unavailable">
@@ -461,28 +454,5 @@ function ReferencePageInner() {
         ) : null}
       </Tabs>
     </div>
-  );
-}
-
-// useSearchParams() forces a client bailout during static prerender, so the
-// page that reads it must sit under a Suspense boundary (Next.js App Router).
-function ReferencePageFallback() {
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        eyebrow="Protocol reference"
-        title="Parameters & transparency"
-        description="Chain timing, governance and market limits, deployed contract addresses, the reward schedule, and the exact distribution, NAV, and reward formulas this network runs."
-      />
-      <LoadingSkeleton lines={6} />
-    </div>
-  );
-}
-
-export default function ReferencePage() {
-  return (
-    <Suspense fallback={<ReferencePageFallback />}>
-      <ReferencePageInner />
-    </Suspense>
   );
 }
