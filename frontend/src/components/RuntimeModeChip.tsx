@@ -32,7 +32,7 @@ export default function RuntimeModeChip({
   const chip =
     mode === "unknown" ? (
       <span className={`chip chip-neutral ${className}`.trim()} aria-label="Runtime mode: checking">
-        Checking network…
+        Connecting…
       </span>
     ) : isSimulation ? (
       <span className={`chip chip-sim ${className}`.trim()} aria-label="Runtime mode: simulation">
