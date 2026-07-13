@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simDeposit } from "@/lib/simulationStore";
-import { getAztecTxMeta } from "@/lib/txHash";
+import { getAztecTxOutcome } from "@/lib/txHash";
 import { simResult } from "@/lib/aztecSim";
 
 export async function POST(request: NextRequest) {
@@ -41,9 +41,14 @@ export async function POST(request: NextRequest) {
     if (!kycAddr) {
       return NextResponse.json({ error: "NEXT_PUBLIC_KYC_VERIFIER_ADDRESS not set" }, { status: 500 });
     }
+    // Required like its siblings: silently skipping the EUR transfer would mint
+    // a deposit position for free (no fallback that lies — CLAUDE.md).
+    if (!eurTokenAddr) {
+      return NextResponse.json({ error: "NEXT_PUBLIC_EUR_TOKEN_ADDRESS not set" }, { status: 500 });
+    }
 
     // @aztec/aztec.js has no main export — use specific subpaths
-    const { Contract } = await import("@aztec/aztec.js/contracts");
+    const { Contract, BatchCall } = await import("@aztec/aztec.js/contracts");
     const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
     const { AztecAddress } = await import("@aztec/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
@@ -72,28 +77,22 @@ export async function POST(request: NextRequest) {
     }
     const hintedKycNote = credentialsResult.storage[0];
 
-    // Step 1: Transfer EUR from caller to housing fund (still public for
-    // the EUR stablecoin shadow; V2 privacy gain is on the housing-fund
-    // side where the deposit position becomes a private DepositNote).
-    let eurTransfer: ReturnType<typeof getAztecTxMeta> | null = null;
-    if (eurTokenAddr) {
-      // EUR is an AIP-20 token: transfer_public_to_public(from, to, amount, _nonce).
-      // from == caller (accountAddress) is self-authorized, so _nonce = 0.
-      const EurArtifactJson = await loadGeneratedArtifactJson("token_contract-Token.json");
-      const eurArtifact = loadContractArtifact(EurArtifactJson as Parameters<typeof loadContractArtifact>[0]);
-      const eurContract = await Contract.at(AztecAddress.fromString(eurTokenAddr), eurArtifact, wallet);
-      const eurReceipt = await eurContract.methods
-        .transfer_public_to_public(
-          accountAddress,
-          AztecAddress.fromString(housingFundAddr),
-          BigInt(amount),
-          0,
-        )
-        .send({ from: accountAddress });
-      eurTransfer = getAztecTxMeta(eurReceipt);
-    }
+    // The EUR transfer (still public for the EUR stablecoin shadow; V2 privacy
+    // gain is on the housing-fund side where the deposit position becomes a
+    // private DepositNote) is batched with deposit_private below into ONE tx.
+    // EUR is an AIP-20 token: transfer_public_to_public(from, to, amount, _nonce).
+    // from == caller (accountAddress) is self-authorized, so _nonce = 0.
+    const EurArtifactJson = await loadGeneratedArtifactJson("token_contract-Token.json");
+    const eurArtifact = loadContractArtifact(EurArtifactJson as Parameters<typeof loadContractArtifact>[0]);
+    const eurContract = await Contract.at(AztecAddress.fromString(eurTokenAddr), eurArtifact, wallet);
+    const eurTransferCall = eurContract.methods.transfer_public_to_public(
+      accountAddress,
+      AztecAddress.fromString(housingFundAddr),
+      BigInt(amount),
+      0,
+    );
 
-    // Step 2: V2 private deposit. The DepositNote lands in caller's PXE;
+    // V2 private deposit. The DepositNote lands in caller's PXE;
     // only the aggregate total_deposits counter is updated publicly.
     const HfArtifactJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
     const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
@@ -118,19 +117,43 @@ export async function POST(request: NextRequest) {
     const suppliedSeq = cursor.deposit_seq;
     const suppliedIsSmall = amountU128 <= cursor.small_threshold;
 
-    const receipt = await hfContract.methods
-      .deposit_private(amountU128, hintedKycNote, suppliedCumBefore, suppliedSeq, suppliedIsSmall)
-      .send({ from: accountAddress });
-    const deposit = getAztecTxMeta(receipt);
+    // Atomic: one tx carries both the EUR transfer and the private deposit.
+    // Previously these were two separate txs, so a deposit_private revert
+    // (e.g. stale cursor under a concurrent deposit) stranded the user's EUR
+    // in the fund with no DepositNote. BatchCall groups the private call and
+    // the enqueued public transfer into a single ExecutionPayload — if the tx
+    // reverts, both effects drop together.
+    const receipt = await new BatchCall(wallet, [
+      eurTransferCall,
+      hfContract.methods.deposit_private(
+        amountU128,
+        hintedKycNote,
+        suppliedCumBefore,
+        suppliedSeq,
+        suppliedIsSmall,
+      ),
+    ]).send({ from: accountAddress });
+
+    // send() resolves even when the mined tx reverted (e.g. the only_self tail's
+    // cursor equality assert lost a concurrency race) — inspect the receipt so a
+    // reverted deposit is never reported as success.
+    const outcome = getAztecTxOutcome(receipt);
+    if (outcome.reverted) {
+      return NextResponse.json(
+        { error: `Deposit was mined but reverted on-chain: ${outcome.error ?? "no revert reason in receipt"}` },
+        { status: 409 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
       message: `Privately deposited €${amount.toLocaleString()} to housing fund`,
-      txHash: deposit.txHash,
-      blockNumber: deposit.blockNumber,
-      status: deposit.status,
-      eurTransferTxHash: eurTransfer?.txHash ?? null,
-      eurTransferBlockNumber: eurTransfer?.blockNumber ?? null,
+      txHash: outcome.txHash,
+      blockNumber: outcome.blockNumber,
+      status: outcome.status,
+      // The EUR transfer now rides in the same tx as the deposit.
+      eurTransferTxHash: outcome.txHash,
+      eurTransferBlockNumber: outcome.blockNumber,
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);

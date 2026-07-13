@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
-import { simSetRorConfig } from "@/lib/simulationStore";
-import { getAztecTxMeta } from "@/lib/txHash";
+import { simSetRorConfig, simSetAcquisitionValue } from "@/lib/simulationStore";
+import { getAztecTxOutcome } from "@/lib/txHash";
 
 /**
  * POST /api/fund/ror — admin config for the capped-return parameters: the
  * fund-level Return on Rent (`set_ror_bps`) and, optionally, a property's
  * acquisition value (`set_acquisition_value`). Rent = ROR × acquisition value.
- * Sim: sets the in-memory ROR. Live: admin-only contract calls (the contract
- * enforces admin / admin-or-keeper). Used by scripts/seed-fsft.sh.
+ * Sim: sets the in-memory ROR (+ acquisition). Live: admin-only contract calls
+ * (the contract enforces admin / admin-or-keeper). Used by scripts/seed-fsft.sh.
+ *
+ * J4 note: properties funded through the matching queue already carry
+ * acquisition = the winning ask (match_next writes it). Passing
+ * propertyId/acquisitionValue here OVERWRITES that matched value — this is the
+ * explicit admin override path, not the default way acquisitions get set.
  *
  * Body: { rorBps: number, propertyId?: number, acquisitionValue?: number,
  *         accountIndex?: number, address?: string }
@@ -27,9 +32,16 @@ export async function POST(request: NextRequest) {
   if (!isLiveModeEnabled()) {
     const result = simSetRorConfig(bps);
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
+    // Parity with the live branch below: the same request that sets ROR may
+    // record an acquisition value (previously silently ignored in sim, which
+    // left the covenant ceiling unenforceable).
+    if (hasAcq) {
+      const acqResult = simSetAcquisitionValue(Number(propertyId), Number(acquisitionValue));
+      if (!acqResult.success) return NextResponse.json({ error: acqResult.error }, { status: 400 });
+    }
     return NextResponse.json({
       success: true,
-      message: `Set ROR to ${(bps / 100).toFixed(2)}% (simulation)`,
+      message: `Set ROR to ${(bps / 100).toFixed(2)}%${hasAcq ? ` + acquisition value for property ${propertyId}` : ""} (simulation)`,
       txHash: `sim_ror_${Date.now()}`,
     });
   }
@@ -57,14 +69,32 @@ export async function POST(request: NextRequest) {
     const from = AztecAddress.fromString(account.address);
 
     const rorReceipt = await hfContract.methods.set_ror_bps(BigInt(bps)).send({ from });
-    const rorMeta = getAztecTxMeta(rorReceipt);
+    // Both calls are admin-gated public functions that can revert post-mining —
+    // inspect each receipt, never report a reverted config change as applied.
+    const rorMeta = getAztecTxOutcome(rorReceipt);
+    if (rorMeta.reverted) {
+      return NextResponse.json(
+        { error: `set_ror_bps was mined but reverted on-chain: ${rorMeta.error ?? "no revert reason in receipt"}` },
+        { status: 409 }
+      );
+    }
 
     let acqTxHash: string | null = null;
     if (hasAcq) {
       const acqReceipt = await hfContract.methods
         .set_acquisition_value(Number(propertyId), BigInt(Number(acquisitionValue)))
         .send({ from });
-      acqTxHash = getAztecTxMeta(acqReceipt).txHash;
+      const acqOutcome = getAztecTxOutcome(acqReceipt);
+      if (acqOutcome.reverted) {
+        return NextResponse.json(
+          {
+            error: `ROR was set, but set_acquisition_value reverted on-chain: ${acqOutcome.error ?? "no revert reason in receipt"}`,
+            txHash: rorMeta.txHash,
+          },
+          { status: 409 }
+        );
+      }
+      acqTxHash = acqOutcome.txHash;
     }
 
     return NextResponse.json({

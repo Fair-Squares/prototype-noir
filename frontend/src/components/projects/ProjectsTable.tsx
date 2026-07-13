@@ -120,12 +120,52 @@ export function ProjectsTable({ rows }: ProjectsTableProps) {
           <Empty />
         ),
     },
+    {
+      // J6: the covenant terms voted with the request — capped monthly rent
+      // and, when the backing listing carries a market reference, the
+      // discount vs market (the RentComparison surface, table-dense form).
+      key: "covenantRent",
+      header: "Covenant rent",
+      align: "right",
+      hideOnMobile: true,
+      render: (row) =>
+        row.cappedMonthlyRentEur != null ? (
+          <span className="text-mono">
+            {formatEUR(row.cappedMonthlyRentEur)}/mo
+            {row.rentDiscountPct != null ? (
+              <span
+                className={
+                  row.rentDiscountPct >= 20
+                    ? "ml-1 font-semibold text-[var(--color-success)]"
+                    : "ml-1 text-text-2"
+                }
+              >
+                (−{row.rentDiscountPct}%)
+              </span>
+            ) : null}
+          </span>
+        ) : (
+          <Empty />
+        ),
+    },
+    {
+      key: "lock",
+      header: "Lock",
+      align: "right",
+      hideOnMobile: true,
+      render: (row) =>
+        row.lockYears != null ? (
+          <span className="text-mono text-text-2">{row.lockYears} yrs</span>
+        ) : (
+          <Empty />
+        ),
+    },
   ];
 
   return (
     <DataTable
       dense
-      caption="On-chain fields for every funding request: amounts, votes, distribution pool, snapshot deposits and deed valuation."
+      caption="On-chain fields for every funding request: amounts, votes, distribution pool, snapshot deposits, deed valuation and covenant terms."
       columns={columns}
       rows={rows}
       rowKey={(row) => row.id}

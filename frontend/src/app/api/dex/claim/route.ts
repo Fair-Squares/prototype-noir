@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
-import { requireAztecTxHash } from "@/lib/txHash";
+import { getAztecTxOutcome } from "@/lib/txHash";
 
 // FSFTDex V3: claim the proceeds (and/or refunds) accrued to an order's
 // anonymous owner_tag. The owner proves their OrderOwnerNote for `seq`; the DEX
@@ -56,10 +56,19 @@ export async function POST(request: NextRequest) {
     }
 
     const receipt = await dex.methods.claim(hinted, TOKEN[token]).send({ from });
+    // A mined claim can still revert in the public settlement leg — inspect
+    // the receipt, never report a reverted claim as paid out.
+    const outcome = getAztecTxOutcome(receipt);
+    if (outcome.reverted) {
+      return NextResponse.json(
+        { error: `Claim was mined but reverted on-chain: ${outcome.error ?? "no revert reason in receipt"}` },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({
       success: true,
       message: `Claimed ${token.toUpperCase()} proceeds to your private balance.`,
-      txHash: requireAztecTxHash(receipt),
+      txHash: outcome.txHash,
       source: "live",
     });
   } catch (error: unknown) {

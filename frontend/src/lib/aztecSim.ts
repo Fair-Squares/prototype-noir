@@ -45,5 +45,43 @@ export function humanizeContractError(raw: string): { message: string; status: n
   if (/credential revoked/.test(m)) {
     return { message: "Your KYC credential has been revoked, so this action can't be completed.", status: 403 };
   }
+  // J1/J2: listing + council review asserts.
+  if (/property owner role required/.test(m)) {
+    return { message: "Only registered property owners can submit a listing — get the property-owner role first.", status: 403 };
+  }
+  if (/council role required/.test(m)) {
+    return { message: "Only housing council members can review listings.", status: 403 };
+  }
+  if (/councillor already approved/.test(m)) {
+    return { message: "You already approved this listing — each council member reviews a listing once.", status: 409 };
+  }
+  if (/listing not under review/.test(m)) {
+    return { message: "This listing is no longer under review (already approved, rejected, or proposed).", status: 409 };
+  }
+  if (/listing not council-approved/.test(m)) {
+    return { message: "This listing has not passed council review yet, so an investor vote can't be opened on it.", status: 409 };
+  }
+  if (/score above 100/.test(m)) {
+    return { message: "Quality scores run from 0 to 100.", status: 400 };
+  }
+  // J3: the affordability baseline on covenant attach.
+  if (/covenant above affordability baseline/.test(m)) {
+    return {
+      message:
+        "The covenant's rent ceiling sits above the affordability baseline — the capped monthly rent must be at least 20% below the appraiser-attested market rent from the listing. Lower the rent ceiling and try again.",
+      status: 409,
+    };
+  }
+  // J4: funding-queue cranks.
+  if (/funding queue is empty/.test(m)) {
+    return { message: "The funding queue is empty — no approved requests are awaiting capital.", status: 409 };
+  }
+  if (/no fundable proposal in queue/.test(m)) {
+    return {
+      message:
+        "No queued request fits the pool right now — every waiting ask exceeds the fund's available balance. More deposits (or a smaller ask) will unblock matching.",
+      status: 409,
+    };
+  }
   return null;
 }

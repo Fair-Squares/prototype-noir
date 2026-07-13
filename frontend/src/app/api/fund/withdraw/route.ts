@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simWithdraw } from "@/lib/simulationStore";
-import { requireAztecTxHash } from "@/lib/txHash";
+import { getAztecTxOutcome } from "@/lib/txHash";
 import { simResult } from "@/lib/aztecSim";
 
 export async function POST(request: NextRequest) {
@@ -53,6 +53,13 @@ export async function POST(request: NextRequest) {
     // V2 path: withdraw_private consumes a whole DepositNote. Fetch the
     // caller's first note whose amount matches the requested withdraw.
     // Partial-withdraw / change-note minting is a follow-up.
+    //
+    // NOTE for future wiring: the PUBLIC transparency-mode path
+    // (HousingFund.withdraw) is deliberately NOT used here. It drains at most
+    // MAX_WITHDRAW_RECORDS (= 8) deposit records per call behind the H2b
+    // cursor — a caller whose ticket spans more records must split the
+    // withdrawal across multiple calls ("withdraw spans too many records"
+    // otherwise). Do not naively pass a full ticket to it.
     const depositsResult = simResult<{
       len: bigint;
       storage: { note: { amount: bigint } }[];
@@ -80,10 +87,21 @@ export async function POST(request: NextRequest) {
       .withdraw_private(target)
       .send({ from: accountAddress });
 
+    // send() resolves even when the mined tx reverted (e.g. the public tail's
+    // "insufficient available balance" assert) — never report a reverted
+    // withdrawal as success.
+    const outcome = getAztecTxOutcome(receipt);
+    if (outcome.reverted) {
+      return NextResponse.json(
+        { error: `Withdrawal was mined but reverted on-chain: ${outcome.error ?? "no revert reason in receipt"}` },
+        { status: 409 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       message: `Privately withdrew €${amount.toLocaleString()} from housing fund`,
-      txHash: requireAztecTxHash(receipt),
+      txHash: outcome.txHash,
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);

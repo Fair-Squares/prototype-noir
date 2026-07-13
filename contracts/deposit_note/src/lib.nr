@@ -2,9 +2,24 @@ use aztec::{
     macros::notes::note,
     protocol::{
         address::AztecAddress,
+        hash::poseidon2_hash,
         traits::{Deserialize, Packable, Serialize},
     },
 };
+
+/// H1: domain tag for the per-note withdraw marker nullifier that
+/// HousingFund.withdraw_private pushes when a DepositNote is spent.
+pub global WITHDRAW_NULLIFIER_DOMAIN: Field = 0x1505_5749_5448_4452_4157; // "WITHDRAW" tag
+
+/// H1: the per-note withdraw marker (inner nullifier). HousingFund pushes it on
+/// withdraw_private; its claim/reinvest paths -- and Governance's fund-exposure
+/// vote check -- recompute it from the same kernel-verified note and prove its
+/// SILOED form (siloed to the note's origin contract) was absent at their
+/// anchor/snapshot block. Lives here, next to DepositNote, so every consumer
+/// derives the marker from one definition.
+pub fn withdraw_marker_nullifier(note_hash: Field) -> Field {
+    poseidon2_hash([note_hash, WITHDRAW_NULLIFIER_DOMAIN])
+}
 
 /// A private record of EUR deposited into the housing fund by `owner`.
 ///

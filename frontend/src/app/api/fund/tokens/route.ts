@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simGetFundStats, simGetPortfolio } from "@/lib/simulationStore";
-import { requireAztecTxHash } from "@/lib/txHash";
+import { getAztecTxOutcome } from "@/lib/txHash";
 import { simResult } from "@/lib/aztecSim";
 
 export async function GET(request: NextRequest) {
@@ -208,6 +208,14 @@ export async function POST(request: NextRequest) {
     const receipt = await dripper.methods
       .drip_to_public(AztecAddress.fromString(eurTokenAddr), BigInt(Number(amount)))
       .send({ from: actorAddress });
+    // A mined drip can still revert (e.g. faucet cap) — inspect the receipt.
+    const outcome = getAztecTxOutcome(receipt);
+    if (outcome.reverted) {
+      return NextResponse.json(
+        { error: `Drip was mined but reverted on-chain: ${outcome.error ?? "no revert reason in receipt"}` },
+        { status: 409 }
+      );
+    }
     // Avoid logging the funded amount/address together: that ties an identity
     // to a chosen EUR amount in server logs. Log only that a drip succeeded.
     console.info(`[fund/tokens POST] Drip succeeded`);
@@ -215,7 +223,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: `Dripped ${Number(amount).toLocaleString()} EURs to your account`,
-      txHash: requireAztecTxHash(receipt),
+      txHash: outcome.txHash,
       source: "live",
     });
   } catch (error: unknown) {

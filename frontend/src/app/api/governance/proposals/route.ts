@@ -5,10 +5,14 @@ import { getAztecTxHash, getAztecTxOutcome } from "@/lib/txHash";
 import { simResult, humanizeContractError } from "@/lib/aztecSim";
 import {
   simGetProposals,
+  simGetListings,
   simCreateProposal,
+  simCreateProposalFromListing,
+  simSetCovenant,
   simFinalizeProposal,
   simExecuteProposal,
   simOpenDistribution,
+  simSyncProposalCovenant,
   simGetClaimableAmount,
 } from "@/lib/simulationStore";
 
@@ -46,10 +50,14 @@ export async function GET(request: NextRequest) {
   const accountIndex = Number(searchParams.get("accountIndex") ?? "0");
 
   if (!isLiveModeEnabled()) {
+    const listings = simGetListings();
     const proposals = simGetProposals().map((proposal) => {
       const totalVotes = proposal.yesVotes + proposal.noVotes;
       const claimableAmount = address ? simGetClaimableAmount(proposal.id, address) : 0;
       const hasClaimed = address ? proposal.claimedBy.includes(address) : false;
+      // J4: listing back-reference — listing-backed proposals fund via the
+      // matching queue, not admin execution.
+      const backingListing = listings.find((l) => l.proposalId === proposal.id);
       return {
         ...proposal,
         // Sim deadlines are unix SECONDS, not block heights. Mark them so
@@ -60,6 +68,7 @@ export async function GET(request: NextRequest) {
         quorumReached: totalVotes >= proposal.quorumRequired,
         claimableAmount,
         hasClaimed,
+        listingId: backingListing ? backingListing.id : null,
       };
     });
     return NextResponse.json({ proposals, source: "simulation" });
@@ -119,7 +128,7 @@ export async function GET(request: NextRequest) {
 
     const proposals = await Promise.all(
       Array.from({ length: count }, async (_, id) => {
-        const [proposal, distribution, covenantRaw] = await Promise.all([
+        const [proposal, distribution, covenantRaw, listingPlusOne] = await Promise.all([
           govContract.methods.get_proposal(id).simulate({ from }).then((r) =>
             simResult<{
               desc_hash: bigint;
@@ -150,6 +159,12 @@ export async function GET(request: NextRequest) {
               target_group: bigint;
               is_set: boolean;
             }>(r)
+          ),
+          // J4: listing back-reference (listing_id + 1; 0 = legacy direct
+          // proposal). Listing-backed proposals fund via the matching queue,
+          // not admin execution — the UI branches on this.
+          govContract.methods.get_proposal_listing_id_plus_one(id).simulate({ from }).then((r) =>
+            Number(simResult(r))
           ),
         ]);
 
@@ -247,6 +262,7 @@ export async function GET(request: NextRequest) {
           hasClaimed,
           claimableAmount,
           hasPrivateDeposits,
+          listingId: listingPlusOne > 0 ? listingPlusOne - 1 : null,
           covenant: covenantRaw.is_set
             ? {
                 isSet: true,
@@ -290,6 +306,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, proposal: result.proposal });
     }
 
+    // J1: open the investor vote on a council-approved listing (the ask is
+    // inherited from the listing — amount is deliberately not a parameter).
+    if (action === "create_from_listing") {
+      const { listingId } = body;
+      if (listingId === undefined || !title) {
+        return NextResponse.json({ error: "listingId and title required" }, { status: 400 });
+      }
+      const result = simCreateProposalFromListing(
+        address ?? "0x0",
+        Number(listingId),
+        title,
+        description ?? ""
+      );
+      if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
+      return NextResponse.json({ success: true, proposal: result.proposal });
+    }
+
+    // W1/J3: sim covenant attach, mirroring Governance.set_proposal_covenant
+    // including the listing-backed affordability-baseline check.
+    if (action === "set_covenant") {
+      const { rentCeilingBps, lockYears } = body;
+      if (rentCeilingBps == null || lockYears == null) {
+        return NextResponse.json({ error: "rentCeilingBps, lockYears required" }, { status: 400 });
+      }
+      const result = simSetCovenant(
+        address ?? "0x0",
+        Number(proposalId),
+        Number(rentCeilingBps),
+        Number(lockYears)
+      );
+      if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
+      return NextResponse.json({ success: true, message: "Covenant attached" });
+    }
+
     if (action === "finalize") {
       const result = simFinalizeProposal(Number(proposalId));
       if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
@@ -301,6 +351,15 @@ export async function POST(request: NextRequest) {
       if (!executeResult.success) return NextResponse.json({ error: executeResult.error }, { status: 400 });
       const openResult = simOpenDistribution(Number(proposalId));
       if (!openResult.success) return NextResponse.json({ error: openResult.error }, { status: 400 });
+      // W1c: bind the covenant to rent enforcement, mirroring the live branch
+      // below. match-funded proposals sync inside simMatchNext; this admin
+      // path must do it explicitly (only when a covenant is attached — sync
+      // rejects covenant-less proposals, like the contract).
+      const simProposal = simGetProposals().find((p) => p.id === Number(proposalId));
+      if (simProposal?.covenant?.isSet) {
+        const syncResult = simSyncProposalCovenant(Number(proposalId));
+        if (!syncResult.success) return NextResponse.json({ error: syncResult.error }, { status: 400 });
+      }
       return NextResponse.json({
         success: true,
         message: "Proposal executed and distribution opened",
@@ -357,10 +416,52 @@ export async function POST(request: NextRequest) {
         .create_proposal(descHash, BigInt(amount))
         .send({ from: actorAddress });
 
+      // Mirror the other actions below: a mined create can still revert in the
+      // public leg — never report a proposal that does not exist as created.
+      const createOutcome = getAztecTxOutcome(receipt);
+      if (createOutcome.reverted) {
+        const mapped = humanizeContractError(createOutcome.error ?? "");
+        if (mapped) return NextResponse.json({ error: mapped.message }, { status: mapped.status });
+        return NextResponse.json(
+          { error: `Proposal creation reverted: ${createOutcome.error ?? "see contract assertion."}` },
+          { status: 409 }
+        );
+      }
+
       return NextResponse.json({
         success: true,
         message: `Proposal \"${title}\" created`,
-        txHash: getAztecTxHash(receipt),
+        txHash: createOutcome.txHash,
+      });
+    }
+
+    // J1: open the investor vote on a council-approved listing. The contract
+    // inherits the ask from the listing and flips it to PROPOSED, so the only
+    // inputs are the listing id and the human title for the desc hash.
+    if (action === "create_from_listing") {
+      const { listingId } = body;
+      if (listingId === undefined || !title) {
+        return NextResponse.json({ error: "listingId and title required" }, { status: 400 });
+      }
+      const actorAddress = AztecAddress.fromString(actor.address);
+      const descHashBytes = Buffer.from(title.slice(0, 31), "utf-8");
+      const descHash = BigInt("0x" + descHashBytes.toString("hex").padStart(64, "0"));
+      const receipt = await govContract.methods
+        .create_proposal_from_listing(Number(listingId), descHash)
+        .send({ from: actorAddress });
+      const outcome = getAztecTxOutcome(receipt);
+      if (outcome.reverted) {
+        const mapped = humanizeContractError(outcome.error ?? "");
+        if (mapped) return NextResponse.json({ error: mapped.message }, { status: mapped.status });
+        return NextResponse.json(
+          { error: `Proposal creation from listing reverted: ${outcome.error ?? "see contract assertion."}` },
+          { status: 409 }
+        );
+      }
+      return NextResponse.json({
+        success: true,
+        message: `Investor vote opened for \"${title}\"`,
+        txHash: outcome.txHash,
       });
     }
 
@@ -420,11 +521,44 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // W1c: bind the voted covenant to rent enforcement. match_next syncs
+      // on-chain at funding time, but proposals executed via this admin path
+      // never reach match_next — without this step record_rent's ceiling
+      // silently never engages (unsynced covenant = no enforcement by
+      // design). sync is permissionless + idempotent; only called when a
+      // covenant is attached (it reverts on covenant-less proposals).
+      let covenantSyncTxHash: string | null = null;
+      const covenant = simResult<{ is_set: boolean }>(
+        await govAsAdmin.methods.get_proposal_covenant(Number(proposalId)).simulate({ from: adminAddress })
+      );
+      if (covenant.is_set) {
+        const syncReceipt = await hfAsAdmin.methods
+          .sync_proposal_covenant(Number(proposalId))
+          .send({ from: adminAddress });
+        const syncOutcome = getAztecTxOutcome(syncReceipt);
+        if (syncOutcome.reverted) {
+          // Partial-state honesty (same shape as fund/ror): execution and the
+          // distribution ARE live; only the rent-ceiling binding failed.
+          return NextResponse.json(
+            {
+              error: `Proposal executed and distribution opened, but the covenant sync reverted — the rent ceiling is NOT yet enforced for this property: ${syncOutcome.error ?? "see contract assertion."}`,
+              txHash: executeOutcome.txHash,
+              openDistributionTxHash: openOutcome.txHash,
+            },
+            { status: 409 }
+          );
+        }
+        covenantSyncTxHash = syncOutcome.txHash;
+      }
+
       return NextResponse.json({
         success: true,
         txHash: executeOutcome.txHash,
         openDistributionTxHash: openOutcome.txHash,
-        message: "Proposal executed and distribution opened",
+        covenantSyncTxHash,
+        message: covenantSyncTxHash
+          ? "Proposal executed, distribution opened, and the affordability covenant is now enforced"
+          : "Proposal executed and distribution opened",
       });
     }
 

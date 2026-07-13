@@ -117,3 +117,52 @@ unconstrained fn test_register_kyc_rejects_non_verifier() {
 
     env.call_public(mallory, KYCVerifier::at(kyc_addr).register_kyc(alice));
 }
+
+// -- J1/J2: journey roles (property owner + council) ---------------------------
+
+#[test]
+unconstrained fn test_register_property_owner_flips_view() {
+    let (mut env, kyc_addr, admin) = setup();
+    let owner = env.create_light_account();
+    assert_eq(env.view_public(KYCVerifier::at(kyc_addr).is_property_owner(owner)), false);
+    env.call_public(admin, KYCVerifier::at(kyc_addr).register_property_owner(owner));
+    assert_eq(env.view_public(KYCVerifier::at(kyc_addr).is_property_owner(owner)), true);
+    env.call_public(admin, KYCVerifier::at(kyc_addr).revoke_property_owner(owner));
+    assert_eq(env.view_public(KYCVerifier::at(kyc_addr).is_property_owner(owner)), false);
+}
+
+#[test(should_fail_with = "caller is not an authorised verifier")]
+unconstrained fn test_register_property_owner_rejects_non_verifier() {
+    let (mut env, kyc_addr, _admin) = setup();
+    let stranger = env.create_light_account();
+    let owner = env.create_light_account();
+    env.call_public(stranger, KYCVerifier::at(kyc_addr).register_property_owner(owner));
+}
+
+#[test]
+unconstrained fn test_set_council_role_grant_and_revoke() {
+    let (mut env, kyc_addr, admin) = setup();
+    let councillor = env.create_light_account();
+    assert_eq(env.view_public(KYCVerifier::at(kyc_addr).is_council(councillor)), false);
+    env.call_public(admin, KYCVerifier::at(kyc_addr).set_council_role(councillor, true));
+    assert_eq(env.view_public(KYCVerifier::at(kyc_addr).is_council(councillor)), true);
+    env.call_public(admin, KYCVerifier::at(kyc_addr).set_council_role(councillor, false));
+    assert_eq(env.view_public(KYCVerifier::at(kyc_addr).is_council(councillor)), false);
+}
+
+#[test(should_fail_with = "caller is not admin")]
+unconstrained fn test_set_council_role_requires_admin() {
+    let (mut env, kyc_addr, _admin) = setup();
+    let stranger = env.create_light_account();
+    env.call_public(stranger, KYCVerifier::at(kyc_addr).set_council_role(stranger, true));
+}
+
+#[test]
+unconstrained fn test_roles_are_independent_of_investor() {
+    let (mut env, kyc_addr, admin) = setup();
+    let owner = env.create_light_account();
+    // Granting the property-owner role does not confer investor/verified status.
+    env.call_public(admin, KYCVerifier::at(kyc_addr).register_property_owner(owner));
+    assert_eq(env.view_public(KYCVerifier::at(kyc_addr).is_investor(owner)), false);
+    assert_eq(env.view_public(KYCVerifier::at(kyc_addr).is_verified(owner)), false);
+}

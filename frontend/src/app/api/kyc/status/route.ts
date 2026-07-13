@@ -58,6 +58,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         verified: false,
         isInvestor: false,
+        isPropertyOwner: false,
+        isCouncil: false,
         roles: [],
         canTradeDex: false,
         canVote: false,
@@ -130,7 +132,7 @@ export async function GET(request: NextRequest) {
     // FSFT exposure uses the AIP-20 token's public balance check. The V2
     // token has no private-holder-proof primitive, so exposure is the
     // public balance alone. All three reads are independent.
-    const [credentialsRaw, depositNotesRaw, fsftPublicBalance] = await Promise.all([
+    const [credentialsRaw, depositNotesRaw, fsftPublicBalance, ownerRaw, councilRaw] = await Promise.all([
       kycContract.methods.get_my_kyc_credentials(userAddress, 0).simulate({ from: readFrom }),
       hasHfFt
         ? hfContract!.methods.get_my_deposit_notes(userAddress, 0).simulate({ from: readFrom })
@@ -138,13 +140,20 @@ export async function GET(request: NextRequest) {
       hasHfFt
         ? ftContract!.methods.balance_of_public(userAddress).simulate({ from: readFrom })
         : Promise.resolve(null),
+      // J1/J2 journey roles: public #[view] maps (transparency-mode by design).
+      kycContract.methods.is_property_owner(userAddress).simulate({ from: readFrom }),
+      kycContract.methods.is_council(userAddress).simulate({ from: readFrom }),
     ]);
 
     const credentialsResult = simResult<{ len: bigint }>(credentialsRaw);
     const isInvestor = credentialsResult.len > 0n;
     const verified = isInvestor;
+    const isPropertyOwner = Boolean(simResult(ownerRaw));
+    const isCouncil = Boolean(simResult(councilRaw));
     const roles: string[] = [];
     if (isInvestor) roles.push("investor");
+    if (isPropertyOwner) roles.push("property owner");
+    if (isCouncil) roles.push("council");
 
     let hasDepositTicket = false;
     let hasFsftExposure = false;
@@ -163,6 +172,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       verified: Boolean(verified),
       isInvestor: Boolean(isInvestor),
+      isPropertyOwner,
+      isCouncil,
       roles,
       canTradeDex: Boolean(isInvestor),
       canVote,

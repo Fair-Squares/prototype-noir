@@ -58,6 +58,15 @@ pub contract KYCVerifier {
         kyc_credentials: Owned<PrivateSet<KycCredentialNote, Context>, Context>,
         // V2 revocations: poseidon2_hash([owner.to_field(), nonce]) -> revoked?
         revocations: Map<Field, PublicMutable<bool, Context>, Context>,
+
+        // J1/J2 journey roles (appended at the END so existing slots keep their
+        // positions). Both are address-keyed PUBLIC maps and share the M15
+        // transparency-mode caveat above: council membership is public by
+        // nature; the property-owner row publicly marks an address as a
+        // submitter, which is acceptable for the onboarding flow (listings
+        // are public documents anyway).
+        council_role: Map<AztecAddress, PublicMutable<bool, Context>, Context>,
+        property_owner_role: Map<AztecAddress, PublicMutable<bool, Context>, Context>,
     }
 
     // CONSTRUCTOR
@@ -84,6 +93,18 @@ pub contract KYCVerifier {
     fn remove_verifier(verifier: AztecAddress) {
         assert_eq(self.msg_sender(), self.storage.admin.read(), "caller is not admin");
         self.storage.verifiers.at(verifier).write(false);
+    }
+
+    /// J2: admin grants/revokes Housing Council membership. Council members
+    /// review property listings (Governance.council_approve/council_reject)
+    /// before any listing can reach an investor vote. Same admin machinery as
+    /// verifiers; membership is deliberately public (a council is accountable
+    /// by name, unlike investors).
+    #[external("public")]
+    fn set_council_role(user: AztecAddress, granted: bool) {
+        assert_eq(self.msg_sender(), self.storage.admin.read(), "caller is not admin");
+        assert(!user.is_zero(), "invalid user address");
+        self.storage.council_role.at(user).write(granted);
     }
 
     /// ADMIN WARNING -- revocation is a TWO-SURFACE operation. This clears only
@@ -129,6 +150,44 @@ pub contract KYCVerifier {
             // Ensure investor role exists for already-verified legacy entries.
             self.storage.investor_role.at(user).write(true);
         }
+    }
+
+    /// J1: verifier grants the property-owner role -- the gate for
+    /// Governance.submit_listing. Mirrors register_kyc's verifier gating: the
+    /// same KYC process that vets investors vets submitters.
+    #[external("public")]
+    fn register_property_owner(user: AztecAddress) {
+        assert(
+            self.storage.verifiers.at(self.msg_sender()).read(),
+            "caller is not an authorised verifier",
+        );
+        assert(!user.is_zero(), "invalid user address");
+        self.storage.property_owner_role.at(user).write(true);
+    }
+
+    /// J1: verifier revokes the property-owner role. Existing listings are
+    /// unaffected (they are already public documents under council review).
+    #[external("public")]
+    fn revoke_property_owner(user: AztecAddress) {
+        assert(
+            self.storage.verifiers.at(self.msg_sender()).read(),
+            "caller is not an authorised verifier",
+        );
+        self.storage.property_owner_role.at(user).write(false);
+    }
+
+    /// J2: public council-membership check (transparency-mode by design).
+    #[view]
+    #[external("public")]
+    fn is_council(user: AztecAddress) -> bool {
+        self.storage.council_role.at(user).read()
+    }
+
+    /// J1: public property-owner check (transparency-mode, see M15 note).
+    #[view]
+    #[external("public")]
+    fn is_property_owner(user: AztecAddress) -> bool {
+        self.storage.property_owner_role.at(user).read()
     }
 
     // V2: PRIVATE CREDENTIAL FLOW

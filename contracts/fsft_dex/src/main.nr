@@ -181,6 +181,9 @@ pub contract FSFTDex {
         assert(!fsft_token.is_zero(), "invalid fsft token");
         assert(!eur_token.is_zero(), "invalid eur token");
         assert(price_band_bps > 0, "invalid price band");
+        // Above 100% the band math (ref * (10000 - band)) underflows and every
+        // placement/snapshot would trap -- one admin typo must not halt the book.
+        assert(price_band_bps <= 10000, "price band above 100%");
         assert(max_ttl_blocks > 0, "invalid max ttl");
 
         self.storage.admin.write(admin);
@@ -198,6 +201,9 @@ pub contract FSFTDex {
     fn set_risk_policy(price_band_bps: u32, max_ttl_blocks: u32) {
         assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
         assert(price_band_bps > 0, "invalid price band");
+        // Above 100% the band math (ref * (10000 - band)) underflows and every
+        // placement/snapshot would trap -- one admin typo must not halt the book.
+        assert(price_band_bps <= 10000, "price band above 100%");
         assert(max_ttl_blocks > 0, "invalid max ttl");
         self.storage.price_band_bps.write(price_band_bps);
         self.storage.max_ttl_blocks.write(max_ttl_blocks);
@@ -334,6 +340,12 @@ pub contract FSFTDex {
         let (_ref_price_bps, min_price_bps, max_price_bps) =
             price_band_bounds(valuation.last_token_price_bps, self.storage.price_band_bps.read());
         assert((price_bps >= min_price_bps) & (price_bps <= max_price_bps), "price out of band");
+
+        // Enforce the TTL risk policy. Like the price band above, max_ttl_blocks
+        // was only surfaced in the snapshot view -- nothing constrained it, so an
+        // order could rest for u32-max blocks and the policy was a dead letter.
+        assert(ttl_blocks > 0, "ttl must be positive");
+        assert(ttl_blocks <= self.storage.max_ttl_blocks.read(), "ttl exceeds policy");
 
         // Forge-proof FCFS sequence stamp (supplied-then-verified).
         let seq = self.storage.seq_counter.read();

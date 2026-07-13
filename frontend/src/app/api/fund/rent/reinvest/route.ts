@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simReinvestRent } from "@/lib/simulationStore";
-import { requireAztecTxHash } from "@/lib/txHash";
+import { getAztecTxOutcome } from "@/lib/txHash";
 import { simResult, isDuplicateNullifierError } from "@/lib/aztecSim";
 
 // Mirror of the contract's allocation math (HousingFund.total_claim) so the
@@ -130,10 +130,27 @@ export async function POST(request: NextRequest) {
       )
       .send({ from: actorAddress });
 
+    // A mined reinvest can still revert in the public tail (duplicate epoch
+    // nullifier, stale cursor race) — mirror the thrown-path mapping below.
+    const outcome = getAztecTxOutcome(receipt);
+    if (outcome.reverted) {
+      const m = outcome.error ?? "";
+      if (isDuplicateNullifierError(m)) {
+        return NextResponse.json(
+          { error: "You have already claimed or reinvested rent for this epoch." },
+          { status: 409 }
+        );
+      }
+      return NextResponse.json(
+        { error: `Reinvest was mined but reverted on-chain: ${m || "no revert reason in receipt"}` },
+        { status: 409 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       reinvested: Number(share),
-      txHash: requireAztecTxHash(receipt),
+      txHash: outcome.txHash,
       message: `Reinvested €${Number(share).toLocaleString()} rent into the fund`,
     });
   } catch (error: unknown) {

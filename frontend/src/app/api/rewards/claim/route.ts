@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simClaimRewards } from "@/lib/simulationStore";
-import { requireAztecTxHash } from "@/lib/txHash";
+import { getAztecTxOutcome } from "@/lib/txHash";
 import { simResult, isDuplicateNullifierError } from "@/lib/aztecSim";
 
 export async function POST(request: NextRequest) {
@@ -78,11 +78,24 @@ export async function POST(request: NextRequest) {
     const receipt = await rewardsContract.methods
       .claim_reward_private(hintedRewardNote, AztecAddress.fromString(protocolTokenAddr))
       .send({ from: actorAddress });
+    // A mined claim can still revert in the public tail (pool ledger,
+    // duplicate nullifier) — mirror the thrown-path mapping below.
+    const outcome = getAztecTxOutcome(receipt);
+    if (outcome.reverted) {
+      const m = outcome.error ?? "";
+      if (isDuplicateNullifierError(m)) {
+        return NextResponse.json({ error: "You have already claimed this reward." }, { status: 409 });
+      }
+      return NextResponse.json(
+        { error: `Reward claim was mined but reverted on-chain: ${m || "no revert reason in receipt"}` },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({
       success: true,
       claimed: claimedAmount,
       message: "Protocol rewards privately claimed",
-      txHash: requireAztecTxHash(receipt),
+      txHash: outcome.txHash,
       source: "live",
     });
   } catch (error: unknown) {

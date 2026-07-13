@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { votingWindowFor } from "@/lib/proposalLifecycle";
+import { CouncilQueue } from "@/components/governance/CouncilQueue";
 import { CreateProposalForm } from "@/components/governance/CreateProposalForm";
 import { GovernanceMemoCard } from "@/components/governance/GovernanceMemoCard";
 import {
@@ -21,9 +22,12 @@ import {
   createProposal,
   fetchGovernanceEligibility,
   fetchKYCProfile,
+  fetchListings,
   fetchProposals,
+  registerKYC,
   type GovernanceEligibility,
   type KYCProfile,
+  type Listing,
   type Proposal,
 } from "@/lib/contracts";
 
@@ -43,6 +47,8 @@ export default function GovernancePage() {
   const accountIndex = activeAccount?.index ?? 0;
 
   const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [joiningCouncil, setJoiningCouncil] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [attesting, setAttesting] = useState(false);
@@ -63,9 +69,13 @@ export default function GovernancePage() {
     const seq = ++refreshSeqRef.current;
     setLoading(true);
     try {
-      const next = await fetchProposals(address ?? undefined, accountIndex);
+      const [next, nextListings] = await Promise.all([
+        fetchProposals(address ?? undefined, accountIndex),
+        fetchListings(),
+      ]);
       if (seq !== refreshSeqRef.current) return;
       setProposals(next);
+      setListings(nextListings);
       setLoadError(null);
     } catch (error: unknown) {
       if (seq !== refreshSeqRef.current) return;
@@ -229,6 +239,41 @@ export default function GovernancePage() {
           </>
         )}
       </KpiGrid>
+
+      {address && (kycProfile.isCouncil ?? false) ? (
+        <CouncilQueue
+          address={address}
+          accountIndex={accountIndex}
+          listings={listings}
+          onReviewed={() => void refresh()}
+        />
+      ) : address && standingLoaded && listings.some((l) => l.status === 1) ? (
+        <Section
+          title="Council review queue"
+          description={`${listings.filter((l) => l.status === 1).length} listing(s) await housing council review. Council membership is an admin grant; in this demo you can join instantly to walk the journey.`}
+        >
+          <Button
+            variant="secondary"
+            loading={joiningCouncil}
+            onClick={async () => {
+              setJoiningCouncil(true);
+              try {
+                await registerKYC(address, true, ["council"]);
+                setKycProfile(await fetchKYCProfile(address));
+              } catch (error: unknown) {
+                setNotice({
+                  tone: "danger",
+                  text: error instanceof Error ? error.message : String(error),
+                });
+              } finally {
+                setJoiningCouncil(false);
+              }
+            }}
+          >
+            {joiningCouncil ? "Joining…" : "Join the housing council (demo)"}
+          </Button>
+        </Section>
+      ) : null}
 
       {address && kycProfile.isInvestor && !canVote ? (
         <Section

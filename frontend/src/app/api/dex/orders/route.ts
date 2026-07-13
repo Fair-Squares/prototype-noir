@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simGetDexOrderbook, simPlaceDexOrder } from "@/lib/simulationStore";
-import { requireAztecTxHash } from "@/lib/txHash";
+import { getAztecTxOutcome } from "@/lib/txHash";
 import { simResult } from "@/lib/aztecSim";
 import { getBlockNumber } from "@/lib/aztecClient";
 
@@ -107,6 +107,12 @@ export async function POST(request: NextRequest) {
 
   if (!address || !side || !amount) {
     return NextResponse.json({ error: "address, side and amount are required" }, { status: 400 });
+  }
+  // The DEX enforces a TTL risk policy on placement (0 < ttl <= max_ttl_blocks).
+  // The clamp below handles the upper bound; reject a nonsensical explicit TTL
+  // here instead of letting Math.min(0, max) send a guaranteed revert.
+  if (ttlBlocks !== undefined && (!Number.isInteger(ttlBlocks) || ttlBlocks <= 0)) {
+    return NextResponse.json({ error: "ttlBlocks must be a positive integer when provided" }, { status: 400 });
   }
 
   if (!isLiveModeEnabled()) {
@@ -223,9 +229,19 @@ export async function POST(request: NextRequest) {
       );
       if (privateEur < escrowAmount) {
         shieldedAmount = escrowAmount - privateEur;
-        await token.methods
+        const shieldReceipt = await token.methods
           .transfer_public_to_private(from, from, shieldedAmount, 0)
           .send({ from });
+        // The shield is a separate committed tx; if it reverted, the private
+        // balance the placement is about to escrow does not exist — stop here
+        // rather than let place_order fail confusingly downstream.
+        const shieldOutcome = getAztecTxOutcome(shieldReceipt);
+        if (shieldOutcome.reverted) {
+          return NextResponse.json(
+            { error: `EUR shield transfer was mined but reverted on-chain: ${shieldOutcome.error ?? "no revert reason in receipt"}` },
+            { status: 409 }
+          );
+        }
       }
     }
 
@@ -253,6 +269,22 @@ export async function POST(request: NextRequest) {
       )
       .send({ from, authWitnesses: [escrowAuthwit] });
 
+    // A mined placement can still revert in the public matcher tail (stale seq
+    // under a concurrent placement, TTL/band policy) — the escrow rides in the
+    // same tx so it reverts with it; report the failure, never a phantom order.
+    const outcome = getAztecTxOutcome(receipt);
+    if (outcome.reverted) {
+      return NextResponse.json(
+        {
+          error: `Order was mined but reverted on-chain: ${outcome.error ?? "no revert reason in receipt"}`,
+          // The shield self-transfer (if any) committed separately and is NOT
+          // rolled back — the EUR sits in the caller's private balance.
+          shieldedAmount: shieldedAmount > 0n ? Number(shieldedAmount) : 0,
+        },
+        { status: 409 }
+      );
+    }
+
     // SECURITY (M17): never return `secretOwnerKey`. It is the pre-image of the
     // anonymous owner tag (`owner_tag = poseidon2([secret, seq])`). Because `seq`
     // is public, leaking the secret lets anyone recompute the tag and read the
@@ -269,7 +301,7 @@ export async function POST(request: NextRequest) {
         matchCount > 0
           ? `Order placed and matched ${matchCount} resting order(s) on-chain.`
           : "Order placed — resting in the book until a crossing order matches it.",
-      txHash: requireAztecTxHash(receipt),
+      txHash: outcome.txHash,
       source: "live",
     });
   } catch (error: unknown) {

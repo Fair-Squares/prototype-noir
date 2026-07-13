@@ -351,7 +351,14 @@ pub contract ProtocolRewards {
         // tail. Without the pool check, an admin could mint arbitrary protocol
         // tokens via private reward notes (the vendored Token has no supply cap),
         // bypassing the 8M pool that only checkpoint_epoch enforces.
-        self.enqueue_self._assert_admin_and_epoch_open(epoch, self.msg_sender(), amount as u64);
+        //
+        // Narrowing `as` casts WRAP in Noir (they don't trap): an allocation of
+        // 2^64 + N would cross the tail as N and pass the pool cap while the
+        // note mints the full u128. Round-trip the cast so oversized amounts
+        // fail here instead.
+        let amount_u64 = amount as u64;
+        assert(amount_u64 as u128 == amount, "amount exceeds u64 range");
+        self.enqueue_self._assert_admin_and_epoch_open(epoch, self.msg_sender(), amount_u64);
 
         let note = RewardClaimNote::new(recipient, amount, epoch);
         self.storage.reward_notes.at(recipient).insert(note).deliver(
@@ -427,7 +434,11 @@ pub contract ProtocolRewards {
         self.call(Token::at(protocol_token_addr).mint_to_private(caller, amount));
 
         // Public aggregate bump (u64 ledger) + protocol_token_addr verification.
+        // Round-trip the narrowing cast (wraps, doesn't trap) so the u64 ledger
+        // can never under-count what was actually minted above -- defense in
+        // depth for notes that predate the allocate-side range check.
         let amount_u64 = amount as u64;
+        assert(amount_u64 as u128 == amount, "amount exceeds u64 range");
         self.enqueue_self._record_private_claim(amount_u64, protocol_token_addr);
     }
 

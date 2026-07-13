@@ -23,6 +23,8 @@ import {
   RewardsPanel,
   WithdrawPanel,
 } from "@/components/portfolio";
+import { DexOrdersPanel } from "@/components/portfolio/DexOrdersPanel";
+import { PropertyExposure } from "@/components/portfolio/PropertyExposure";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   attestFsftForRewards,
@@ -32,12 +34,14 @@ import {
   fetchKYCProfile,
   fetchPortfolio,
   formatFSFT,
+  fetchProperties,
   fetchProposals,
   fetchRewardsStats,
   reinvestRent,
   withdrawFunds,
   type KYCProfile,
   type PortfolioData,
+  type PropertyDeed,
   type Proposal,
   type RewardsStats,
 } from "@/lib/contracts";
@@ -53,6 +57,7 @@ export default function PortfolioPage() {
   const [kyc, setKyc] = useState<KYCProfile>(EMPTY_KYC);
   const [rewards, setRewards] = useState<RewardsStats | null>(null);
   const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [properties, setProperties] = useState<PropertyDeed[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
@@ -69,17 +74,20 @@ export default function PortfolioPage() {
     const seq = ++loadSeqRef.current;
     setLoading(true);
     try {
-      const [nextPortfolio, nextKyc, nextRewards, nextProposals] = await Promise.all([
-        fetchPortfolio(addr, accountIndex),
-        fetchKYCProfile(addr),
-        fetchRewardsStats(addr, accountIndex),
-        fetchProposals(addr, accountIndex),
-      ]);
+      const [nextPortfolio, nextKyc, nextRewards, nextProposals, nextProperties] =
+        await Promise.all([
+          fetchPortfolio(addr, accountIndex),
+          fetchKYCProfile(addr),
+          fetchRewardsStats(addr, accountIndex),
+          fetchProposals(addr, accountIndex),
+          fetchProperties(),
+        ]);
       if (seq !== loadSeqRef.current) return;
       setPortfolio(nextPortfolio);
       setKyc(nextKyc);
       setRewards(nextRewards);
       setProposals(nextProposals);
+      setProperties(nextProperties);
       setError(null);
     } catch (loadError: unknown) {
       if (seq !== loadSeqRef.current) return;
@@ -351,6 +359,19 @@ export default function PortfolioPage() {
 
             <ReadinessSummary kyc={kyc} portfolio={portfolio} />
           </div>
+
+          {/* 3b · J6: your slice of each home the fund owns. Votes cast are
+              deliberately NOT listed: ballots are secret by design (private
+              nullifiers), so no per-account vote feed can exist on-chain. */}
+          <Section
+            title="Property exposure"
+            description="Your fund share applied to each home the fund holds — weight and euro exposure per deed."
+          >
+            <PropertyExposure properties={properties} portfolio={portfolio} />
+          </Section>
+
+          {/* 3c · J6: DEX orders overview (self-contained; claim/cancel on /dex). */}
+          <DexOrdersPanel address={address} accountIndex={accountIndex} />
 
           {/* 4 · Participation rewards (claim stays in the portfolio) */}
           <RewardsPanel

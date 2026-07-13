@@ -9,16 +9,24 @@ export default function HeaderWalletButton() {
     useWallet();
   const [showDropdown, setShowDropdown] = useState(false);
   const [isInvestor, setIsInvestor] = useState(false);
+  const [isPropertyOwner, setIsPropertyOwner] = useState(false);
+  const [isCouncil, setIsCouncil] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!activeAccount?.address) {
       setIsInvestor(false);
+      setIsPropertyOwner(false);
+      setIsCouncil(false);
       return;
     }
     fetchKYCProfile(activeAccount.address)
-      .then((profile) => setIsInvestor(Boolean(profile.isInvestor)))
+      .then((profile) => {
+        setIsInvestor(Boolean(profile.isInvestor));
+        setIsPropertyOwner(Boolean(profile.isPropertyOwner));
+        setIsCouncil(Boolean(profile.isCouncil));
+      })
       .catch((e) => console.error("KYC profile read failed", e));
   }, [activeAccount?.address]);
 
@@ -151,6 +159,8 @@ export default function HeaderWalletButton() {
         {isAdmin && <span className="chip chip-accent hidden sm:inline-flex">admin</span>}
         {activeAccount.isGenerated && <span className="chip chip-warning hidden sm:inline-flex">dev</span>}
         {isInvestor && <span className="chip chip-accent hidden sm:inline-flex">investor</span>}
+        {isPropertyOwner && <span className="chip chip-accent hidden sm:inline-flex">owner</span>}
+        {isCouncil && <span className="chip chip-success hidden sm:inline-flex">council</span>}
         <span aria-hidden="true" className="opacity-60">
           ▾
         </span>

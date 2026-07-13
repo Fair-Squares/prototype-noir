@@ -225,3 +225,211 @@ unconstrained fn test_public_covenant_getters_match() {
     assert_eq(env.view_public(Governance::at(gov).get_proposal_rent_ceiling_bps_public(0)), 350);
     assert_eq(env.view_public(Governance::at(gov).get_proposal_lock_years_public(0)), 20);
 }
+
+// -- J1/J2: listing + council review lifecycle --------------------------------
+// Extends setup_with_investor with a property owner and a council member so the
+// full journey middle (submit -> council review -> proposal) runs on the PUBLIC
+// path against a real KYCVerifier.
+unconstrained fn setup_with_listing_roles() -> (TestEnvironment, AztecAddress, AztecAddress, AztecAddress, AztecAddress, AztecAddress) {
+    let mut env = TestEnvironment::new();
+    let admin = env.create_light_account();
+    let proposer = env.create_light_account();
+    let owner = env.create_light_account();
+    let councillor = env.create_light_account();
+    let kyc = env.deploy("KYCVerifier").with_public_initializer(
+        admin,
+        KYCVerifier::interface().constructor(admin),
+    );
+    let gov = env.deploy("Governance").with_public_initializer(
+        admin,
+        Governance::interface().constructor(admin, kyc, admin, 300, 2),
+    );
+    // admin is the constructor-seeded verifier: it vets the investor and the
+    // property owner; council membership is an admin grant.
+    env.call_public(admin, KYCVerifier::at(kyc).register_kyc(proposer));
+    env.call_public(admin, KYCVerifier::at(kyc).register_property_owner(owner));
+    env.call_public(admin, KYCVerifier::at(kyc).set_council_role(councillor, true));
+    (env, gov, admin, proposer, owner, councillor)
+}
+
+#[test]
+unconstrained fn test_submit_listing_starts_submitted() {
+    let (mut env, gov, _admin, _proposer, owner, _councillor) = setup_with_listing_roles();
+    env.call_public(owner, Governance::at(gov).submit_listing(250000, 1200, Field::from(77)));
+    assert_eq(env.execute_utility(Governance::at(gov).get_listing_count()), 1);
+    let listing = env.execute_utility(Governance::at(gov).get_listing(0));
+    assert_eq(listing.ask_eur, 250000);
+    assert_eq(listing.market_rent_ref_eur, 1200);
+    assert_eq(listing.dossier_hash, Field::from(77));
+    assert_eq(listing.status, 1); // LISTING_SUBMITTED
+    assert_eq(listing.approvals, 0);
+    assert_eq(listing.quality_score, 0);
+}
+
+#[test(should_fail_with = "property owner role required")]
+unconstrained fn test_submit_listing_rejects_non_owner() {
+    let (mut env, gov, _admin, proposer, _owner, _councillor) = setup_with_listing_roles();
+    // proposer is an investor but not a registered property owner.
+    env.call_public(proposer, Governance::at(gov).submit_listing(250000, 1200, Field::from(77)));
+}
+
+#[test(should_fail_with = "dossier hash required")]
+unconstrained fn test_submit_listing_rejects_empty_dossier() {
+    let (mut env, gov, _admin, _proposer, owner, _councillor) = setup_with_listing_roles();
+    env.call_public(owner, Governance::at(gov).submit_listing(250000, 1200, Field::from(0)));
+}
+
+#[test]
+unconstrained fn test_council_approve_flips_status_and_scores() {
+    let (mut env, gov, _admin, _proposer, owner, councillor) = setup_with_listing_roles();
+    env.call_public(owner, Governance::at(gov).submit_listing(250000, 1200, Field::from(77)));
+    // min_council_approvals defaults to 1, so one approval crosses the threshold.
+    env.call_public(councillor, Governance::at(gov).council_approve(0, 82));
+    let listing = env.execute_utility(Governance::at(gov).get_listing(0));
+    assert_eq(listing.status, 2); // LISTING_COUNCIL_APPROVED
+    assert_eq(listing.approvals, 1);
+    assert_eq(listing.quality_score, 82);
+}
+
+#[test(should_fail_with = "council role required")]
+unconstrained fn test_council_approve_rejects_non_council() {
+    let (mut env, gov, _admin, proposer, owner, _councillor) = setup_with_listing_roles();
+    env.call_public(owner, Governance::at(gov).submit_listing(250000, 1200, Field::from(77)));
+    env.call_public(proposer, Governance::at(gov).council_approve(0, 82));
+}
+
+#[test(should_fail_with = "score above 100")]
+unconstrained fn test_council_approve_rejects_oversized_score() {
+    let (mut env, gov, _admin, _proposer, owner, councillor) = setup_with_listing_roles();
+    env.call_public(owner, Governance::at(gov).submit_listing(250000, 1200, Field::from(77)));
+    env.call_public(councillor, Governance::at(gov).council_approve(0, 101));
+}
+
+#[test(should_fail_with = "unknown listing")]
+unconstrained fn test_council_approve_rejects_unknown_listing() {
+    let (mut env, gov, _admin, _proposer, _owner, councillor) = setup_with_listing_roles();
+    // No listing was submitted; id 0 must not read as reviewable (nonzero-status lesson).
+    env.call_public(councillor, Governance::at(gov).council_approve(0, 50));
+}
+
+#[test(should_fail_with = "listing not under review")]
+unconstrained fn test_council_approve_rejects_already_approved_listing() {
+    let (mut env, gov, _admin, _proposer, owner, councillor) = setup_with_listing_roles();
+    env.call_public(owner, Governance::at(gov).submit_listing(250000, 1200, Field::from(77)));
+    env.call_public(councillor, Governance::at(gov).council_approve(0, 82));
+    // Threshold already crossed -> status is COUNCIL_APPROVED, not SUBMITTED.
+    env.call_public(councillor, Governance::at(gov).council_approve(0, 90));
+}
+
+#[test]
+unconstrained fn test_council_reject_is_final() {
+    let (mut env, gov, _admin, _proposer, owner, councillor) = setup_with_listing_roles();
+    env.call_public(owner, Governance::at(gov).submit_listing(250000, 1200, Field::from(77)));
+    env.call_public(councillor, Governance::at(gov).council_reject(0));
+    let listing = env.execute_utility(Governance::at(gov).get_listing(0));
+    assert_eq(listing.status, 4); // LISTING_REJECTED
+}
+
+#[test]
+unconstrained fn test_create_proposal_from_listing_inherits_ask() {
+    let (mut env, gov, _admin, proposer, owner, councillor) = setup_with_listing_roles();
+    env.call_public(owner, Governance::at(gov).submit_listing(250000, 1200, Field::from(77)));
+    env.call_public(councillor, Governance::at(gov).council_approve(0, 82));
+    env.call_public(proposer, Governance::at(gov).create_proposal_from_listing(0, Field::from(42)));
+
+    let view = env.execute_utility(Governance::at(gov).get_proposal(0));
+    assert_eq(view.amount, 250000); // inherited from the listing, not caller-supplied
+    assert_eq(view.status, 0); // ACTIVE
+    let listing = env.execute_utility(Governance::at(gov).get_listing(0));
+    assert_eq(listing.status, 3); // LISTING_PROPOSED
+    // Back-reference: listing_id + 1 (0 = legacy direct proposal).
+    assert_eq(env.execute_utility(Governance::at(gov).get_proposal_listing_id_plus_one(0)), 1);
+}
+
+#[test(should_fail_with = "listing not council-approved")]
+unconstrained fn test_create_proposal_from_unapproved_listing_fails() {
+    let (mut env, gov, _admin, proposer, owner, _councillor) = setup_with_listing_roles();
+    env.call_public(owner, Governance::at(gov).submit_listing(250000, 1200, Field::from(77)));
+    env.call_public(proposer, Governance::at(gov).create_proposal_from_listing(0, Field::from(42)));
+}
+
+#[test(should_fail_with = "listing not council-approved")]
+unconstrained fn test_listing_backs_at_most_one_proposal() {
+    let (mut env, gov, _admin, proposer, owner, councillor) = setup_with_listing_roles();
+    env.call_public(owner, Governance::at(gov).submit_listing(250000, 1200, Field::from(77)));
+    env.call_public(councillor, Governance::at(gov).council_approve(0, 82));
+    env.call_public(proposer, Governance::at(gov).create_proposal_from_listing(0, Field::from(42)));
+    // Listing is now PROPOSED; a second proposal from it must fail.
+    env.call_public(proposer, Governance::at(gov).create_proposal_from_listing(0, Field::from(43)));
+}
+
+// -- J3: affordability baseline (listing-backed covenants) ---------------------
+// ask 250000 EUR, market rent 1200 EUR/mo -> baseline cap = 1200 * 80% = 960/mo.
+// ceiling 350 bps/yr -> 250000*350/10000/12 = 729/mo (within baseline).
+// ceiling 500 bps/yr -> 250000*500/10000/12 = 1041/mo (above the cap).
+
+#[test]
+unconstrained fn test_covenant_within_baseline_accepted() {
+    let (mut env, gov, _admin, proposer, owner, councillor) = setup_with_listing_roles();
+    env.call_public(owner, Governance::at(gov).submit_listing(250000, 1200, Field::from(77)));
+    env.call_public(councillor, Governance::at(gov).council_approve(0, 82));
+    env.call_public(proposer, Governance::at(gov).create_proposal_from_listing(0, Field::from(42)));
+    env.call_public(proposer, Governance::at(gov).set_proposal_covenant(0, 350, 20, Field::from(0)));
+    assert_eq(env.view_public(Governance::at(gov).get_proposal_covenant_set_public(0)), true);
+}
+
+#[test(should_fail_with = "covenant above affordability baseline")]
+unconstrained fn test_covenant_above_baseline_rejected() {
+    let (mut env, gov, _admin, proposer, owner, councillor) = setup_with_listing_roles();
+    env.call_public(owner, Governance::at(gov).submit_listing(250000, 1200, Field::from(77)));
+    env.call_public(councillor, Governance::at(gov).council_approve(0, 82));
+    env.call_public(proposer, Governance::at(gov).create_proposal_from_listing(0, Field::from(42)));
+    // 500 bps/yr on a 250k ask is ~1041 EUR/mo -- above the 960 baseline cap.
+    env.call_public(proposer, Governance::at(gov).set_proposal_covenant(0, 500, 20, Field::from(0)));
+}
+
+// -- J4: funding queue + priority ----------------------------------------------
+
+#[test]
+unconstrained fn test_funding_queue_starts_empty() {
+    let (env, gov, _admin, _proposer, _owner, _councillor) = setup_with_listing_roles();
+    assert_eq(env.view_public(Governance::at(gov).get_funding_queue_head_public()), 0);
+    assert_eq(env.view_public(Governance::at(gov).get_funding_queue_tail_public()), 0);
+}
+
+#[test(should_fail_with = "queue index out of range")]
+unconstrained fn test_funding_queue_entry_out_of_range() {
+    let (mut env, gov, _admin, _proposer, _owner, _councillor) = setup_with_listing_roles();
+    let _ = env.view_public(Governance::at(gov).get_funding_queue_entry_public(0));
+}
+
+#[test]
+unconstrained fn test_proposal_priority_packs_score_and_discount() {
+    let (mut env, gov, _admin, proposer, owner, councillor) = setup_with_listing_roles();
+    // ask 250000, market 1200/mo, score 82, ceiling 350 bps/yr:
+    // ceiling_monthly = 729, baseline cap = 960 -> discount 231.
+    env.call_public(owner, Governance::at(gov).submit_listing(250000, 1200, Field::from(77)));
+    env.call_public(councillor, Governance::at(gov).council_approve(0, 82));
+    env.call_public(proposer, Governance::at(gov).create_proposal_from_listing(0, Field::from(42)));
+    // Before the covenant: score only, zero discount.
+    assert_eq(env.view_public(Governance::at(gov).get_proposal_priority_public(0)), 82_000_000_000);
+    env.call_public(proposer, Governance::at(gov).set_proposal_covenant(0, 350, 20, Field::from(0)));
+    assert_eq(env.view_public(Governance::at(gov).get_proposal_priority_public(0)), 82_000_000_231);
+}
+
+#[test(should_fail_with = "proposal has no listing")]
+unconstrained fn test_priority_rejects_legacy_proposal() {
+    let (mut env, gov, _admin, proposer, _owner, _councillor) = setup_with_listing_roles();
+    env.call_public(proposer, Governance::at(gov).create_proposal(Field::from(9), 750));
+    let _ = env.view_public(Governance::at(gov).get_proposal_priority_public(0));
+}
+
+#[test(should_fail_with = "only the housing fund can match")]
+unconstrained fn test_mark_matched_rejects_non_fund() {
+    let (mut env, gov, _admin, proposer, owner, councillor) = setup_with_listing_roles();
+    env.call_public(owner, Governance::at(gov).submit_listing(250000, 1200, Field::from(77)));
+    env.call_public(councillor, Governance::at(gov).council_approve(0, 82));
+    env.call_public(proposer, Governance::at(gov).create_proposal_from_listing(0, Field::from(42)));
+    // proposer is not the wired housing fund.
+    env.call_public(proposer, Governance::at(gov).mark_matched(0, 0));
+}

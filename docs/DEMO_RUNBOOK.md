@@ -119,3 +119,25 @@ audit · legal wrapper/SPV — all **production** concerns (`FUTURE_DEVELOPMENT_
 - Passes the §0.6.1 equity gate: visibly caps returns, shows distribution to
   small savers + a tenant, and is honest that durable yield/redemption are
   production work.
+
+## Journey walkthrough (sim mode, verified 2026-07-12)
+
+The full published journey, driven over the API against `npm run start` (sim mode,
+no Aztec needed). Each step below was executed and verified end-to-end:
+
+1. Roles: `POST /api/kyc/register` with `journeyRoles: ["property_owner"]` (owner)
+   and `["council"]` (council member).
+2. Onboard: `POST /api/property/listings` — ask €250,000, market rent €1,200/mo,
+   dossier hash. Listing appears as "submitted".
+3. Council: `POST /api/governance/council` approve with quality score 82.
+4. Vote: `POST /api/governance/proposals` `create_from_listing` (ask inherited),
+   `set_covenant` 350 bps / 20 yr (within the 20% baseline: €729 ≤ €960),
+   two investor votes, then `finalize` after the window — the proposal
+   auto-enqueues for funding (queue shows score 82, discount €231, fundable).
+5. Match: `POST /api/fund/queue` `match_next` — funds the proposal, records the
+   acquisition at the ask, syncs the covenant, opens the distribution.
+6. Enforcement: `GET /api/fund/rent?propertyId=N` reports the €729/mo cap;
+   posting €800 rent is rejected with the ceiling message, €700 is accepted.
+7. Returns: `POST /api/governance/claim` mints the investor's FSFT share;
+   `/api/portfolio` reflects the holding, allocation, and rent earnings.
+8. Pages `/`, `/fund`, `/fund/submit`, `/portfolio`, `/governance` all render.
