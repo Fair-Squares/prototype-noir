@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { fetchFundStats } from "@/lib/contracts";
 import { MarketingHero } from "@/components/marketing/MarketingHero";
 import { AffordabilityProblem } from "@/components/marketing/AffordabilityProblem";
-import { HowItWorks } from "@/components/marketing/HowItWorks";
 import { ImpactCalculator } from "@/components/marketing/ImpactCalculator";
-import { MarketingCTA } from "@/components/marketing/MarketingCTA";
+import { HowItWorksExplainer } from "@/components/about/HowItWorksExplainer";
+import { ParametersPanel } from "@/components/about/ParametersPanel";
 
 /**
  * /learn — the public "About Fair Squares" marketing site.
@@ -63,13 +63,25 @@ export default function LearnPage() {
         <AffordabilityProblem band />
       </div>
 
-      <HowItWorks />
-
       <section id="calculator" className="scroll-mt-24">
         <ImpactCalculator initialRorBps={rorBps} />
       </section>
 
-      <MarketingCTA primaryHref="/invest" secondaryHref="/explain" />
+      {/* S4: one About door — mission above, the protocol explainer and the
+          parameters/transparency panel below (moved from the retired /explain
+          and /reference routes, which now redirect here). The marketing
+          HowItWorks cards and closing CTA were cut: the explainer below covers
+          the same ground with the real mechanics, and the page needs no second
+          call to action. */}
+      <section id="how-it-works" className="scroll-mt-24">
+        <h2 className="text-title mb-4 text-text-1">How the protocol works</h2>
+        <HowItWorksExplainer />
+      </section>
+
+      <section id="parameters" className="scroll-mt-24">
+        <h2 className="text-title mb-4 text-text-1">Parameters &amp; transparency</h2>
+        <ParametersPanel />
+      </section>
     </div>
   );
 }

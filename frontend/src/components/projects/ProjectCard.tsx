@@ -19,6 +19,10 @@ export interface ProjectCardProps {
   claiming: boolean;
   /** Invoke the on-chain claim for this project's distribution. */
   onClaim: (proposalId: number) => void;
+  /** S1: the shared home-lifecycle strip, rendered under the header. */
+  lifecycle?: React.ReactNode;
+  /** S1: 1-based funding-queue rank while the home waits for capital. */
+  queueRank?: number | null;
 }
 
 /** A labelled progress meter; status is always carried in adjacent text. */
@@ -46,7 +50,7 @@ function Meter({ fraction, tone }: { fraction: number; tone: "accent" | "success
  * shown — no location, unit counts, covenant terms or capped-return figures,
  * because none of those are recorded on-chain.
  */
-export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProps) {
+export function ProjectCard({ row, address, claiming, onClaim, lifecycle, queueRank }: ProjectCardProps) {
   const connected = Boolean(address);
   const window = votingWindowFor(row.proposal);
   const quorum = quorumFor(row.proposal);
@@ -104,7 +108,7 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
             </>
           ) : (
             <>
-              <p className="text-label">Funding request</p>
+              <p className="text-label">Home</p>
               <h3 className="text-heading mt-0.5 text-text-1">{displayName}</h3>
             </>
           )}
@@ -117,6 +121,14 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
         <ProjectStatusChip row={row} />
       </header>
 
+      {lifecycle ? <div className="-mt-1">{lifecycle}</div> : null}
+      {queueRank != null && row.status === 1 ? (
+        <p className="text-caption -mt-1 text-text-2">
+          In the funding queue at rank #{queueRank} — funded automatically when
+          capital allows, best-ranked first.
+        </p>
+      ) : null}
+
       <div>
         <p className="text-kpi-sm text-text-1">{formatEUR(row.requestedAmount)}</p>
         <p className="text-caption mt-1 text-text-2">{fundingCaption(row)}</p>
@@ -127,9 +139,9 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
         <div className="border-t border-border pt-4">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
             <span className="text-label inline-flex items-center gap-1">
-              Distribution to depositors
+              Payout to depositors
               <InfoDot
-                label="What is the distribution"
+                label="What is a payout"
                 content="When a funded home's value is realised, the proceeds open as a pool depositors claim pro-rata against the deposits snapshotted at that moment."
               />
             </span>
@@ -160,12 +172,12 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
       ) : (
         <dl className="grid grid-cols-1 gap-x-4 gap-y-3 border-t border-border pt-4 sm:grid-cols-2">
           <div>
-            <dt className="text-label">Quorum</dt>
+            <dt className="text-label">Votes</dt>
             <dd className="text-body mt-0.5 text-mono text-text-1">
               {quorum.total.toLocaleString()} / {quorum.required.toLocaleString()}
             </dd>
             <dd className="text-caption mt-0.5">
-              {quorum.reached ? "Quorum met" : "Quorum not yet met"}
+              {quorum.reached ? "Enough votes to count" : `Needs ${quorum.required.toLocaleString()} total votes to count`}
             </dd>
           </div>
           <div>
@@ -253,7 +265,7 @@ export function ProjectCard({ row, address, claiming, onClaim }: ProjectCardProp
                 className="btn btn-ghost btn-sm"
                 aria-label={`Open the governance memo for ${displayName}`}
               >
-                Governance memo
+                Vote record
               </Link>
             </>
           )}

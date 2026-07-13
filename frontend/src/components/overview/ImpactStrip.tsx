@@ -26,7 +26,7 @@ export function ImpactStrip({ proposals }: { proposals: Proposal[] }) {
       <p className="text-caption text-text-2">
         Homes, affordability-years and gap closed are modelled for the demo from each project&apos;s
         dossier; the small-saver floor is a live on-chain parameter.{" "}
-        <Link href="/explain#privacy" className="text-fs-teal-dark hover:underline">
+        <Link href="/learn#privacy" className="text-fs-teal-dark hover:underline">
           How this stays private
         </Link>
         .

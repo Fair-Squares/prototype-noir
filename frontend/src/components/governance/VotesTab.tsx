@@ -54,7 +54,7 @@ export function VotesTab({ proposal }: VotesTabProps) {
         <DataTable columns={columns} rows={rows} rowKey={(row) => row.label} />
       </Section>
 
-      <Section title="Quorum progress">
+      <Section title="Votes needed">
         <p className="text-body text-text-1">
           <span className="text-mono">{total.toLocaleString()}</span> of{" "}
           <span className="text-mono">{quorum.required.toLocaleString()}</span> ballots needed.
@@ -65,7 +65,7 @@ export function VotesTab({ proposal }: VotesTabProps) {
           aria-valuemin={0}
           aria-valuemax={quorum.required}
           aria-valuenow={Math.min(total, quorum.required)}
-          aria-label="Quorum progress"
+          aria-label="Votes needed progress"
         >
           <div
             className="h-full rounded-full bar-success"
@@ -75,7 +75,7 @@ export function VotesTab({ proposal }: VotesTabProps) {
           />
         </div>
         <p className="text-caption mt-2">
-          {quorum.reached ? "Quorum met." : "Quorum not yet met."}
+          {quorum.reached ? "Enough votes for the result to count." : "Not enough votes yet for the result to count."}
         </p>
       </Section>
     </div>

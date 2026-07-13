@@ -12,6 +12,8 @@ export interface ListingCardProps {
   cappedMonthlyRentEur?: number;
   /** Rendered for COUNCIL_APPROVED listings (e.g. "open investor vote"). */
   action?: React.ReactNode;
+  /** S1: the shared home-lifecycle strip, rendered under the header. */
+  lifecycle?: React.ReactNode;
   className?: string;
 }
 
@@ -28,20 +30,21 @@ const LISTING_CHIP: Record<number, { status: StatusKind; label: string }> = {
  * capital ask, the attested market rent (the J3 baseline anchor), the dossier
  * commitment, and council review progress.
  */
-export function ListingCard({ listing, cappedMonthlyRentEur, action, className }: ListingCardProps) {
+export function ListingCard({ listing, cappedMonthlyRentEur, action, lifecycle, className }: ListingCardProps) {
   const chip = LISTING_CHIP[listing.status] ?? { status: "pending" as StatusKind, label: listing.statusName };
 
   return (
     <article className={`rounded-lg border border-border bg-card p-4 ${className ?? ""}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-heading text-text-1">Listing #{listing.id}</h3>
+          <h3 className="text-heading text-text-1">Home listing #{listing.id}</h3>
           <p className="mt-0.5 text-body-sm text-text-3">
             Submitted by <span className="text-mono">{listing.proposer.slice(0, 10)}…</span>
           </p>
         </div>
         <StatusChip status={chip.status} label={chip.label} />
       </div>
+      {lifecycle ? <div className="mt-2">{lifecycle}</div> : null}
 
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
         <div>

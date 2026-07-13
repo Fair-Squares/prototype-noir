@@ -21,35 +21,28 @@ export type NavSection = {
  * - `tier: "more-account"` → occasional tasks, tucked under the "More" menu.
  * - `tier: "more-reference"` → reference / help, under "More" below a divider.
  *
- * `num` and `blurb` are retained for tooltips and the mobile drawer's
- * supporting copy; they are no longer rendered as a numbered console TOC.
+ * UX_SIMPLIFICATION_PLAN.md target IA: 7 destinations for 3 personas.
+ * Home · Homes · Portfolio (primary) — Vote · Trade · Verification (More) —
+ * About (reference). Deposit/withdraw and every claim live on Portfolio (the
+ * money hub); learn/explain/reference are one About door. /invest, /rewards,
+ * /explain and /reference redirect (next.config.ts) so old links keep working.
  */
 export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Portal",
     items: [
-      // Primary nav is intentionally minimal (CLAUDE.md → "Navigation target"):
-      // Home · Projects · Portfolio. Everything else lives under "More", and
-      // Invest is contextual — started from a project, not a top-level tab.
-      { num: "01", label: "Home",         href: "/",           blurb: "Featured project and your next step", tier: "primary" },
-      { num: "02", label: "Projects",     href: "/fund",       blurb: "Housing projects and homes",          tier: "primary" },
-      { num: "03", label: "Portfolio",    href: "/portfolio",  blurb: "Your position, income and claims",    tier: "primary" },
-      { num: "04", label: "Invest",       href: "/invest",     blurb: "Deposit and withdraw",                tier: "more-account" },
-      { num: "05", label: "Governance",   href: "/governance", blurb: "Proposals and voting",                tier: "more-account" },
-      { num: "06", label: "Trade",        href: "/dex",        blurb: "Shares and EUR orderbook",            tier: "more-account" },
-      { num: "07", label: "Rewards",      href: "/rewards",    blurb: "Participation rewards",               tier: "more-account" },
-      { num: "08", label: "Verification", href: "/kyc",        blurb: "Identity and investor status",        tier: "more-account" },
+      { num: "01", label: "Home",         href: "/",           blurb: "Your journey and next step",           tier: "primary" },
+      { num: "02", label: "Homes",        href: "/fund",       blurb: "Every home, from submission to owned", tier: "primary" },
+      { num: "03", label: "Portfolio",    href: "/portfolio",  blurb: "Your money: value, deposit, claims",   tier: "primary" },
+      { num: "04", label: "Vote",         href: "/governance", blurb: "The community vote on homes",          tier: "more-account" },
+      { num: "05", label: "Trade",        href: "/dex",        blurb: "Optional: sell or buy fund shares",    tier: "more-account" },
+      { num: "06", label: "Verification", href: "/kyc",        blurb: "Identity and investor status",         tier: "more-account" },
     ],
   },
   {
     label: "Reference",
     items: [
-      // The public story leads the reference group: marketing / explanatory, not
-      // an everyday account task (so not a top tab — per "don't expose the whole
-      // architecture through nav").
-      { num: "11", label: "About Fair Squares", href: "/learn",     blurb: "The mission, how it works, impact calculator", tier: "more-reference" },
-      { num: "09", label: "Reference",          href: "/reference", blurb: "Parameters and metrics",                       tier: "more-reference" },
-      { num: "10", label: "How it works",       href: "/explain",   blurb: "Mechanics and glossary",                       tier: "more-reference" },
+      { num: "07", label: "About Fair Squares", href: "/learn", blurb: "Mission, how it works, parameters", tier: "more-reference" },
     ],
   },
 ];

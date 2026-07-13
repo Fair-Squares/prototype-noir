@@ -93,7 +93,7 @@ export default function TrustChip() {
             <p className="text-caption mt-4 border-t border-border pt-3 text-text-3">{freshAs}</p>
           ) : null}
           <Link
-            href="/explain"
+            href="/learn#privacy"
             onClick={() => setTrustOpen(false)}
             className="text-caption mt-3 inline-flex font-semibold text-fs-teal-dark hover:text-fs-magenta"
           >

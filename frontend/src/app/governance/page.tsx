@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { votingWindowFor } from "@/lib/proposalLifecycle";
 import { CouncilQueue } from "@/components/governance/CouncilQueue";
-import { CreateProposalForm } from "@/components/governance/CreateProposalForm";
 import { GovernanceMemoCard } from "@/components/governance/GovernanceMemoCard";
 import {
   Alert,
@@ -19,7 +18,6 @@ import {
 import { useWallet } from "@/contexts/WalletContext";
 import {
   attestFsftForVoting,
-  createProposal,
   fetchGovernanceEligibility,
   fetchKYCProfile,
   fetchListings,
@@ -50,7 +48,6 @@ export default function GovernancePage() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [joiningCouncil, setJoiningCouncil] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
   const [attesting, setAttesting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
@@ -123,7 +120,6 @@ export default function GovernancePage() {
     [proposals]
   );
 
-  const canCreate = Boolean(address && kycProfile.isInvestor);
   const canVote = Boolean(eligibility?.canVote);
 
   // Decision queue: actionable proposals first, newest-first within each band.
@@ -131,29 +127,6 @@ export default function GovernancePage() {
     () => [...proposals].sort((a, b) => decisionRank(a) - decisionRank(b) || b.id - a.id),
     [proposals]
   );
-
-  const handleCreate = async (input: {
-    title: string;
-    description: string;
-    amount: number;
-  }): Promise<string | null> => {
-    if (!address) return "Connect your wallet first.";
-    if (!canCreate) return "Investor role required to submit a funding request.";
-
-    const result = await createProposal(
-      address,
-      input.title,
-      input.description,
-      input.amount,
-      accountIndex
-    );
-    if (!result.success) return result.error ?? "Submission failed.";
-
-    setNotice({ tone: "success", text: "Funding request submitted." });
-    setShowCreate(false);
-    await refresh();
-    return null;
-  };
 
   const handleAttestFsft = async () => {
     if (!address) {
@@ -183,20 +156,9 @@ export default function GovernancePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Investment committee"
-        title="Funding decisions"
-        description="Each request asks the fund to commit capital toward acquiring one affordable home. Review the ask, the quorum, and your voting standing, then cast a private ballot."
-        actions={
-          canCreate ? (
-            <Button
-              variant="secondary"
-              onClick={() => setShowCreate((current) => !current)}
-              aria-expanded={showCreate}
-            >
-              {showCreate ? "Close request form" : "New funding request"}
-            </Button>
-          ) : null
-        }
+        eyebrow="Community vote"
+        title="Vote on homes"
+        description="Decide which homes we buy. Your ballot is private."
       />
 
       {loadError ? <Alert tone="danger" title="Something went wrong">{loadError}</Alert> : null}
@@ -206,16 +168,6 @@ export default function GovernancePage() {
           <Alert tone={notice.tone === "success" ? "success" : "danger"}>{notice.text}</Alert>
         ) : null}
       </div>
-
-      {address && standingLoaded && !canCreate ? (
-        <Alert tone="info" title="Opening a funding request needs the investor role">
-          Only verified investors can ask the fund to commit capital to a home.{" "}
-          <Link href="/kyc" className="underline">
-            Verify your identity
-          </Link>{" "}
-          to unlock new funding requests. You can still review and vote on requests below.
-        </Alert>
-      ) : null}
 
       <KpiGrid cols={4}>
         {loading ? (
@@ -289,16 +241,7 @@ export default function GovernancePage() {
         </Section>
       ) : null}
 
-      {showCreate ? (
-        <Section
-          title="New funding request"
-          description="Open this to the committee for a vote. Investor role required."
-        >
-          <CreateProposalForm onCreate={handleCreate} onCancel={() => setShowCreate(false)} />
-        </Section>
-      ) : null}
-
-      <Section title="Funding requests">
+      <Section title="Ballots">
         {loading ? (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <SkeletonKpi />
@@ -306,8 +249,8 @@ export default function GovernancePage() {
           </div>
         ) : proposals.length === 0 ? (
           <EmptyState
-            title="No funding requests awaiting the committee yet"
-            description="Approved, funded, and rejected requests appear here as decisions are made."
+            title="No homes up for a vote yet"
+            description="Homes enter the vote from the Homes page once the council approves them. Approved, funded, and rejected ballots stay listed here."
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

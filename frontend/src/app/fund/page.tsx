@@ -11,11 +11,12 @@ import {
   SkeletonRow,
 } from "@/components/ui";
 import { CapitalHeader } from "@/components/projects/CapitalHeader";
-import { FundingQueue } from "@/components/projects/FundingQueue";
+import { HomeLifecycle } from "@/components/homes/HomeLifecycle";
+import { buildHomeRows, type HomeRow } from "@/components/homes/homeRows";
 import { ListingCard } from "@/components/projects/ListingCard";
 import { ProjectCard } from "@/components/projects/ProjectCard";
 import { ProjectsTable } from "@/components/projects/ProjectsTable";
-import { buildProjectRows, type ProjectRow } from "@/components/projects/ProjectRow";
+import { buildProjectRows } from "@/components/projects/ProjectRow";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   claimProposalDistribution,
@@ -28,36 +29,29 @@ import {
   fetchProposals,
   formatEUR,
   formatFSFT,
+  runMatchNext,
   type FundStats,
   type FundingQueueEntry,
   type Listing,
-  type Proposal,
 } from "@/lib/contracts";
 
-/** Order projects so the ones that still need committee attention surface first:
- * open voting, then closed-but-unfinalised, then funded/distributing, then
- * terminal. Within each band keep newest-first (buildProjectRows already sorts
- * by id descending). */
-function dealRoomRank(row: ProjectRow): number {
-  if (row.status === 0) return 0; // active / voting open or just-ended
-  if (row.status === 1) return 1; // approved, awaiting execution
-  if (row.distributionOpened) return 2; // funded & distributing
-  if (row.status === 3) return 3; // executed
-  return 4; // rejected
-}
-
-export default function ProjectsPage() {
+/**
+ * S1 (UX_SIMPLIFICATION_PLAN.md): the Homes page. One card per home carrying
+ * its whole lifecycle — council review → community vote → funding → owned —
+ * instead of three parallel sections (onboarding listings, funding queue,
+ * funding requests) that gave the same home four different names.
+ */
+export default function HomesPage() {
   const { activeAccount } = useWallet();
   const address = activeAccount?.address ?? null;
   const accountIndex = activeAccount?.index ?? 0;
 
   const [stats, setStats] = useState<FundStats | null>(null);
-  const [rows, setRows] = useState<ProjectRow[]>([]);
-  const [listings, setListings] = useState<Listing[]>([]);
+  const [homes, setHomes] = useState<HomeRow[]>([]);
   const [queue, setQueue] = useState<FundingQueueEntry[]>([]);
-  const [proposalsById, setProposalsById] = useState<Map<number, Proposal>>(new Map());
   const [isInvestor, setIsInvestor] = useState(false);
   const [openingVoteId, setOpeningVoteId] = useState<number | null>(null);
+  const [matching, setMatching] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [claimingId, setClaimingId] = useState<number | null>(null);
@@ -76,13 +70,11 @@ export default function ProjectsPage() {
         address ? fetchKYCProfile(address) : Promise.resolve(null),
       ]);
       setStats(nextStats);
-      setRows(buildProjectRows(proposals, deeds, nextListings));
-      setListings(nextListings);
+      setHomes(buildHomeRows(nextListings, buildProjectRows(proposals, deeds, nextListings), nextQueue));
       setQueue(nextQueue);
-      setProposalsById(new Map(proposals.map((p) => [p.id, p])));
       setIsInvestor(Boolean(profile?.isInvestor));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Could not load housing projects.");
+      setError(e instanceof Error ? e.message : "Could not load the homes.");
     } finally {
       setLoading(false);
     }
@@ -95,7 +87,7 @@ export default function ProjectsPage() {
   const handleClaim = useCallback(
     async (proposalId: number) => {
       if (!address) {
-        setNotice({ tone: "danger", text: "Connect your wallet to claim a distribution." });
+        setNotice({ tone: "danger", text: "Connect your wallet to claim a payout." });
         return;
       }
       setClaimingId(proposalId);
@@ -108,16 +100,10 @@ export default function ProjectsPage() {
         }
         const claimed =
           typeof result.claimedAmount === "number" ? ` (${formatFSFT(result.claimedAmount)})` : "";
-        setNotice({
-          tone: "success",
-          text: `Distribution claimed for proposal #${proposalId}${claimed}.`,
-        });
+        setNotice({ tone: "success", text: `Payout claimed for home #${proposalId}${claimed}.` });
         await load();
       } catch (err: unknown) {
-        setNotice({
-          tone: "danger",
-          text: err instanceof Error ? err.message : "Claim failed.",
-        });
+        setNotice({ tone: "danger", text: err instanceof Error ? err.message : "Claim failed." });
       } finally {
         setClaimingId(null);
       }
@@ -125,21 +111,10 @@ export default function ProjectsPage() {
     [address, accountIndex, load]
   );
 
-  const orderedRows = useMemo(
-    () => [...rows].sort((a, b) => dealRoomRank(a) - dealRoomRank(b)),
-    [rows]
-  );
-
-  const summary = useMemo(() => {
-    const needsCapital = rows.filter((r) => r.status === 0 || r.status === 1).length;
-    const funded = rows.filter((r) => r.status === 3 || r.distributionOpened).length;
-    return { total: rows.length, needsCapital, funded };
-  }, [rows]);
-
   const handleOpenVote = useCallback(
     async (listing: Listing) => {
       if (!address) {
-        setNotice({ tone: "danger", text: "Connect your wallet to open an investor vote." });
+        setNotice({ tone: "danger", text: "Connect your wallet to open the community vote." });
         return;
       }
       setOpeningVoteId(listing.id);
@@ -154,7 +129,7 @@ export default function ProjectsPage() {
         );
         setNotice({
           tone: "success",
-          text: result.message ?? `Investor vote opened for listing #${listing.id}.`,
+          text: result.message ?? `Community vote opened for home listing #${listing.id}.`,
         });
         await load();
       } catch (err: unknown) {
@@ -166,34 +141,65 @@ export default function ProjectsPage() {
     [address, accountIndex, load]
   );
 
-  /** Covenant-capped MONTHLY rent for a listing whose proposal carries a set
-   *  covenant: floor(floor(ask * ceiling_bps / 10000) / 12) — the same integer
-   *  math record_rent enforces on-chain. */
-  const cappedRentFor = useCallback(
-    (listing: Listing): number | undefined => {
-      if (listing.proposalId === null) return undefined;
-      const covenant = proposalsById.get(listing.proposalId)?.covenant;
-      if (!covenant?.isSet) return undefined;
-      return Math.floor(Math.floor((listing.askEur * covenant.rentCeilingBps) / 10000) / 12);
-    },
-    [proposalsById]
+  const handleMatch = useCallback(async () => {
+    setMatching(true);
+    setNotice(null);
+    try {
+      const result = await runMatchNext();
+      if (!result.success) {
+        setNotice({ tone: "danger", text: result.error ?? "Matching failed." });
+        return;
+      }
+      setNotice({
+        tone: "success",
+        text:
+          result.message ??
+          (result.fundedProposalId != null
+            ? `Home #${result.fundedProposalId} funded.`
+            : "Matching complete."),
+      });
+      await load();
+    } catch (err: unknown) {
+      setNotice({ tone: "danger", text: err instanceof Error ? err.message : "Matching failed." });
+    } finally {
+      setMatching(false);
+    }
+  }, [load]);
+
+  /** Covenant-capped MONTHLY rent for a pre-proposal listing (no covenant yet
+   *  → undefined; the comparison appears once the proposal carries one). */
+  const cappedRentFor = useCallback((home: HomeRow): number | undefined => {
+    const covenant = home.project?.proposal.covenant;
+    if (!home.listing || !covenant?.isSet) return undefined;
+    return Math.floor(Math.floor((home.listing.askEur * covenant.rentCeilingBps) / 10000) / 12);
+  }, []);
+
+  const fundableWaiting = useMemo(() => queue.filter((entry) => entry.fundable).length, [queue]);
+  const projectRows = useMemo(
+    () => homes.filter((h) => h.project !== null).map((h) => h.project!),
+    [homes]
   );
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Deal room"
-        title="Housing projects"
-        description="Each housing project is a funding request the pool can finance. Track which homes need capital, where each one stands in its lifecycle, and the proceeds flowing back to depositors — read straight from the contracts."
+        eyebrow="Homes"
+        title="Homes"
+        description="Every home the community is buying — from first review to owned."
         actions={
-          <Button variant="secondary" onClick={() => void load()} disabled={loading}>
-            {loading ? "Refreshing…" : "Refresh"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => void load()} disabled={loading}>
+              {loading ? "Refreshing…" : "Refresh"}
+            </Button>
+            <Link href="/fund/submit" className="btn btn-primary btn-sm flex-shrink-0">
+              Submit a property
+            </Link>
+          </div>
         }
       />
 
       {error ? (
-        <Alert tone="danger" title="Could not load housing projects">
+        <Alert tone="danger" title="Could not load the homes">
           {error}
         </Alert>
       ) : null}
@@ -206,34 +212,42 @@ export default function ProjectsPage() {
         ) : null}
       </div>
 
-      {/* J6 note: a NAV/FSFT *trend* is deliberately absent — the chain exposes
-          only the latest valuation point (get_valuation.last_valuation_block),
-          no history. Charting one would mean fabricating a series; it lands
-          with the valuation-snapshot work in WEBSITE_ALIGNMENT.md §3.3. */}
+      {/* J6 note: a value-per-share *trend* is deliberately absent — the chain
+          exposes only the latest valuation point, no history. Charting one
+          would mean fabricating a series; it lands with the valuation-snapshot
+          work in WEBSITE_ALIGNMENT.md §3.3. */}
       <section aria-label="Fund capital">
         <CapitalHeader stats={stats} loading={loading} />
       </section>
 
-      <section aria-labelledby="property-onboarding-heading" className="flex flex-col gap-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <h2 id="property-onboarding-heading" className="text-heading text-text-1">
-              Property onboarding
-            </h2>
-            <p className="text-caption mt-1 text-text-2">
-              Owners submit vetted homes with an appraisal dossier; the housing council reviews
-              price-quality before any listing reaches an investor vote.
-            </p>
+      {fundableWaiting > 0 ? (
+        <Alert tone="info" title={`${fundableWaiting} approved home${fundableWaiting === 1 ? " is" : "s are"} waiting for funding`}>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              Anyone can run the matching — the best-ranked affordable home is funded first
+              (council score, then rent discount, then first come).
+            </span>
+            <Button size="sm" loading={matching} onClick={() => void handleMatch()}>
+              {matching ? "Matching…" : "Run matching"}
+            </Button>
           </div>
-          <Link href="/fund/submit" className="btn btn-secondary btn-sm flex-shrink-0">
-            Submit a property
-          </Link>
-        </div>
+        </Alert>
+      ) : null}
 
-        {listings.length === 0 ? (
+      <section aria-labelledby="homes-heading" className="flex flex-col gap-4">
+        <h2 id="homes-heading" className="sr-only">
+          All homes
+        </h2>
+        {loading && homes.length === 0 ? (
+          <div className="flex flex-col gap-3">
+            <SkeletonRow cols={4} />
+            <SkeletonRow cols={4} />
+            <SkeletonRow cols={4} />
+          </div>
+        ) : homes.length === 0 ? (
           <EmptyState
-            title="No property listings yet"
-            description="The journey starts with an owner submitting a home — capital ask, attested market rent and the document dossier."
+            title="No homes yet"
+            description="The journey starts with an owner submitting a home — the capital ask, the attested market rent and the document dossier. The council reviews it, the community votes, and the fund buys it."
             action={
               <Link href="/fund/submit" className="btn btn-secondary btn-sm">
                 Submit the first property
@@ -242,89 +256,50 @@ export default function ProjectsPage() {
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {listings.map((listing) => (
-              <ListingCard
-                key={listing.id}
-                listing={listing}
-                cappedMonthlyRentEur={cappedRentFor(listing)}
-                action={
-                  listing.status === 2 && isInvestor ? (
-                    <Button
-                      size="sm"
-                      onClick={() => void handleOpenVote(listing)}
-                      disabled={openingVoteId !== null}
-                      loading={openingVoteId === listing.id}
-                    >
-                      Open investor vote
-                    </Button>
-                  ) : undefined
-                }
-              />
-            ))}
+            {homes.map((home) =>
+              home.project ? (
+                <ProjectCard
+                  key={home.key}
+                  row={home.project}
+                  address={address}
+                  claiming={claimingId === home.project.id}
+                  onClaim={handleClaim}
+                  lifecycle={<HomeLifecycle stage={home.stage} />}
+                  queueRank={home.queueRank}
+                />
+              ) : home.listing ? (
+                <ListingCard
+                  key={home.key}
+                  listing={home.listing}
+                  cappedMonthlyRentEur={cappedRentFor(home)}
+                  lifecycle={<HomeLifecycle stage={home.stage} />}
+                  action={
+                    home.stage === "ready" && isInvestor ? (
+                      <Button
+                        size="sm"
+                        onClick={() => void handleOpenVote(home.listing!)}
+                        disabled={openingVoteId !== null}
+                        loading={openingVoteId === home.listing.id}
+                      >
+                        Open the community vote
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              ) : null
+            )}
           </div>
         )}
       </section>
 
-      <FundingQueue entries={queue} loading={loading} onMatched={load} />
-
-      <section aria-labelledby="funding-requests-heading" className="flex flex-col gap-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <h2 id="funding-requests-heading" className="text-heading text-text-1">
-              Funding requests
-            </h2>
-            <p className="text-caption mt-1 text-text-2">
-              {loading
-                ? "Loading on-chain housing projects…"
-                : summary.total === 0
-                  ? "No funding requests on-chain yet."
-                  : `${summary.total} project${summary.total === 1 ? "" : "s"} · ${summary.needsCapital} awaiting the committee · ${summary.funded} funded.`}
-            </p>
-          </div>
-          <Link href="/governance" className="btn btn-ghost btn-sm flex-shrink-0">
-            Open governance board
-          </Link>
-        </div>
-
-        {loading && rows.length === 0 ? (
-          <div className="flex flex-col gap-3">
-            <SkeletonRow cols={4} />
-            <SkeletonRow cols={4} />
-            <SkeletonRow cols={4} />
-          </div>
-        ) : orderedRows.length === 0 ? (
-          <EmptyState
-            title="No housing projects yet"
-            description="Projects appear here once a funding proposal is created on-chain. Approved proposals become property deeds held by the fund, and their proceeds open as distributions you can claim."
-            action={
-              <Link href="/governance" className="btn btn-secondary btn-sm">
-                Open governance board
-              </Link>
-            }
-          />
-        ) : (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {orderedRows.map((row) => (
-              <ProjectCard
-                key={row.id}
-                row={row}
-                address={address}
-                claiming={claimingId === row.id}
-                onClaim={handleClaim}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-
-      {rows.length > 0 ? (
+      {projectRows.length > 0 ? (
         <AdvancedDetails summary="All on-chain fields">
           <p className="text-caption mb-3 text-text-2">
-            Every funding request with its raw on-chain fields, including the voted covenant terms
+            Every home with its raw on-chain fields, including the voted affordability terms
             (capped rent, discount vs the attested market reference, lock). Location and unit counts
             are not recorded on-chain, so they are not shown here.
           </p>
-          <ProjectsTable rows={rows} />
+          <ProjectsTable rows={projectRows} />
         </AdvancedDetails>
       ) : null}
     </div>

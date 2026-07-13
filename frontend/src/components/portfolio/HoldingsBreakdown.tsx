@@ -161,9 +161,9 @@ export function HoldingsBreakdown({
           {portfolio.navPerFsftEur !== undefined ? (
             <div className="flex flex-col gap-0.5">
               <dt className="text-label flex items-center gap-1.5">
-                NAV per share
+                Value per share
                 <InfoDot
-                  label="What is NAV per share"
+                  label="What is value per share"
                   content="Net asset value: the fund's assets divided by the number of shares outstanding. It is the reference value of one fund share, not a price target."
                 />
               </dt>

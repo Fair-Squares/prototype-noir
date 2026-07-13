@@ -176,9 +176,9 @@ export default function DexPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Secondary liquidity"
-        title="Transfer your position"
-        description="A small, optional venue for moving Fund Share tokens between verified investors at a price bounded around the last issuance reference price. Most investors never need this - it is not where the fund is built."
+        eyebrow="Trade"
+        title="Trade shares"
+        description="Move fund shares to another verified investor. Optional — most people never need it."
         actions={
           <Button variant="secondary" size="sm" className="inline-flex" disabled={loading} onClick={refresh}>
             Refresh
@@ -204,7 +204,7 @@ export default function DexPage() {
           </>
         ) : orderbook ? (
           <>
-            <KpiCard label="Last issuance reference price" value={`€${orderbook.priceReferenceEur.toFixed(4)}`} sub={`Per ${fundSymbol}, from the most recent asset distribution`} tone="accent" hint="The reference used to bound orders. It is the token price recorded at the most recent asset distribution — NOT current NAV per share, and not an open-market quote." />
+            <KpiCard label="Last issuance reference price" value={`€${orderbook.priceReferenceEur.toFixed(4)}`} sub={`Per ${fundSymbol}`} tone="accent" hint="The reference used to bound orders. It is the token price recorded at the most recent asset distribution — NOT current NAV per share, and not an open-market quote." />
             <KpiCard label="Allowed price band" value={`€${orderbook.priceBandMinEur.toFixed(4)}`} sub={`to €${orderbook.priceBandMaxEur.toFixed(4)} · indicative reference guardrail`} />
             <KpiCard label="Max order lifetime" value={chainParams ? formatTtl(chainParams.dex.maxTtlBlocks, chainParams.dex.maxTtlSecondsEstimate) : "-"} sub="After expiry an order can no longer settle" />
           </>
@@ -216,8 +216,9 @@ export default function DexPage() {
           The order book below is <strong>public</strong>, but <strong>who</strong> posted each order is not —
           orders carry no owner on chain. Matching is <strong>automatic, on-chain</strong>: when you place an
           order that crosses a resting one at the same price, it settles in the same transaction (no bot, no
-          waiting). Settlement is over <strong>private balances</strong> — to <strong>buy</strong> {fundSymbol} you
-          must shield {eurSymbol} into your private balance first; to <strong>sell</strong> you need private {fundSymbol}.
+          waiting). Settlement is over <strong>private balances</strong> — buying uses the private part of your
+          {eurSymbol} (the app moves the needed amount there for you when you place an order); selling uses
+          your private {fundSymbol}.
           Proceeds accrue to your order and you <strong>claim</strong> them from <strong>Your orders</strong> below.
         </p>
       </AdvancedDetails>
@@ -251,7 +252,7 @@ export default function DexPage() {
           {portfolio ? (
             <TradeBalances canTrade={canTrade} fundSymbol={fundSymbol} eurSymbol={eurSymbol} fsftBalance={portfolio.balance} eurBalance={portfolio.eurBalance} lockedEur={portfolio.lockedEur} lockedFsft={portfolio.lockedFsft} />
           ) : (
-            <EmptyState title="No account connected" description="Connect a verified investor wallet to see the private balances that trades settle over." />
+            <EmptyState title="No account connected" description="Connect a wallet to see your balances." />
           )}
         </Section>
       </div>
@@ -267,7 +268,7 @@ export default function DexPage() {
 
       <Section
         title="Your orders"
-        description="Your own orders, found automatically — cancel one to reclaim unfilled escrow, or claim proceeds a match left for you. Only you can see these."
+        description="Cancel to reclaim escrow, or claim what a match left you. Only you can see these."
       >
         {!address ? (
           <EmptyState title="Connect a wallet" description="Connect a verified investor account to see your orders." />
@@ -276,7 +277,7 @@ export default function DexPage() {
         ) : loading && myOrders.length === 0 ? (
           <p className="text-caption text-text-3">Scanning your orders…</p>
         ) : myOrders.length === 0 ? (
-          <EmptyState title="No orders yet" description="Orders you place show up here automatically — no reference number to keep." />
+          <EmptyState title="No orders yet" description="Orders you place show up here automatically." />
         ) : (
           <div className="space-y-3">
             {myOrders.map((o) => {
@@ -369,7 +370,7 @@ export default function DexPage() {
 
       <p className="text-caption text-text-3">
         New to the fund? Building your position starts in the{" "}
-        <Link href="/invest" className="text-fs-teal hover:underline">primary deposit flow</Link>, not here.
+        <Link href="/portfolio#deposit" className="text-fs-teal hover:underline">primary deposit flow</Link>, not here.
       </p>
     </div>
   );

@@ -70,7 +70,7 @@ export function JourneyStepper({ kyc, portfolio, listings, proposals }: JourneyS
         key: "deposit",
         label: "Deposit",
         done: deposited,
-        action: { href: "/invest", label: deposited ? "Deposit more" : "Make your first deposit" },
+        action: { href: "/portfolio#deposit", label: deposited ? "Deposit more" : "Make your first deposit" },
         detail: deposited
           ? "Your capital is pooled and working."
           : "From €50 — your deposit finances homes and earns the capped return.",

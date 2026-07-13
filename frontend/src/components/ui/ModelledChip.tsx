@@ -17,7 +17,7 @@ export interface ModelledChipProps {
 }
 
 const DEFAULT_HINT =
-  "Modelled for the demo — not an on-chain value. Anything real (deposits, votes, claims, NAV) is shown without this tag.";
+  "Modelled for the demo — not an on-chain value. Anything real (deposits, votes, claims, fund value) is shown without this tag.";
 
 /**
  * "Modelled for demo" badge — the honesty marker that separates real on-chain

@@ -13,6 +13,18 @@ const ZKPASSPORT_EXTERNALS_PREFIX = "@zkpassport/";
 const nextConfig: NextConfig = {
   outputFileTracingRoot: __dirname,
 
+  // S2/S3/S4 (UX_SIMPLIFICATION_PLAN.md): retired destinations keep working.
+  // Deposit/withdraw/rewards live on Portfolio (the money hub); explain and
+  // reference merged into the single About page.
+  async redirects() {
+    return [
+      { source: "/invest", destination: "/portfolio#deposit", permanent: false },
+      { source: "/rewards", destination: "/portfolio#claims", permanent: false },
+      { source: "/explain", destination: "/learn#how-it-works", permanent: false },
+      { source: "/reference", destination: "/learn#parameters", permanent: false },
+    ];
+  },
+
   // Build output dir. Defaults to ".next" (unchanged for docker / next start);
   // set NEXT_DIST_DIR to build into an isolated folder without clobbering a
   // running production server's ".next".
