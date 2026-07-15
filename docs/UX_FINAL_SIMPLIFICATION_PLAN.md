@@ -30,7 +30,7 @@ CLAUDE.md §"User-facing product rules" (the binding rules this plan extends).
 1. A **language shift**: from the current civic/plain register to a *modern retail-finance
    register* — the vocabulary someone knows from a neobank or broker app (Revolut, Trade
    Republic, DEGIRO), plus a deliberate, small dose of tradfi/crypto jargon where it adds
-   precision and credibility (NAV, covenant, secondary market, zero-knowledge, self-custody).
+   precision and credibility (NAV, covenant, secondary market, private balance).
 2. An **IA compression**: 13 user-facing routes with overlapping jobs → ~10 with exactly
    one job each; claim actions centralized in one place; the two education surfaces
    de-duplicated.
@@ -49,8 +49,8 @@ CLAUDE.md §"User-facing product rules" (the binding rules this plan extends).
 - A dumbing-down. Precise terms stay — each gets a one-line plain-language definition
   (InfoDot) and a stable `/explain` anchor. We remove *protocol-internal* vocabulary, not
   *financial* vocabulary.
-- A backend change. Frontend + copy only; the single flagged exception is the optional
-  activity-feed API (§4.4, owner decision D5).
+- A backend change. Frontend + copy only — with D5 resolved to the session-local
+  activity log (§4.4, §9), there are no exceptions left.
 - A relaxation of the honesty rule. `ModelledChip`, "Demo network · no real funds",
   honest privacy labels, and the no-APY rule all survive verbatim.
 
@@ -88,8 +88,8 @@ always with an InfoDot one-liner on first appearance per screen, each with a sta
 | Affordability covenant | tradfi (bond covenant) | "A binding rent ceiling voted with each project and enforced on-chain." |
 | Secondary market | tradfi | "Sell shares to other verified investors without waiting for the fund." |
 | Order book / bid & ask | tradfi | "Open buy and sell orders from other investors." |
-| Private balance / self-custody | crypto | "Held under your keys; amounts visible only to you." |
-| Zero-knowledge verified | crypto | "Proven correct on-chain without revealing your data." |
+| Private balance | crypto | "Held under your keys; amounts visible only to you." |
+| Zero-knowledge verified *(per D4: `/explain` glossary + TrustChip expansion only — not pushed as badges)* | crypto | "Proven correct on-chain without revealing your data." |
 | Liquidity | tradfi | "How quickly you can turn shares back into euros." |
 
 **Tier 3 — banned from primary UI.** Allowed only inside `/reference` and
@@ -142,10 +142,11 @@ The bundle voice (sentence case, warm, "we/you", no hype) stays. Two register sh
   proof and sending two on-chain transactions — an EUR transfer and your private deposit"
   (`invest/page.tsx:435`). New: **"Processing your private deposit…"** with the
   two-transaction detail inside `AdvancedDetails`.
-- **Privacy becomes a selling point, stated in crypto-native terms** (WEBSITE_ALIGNMENT §4.1:
-  it's the differentiator and currently undersold): "Private by design", "Zero-knowledge
-  verified", "Only you can see your position." Short badge-like statements near the
-  TrustChip and on Invest/Portfolio — never paragraphs, never mechanism explanations.
+- **Privacy stays quiet assurance** (owner decision D4, 2026-07-15 — the doc originally
+  proposed crypto-native badges; the owner chose minimal): the existing model — TrustChip,
+  `/explain#privacy`, the honest inline labels ("your ballot stays private", "receive a
+  private position") — is the whole privacy surface. No new badges on Invest/Portfolio;
+  "zero-knowledge" vocabulary lives in the glossary and TrustChip expansion only.
 - **Every headline pairs money with outcome.** The finance clause says what your money
   does for you; the outcome clause says what it does in the world. Pattern: "Earn a
   capped 3% from rent — so families pay below-market rent." Applied to the Home hero,
@@ -211,9 +212,10 @@ Addresses each audited hotspot. Per screen: the job, what changes, what moves wh
 *Job: disconnected → understand the product in 60 s; connected → position + one next step.*
 
 - Disconnected hero keeps the mission line but adds the **finance-plus-outcome one-liner**
-  right under it: "Invest in Dutch affordable housing. Earn a capped 3% from rent, backed
-  by real homes — so families pay below-market rent. Private by design." — the whole
-  use-case, money and outcome in one breath, above the fold.
+  right under it: "Invest in Dutch affordable housing. Earn a 3% target annual return
+  from rent, capped by design — so families pay below-market rent." (return phrasing per
+  D6; no privacy badge in the hero per D4) — the whole use-case, money and outcome in
+  one breath, above the fold.
 - The existing `ImpactStrip` (homes enabled, households, affordability years) stays at
   the top of **both** Home states — it is the §3 line-3 surface, not marketing chrome,
   and it does not count against the ≤3 headline-KPI budget (it's outcome, not finance).
@@ -239,7 +241,7 @@ only here.*
   (3) positions table (shares × NAV, income history);
   (4) readiness/verification status;
   (5) activity.
-- **Personal impact, honestly attributed** (owner decision D8): a compact line in the
+- **Personal impact, honestly attributed** (owner decision D8 — resolved: show): a compact line in the
   headline area — "Your stake is ~0.4% of a fund housing N households at covenant-capped
   rents" — the fund-level figures are real; the pro-rata attribution carries
   `ModelledChip` per §3. This is the panel that answers the investor's real question:
@@ -248,8 +250,8 @@ only here.*
   ("The protocol does not yet expose a per-account event feed", `portfolio/page.tsx:384`).
   Smallest honest fix: a client-side **session activity log** (record every action the
   user performs through the app: deposits, claims, votes, orders — labeled "This
-  session"), plus the honest note for the historical gap. A real per-account feed is the
-  stretch option (D5).
+  session"), plus the honest note for the historical gap. Per D5 (resolved §9) this
+  session log is the scope; a real per-account feed is a follow-up ticket.
 - Faucet stays behind `AdvancedDetails` "Demo tools", labeled sim-only (unchanged).
 
 ### 4.3 Invest (`app/invest/page.tsx`) — from 6-step wizard to order ticket
@@ -394,7 +396,8 @@ disclosure/ticket patterns.
 - The honesty rule and every honest label ("Demo network · no real funds", "Publicly
   registered investors", ModelledChip semantics, no-APY rule).
 - Privacy-as-assurance architecture (TrustChip, ProofRail) — copy sharpened per §1.2 only.
-- The sim/live dual-mode architecture, `lib/contracts.ts` seam, API routes (except D5).
+- The sim/live dual-mode architecture, `lib/contracts.ts` seam, API routes (no
+  exceptions — D5 resolved to the frontend-only session log).
 - Contracts. Zero on-chain changes.
 - The canonical economic model (NAV vs rental income separation) — this plan re-expresses
   it, never remixes it.
@@ -444,18 +447,22 @@ sim-mode session, and the automated guards hold:
 
 ---
 
-## 9. Open owner decisions
+## 9. Owner decisions — RESOLVED 2026-07-15
 
-| # | Decision | Recommendation |
+All eight decisions were put to the owner and resolved in-session. D4 diverges from the
+doc's original recommendation; the D4-dependent sections (§0, §1 Tier-2 table, §1.2,
+§4.1 hero) have been updated to match. These are binding for implementation.
+
+| # | Decision | **Resolution (owner, 2026-07-15)** |
 |---|---|---|
-| D1 | Merge `/learn` + `/explain` into one route vs re-scope both | **Re-scope both** (§2) — full merge breaks `/explain#…` deep links used by every gate/InfoDot for marginal gain |
-| D2 | `/rewards` route fate | **Fold into `/portfolio` + redirect** — it's a claim, not a destination |
-| D3 | "Governance" vs "Votes" nav label | **"Votes"** — matches the register; "funding request" already carries the formality |
-| D4 | How far to lean into crypto register for privacy ("zero-knowledge verified", "self-custody") | **Lean in as short badges** — it's the differentiator per WEBSITE_ALIGNMENT; never as mechanism prose |
-| D5 | Activity feed: session-local log (frontend-only) vs real per-account event feed (API work) | **Session-local now**, real feed as a follow-up ticket — keeps this overhaul frontend-only |
-| D6 | Phrasing the capped return as a rate ("3% target annual return, capped by design") given the no-APY rule | **Adopt the phrasing** — it's the ROR formula stated honestly, not a market-yield claim; the no-APY rule itself stays |
-| D7 | Number locale: nl-NL (`€1.281,50`) vs en (`€1,281.50`) | **en formatting with € symbol** — matches the app's English copy; revisit if the app localizes |
-| D8 | Personal impact attribution on Portfolio ("your stake finances ~0.3 homes / houses N households") — show vs omit | **Show**, with `ModelledChip` on the attribution per §3 — it answers the investor's "did my money do the thing" question honestly; omit only the per-home framing if it reads as over-claiming at tiny stakes (fall back to "part of a fund housing N households") |
+| D1 | Merge `/learn` + `/explain` into one route vs re-scope both | **Re-scope both** (§2) — `/learn` = why, `/explain` = how + glossary; `/explain#…` deep links keep working |
+| D2 | `/rewards` route fate | **Fold into `/portfolio` + redirect** — one claim surface; program explanation moves to `/explain#rewards` |
+| D3 | "Governance" vs "Votes" nav label | **"Votes"** — the objects stay "funding requests" |
+| D4 | How far to lean into crypto register for privacy | **Keep it minimal** *(diverges from the doc's badge recommendation)* — privacy stays quiet assurance: TrustChip + `/explain#privacy` + existing honest inline labels only; no new badges on Invest/Portfolio |
+| D5 | Activity feed: session-local log vs real per-account event feed | **Session-local log now** ("This session" label + honest historical-gap note); the real feed becomes a follow-up ticket — overhaul stays frontend-only |
+| D6 | Phrasing the capped return as a rate given the no-APY rule | **Adopt "3% target annual return — capped by design"** — the ROR formula stated honestly; the no-APY rule itself stays for everything else |
+| D7 | Number locale | **English formatting with € symbol** (`€1,281.50`) via one canonical `lib/format.ts`; revisit if the app localizes |
+| D8 | Personal impact attribution on Portfolio | **Show, with `ModelledChip`** on the pro-rata attribution per §3; fall back to fund-level framing if per-home math over-claims at tiny stakes |
 
 ---
 
