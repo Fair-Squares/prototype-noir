@@ -1,10 +1,18 @@
 # Final UX/UI simplification overhaul — plan
 
-*Written 2026-07-15. Plan only — no implementation in this PR.*
+*Written 2026-07-15, revised the same day after the owner's impact clarification.
+Plan only — no implementation in this PR.*
 
 **Owner's brief:** simplify the app one more time. The use-case must be understandable
 in modern-day language with a bit of financial jargon (tradfi or crypto). The UI/UX must
 make sense for the average-day user — don't dumb it down, but make it usable.
+
+**Owner's clarification (2026-07-15):** as much as this is a financial application, it
+has real-world implications — it means someone gets housing, financed by a group of
+investors, big or small, who share one goal: making that possible. The information the
+app shows must keep that visible and bring it into the light. So this plan pairs the
+finance register with the human outcome everywhere (§3, §4): impact is information, not
+decoration, and it obeys the honesty rule like every other number.
 
 **Companion docs:** [`frontend-redesign-design-doc.md`](./frontend-redesign-design-doc.md)
 (the previous overhaul — its design system and IA survive this plan),
@@ -30,6 +38,9 @@ CLAUDE.md §"User-facing product rules" (the binding rules this plan extends).
    numbers, one primary CTA, protocol lifecycle operations out of the ordinary user's path.
 4. **Usability-debt closure**: the outstanding mobile audit (TODO.md), the dead-end
    transaction history, the Button/Link duplication, debug UI leaking into the default flow.
+5. An **impact re-centering**: every money surface also answers "who gets housed, at what
+   rent, for how long" — the investors' shared goal stays visible next to their money
+   (§3). Impact figures are sourced and labeled like every other number (honesty rule).
 
 **Is not:**
 
@@ -46,6 +57,8 @@ CLAUDE.md §"User-facing product rules" (the binding rules this plan extends).
 **Persona for every decision in this plan:** a Dutch/EU retail user who has a neobank
 and maybe a broker account, has never used a crypto dapp, and gives us 60 seconds.
 "Average-day user" = them, not a protocol engineer and not a first-time computer user.
+They invest for the mission *and* a modest, predictable return — the app must serve
+both motivations at once, never one at the expense of the other.
 
 ---
 
@@ -59,6 +72,10 @@ enforced boundary instead of case-by-case judgement:
 **Tier 1 — free use, no explanation needed** (the neobank register):
 invest, shares, share price, portfolio, position, returns, income, payout, order,
 market, fees, verification, KYC, balance, deposit, withdraw, claim.
+Equally Tier 1 — the **human-outcome vocabulary**, used in headlines, not footnotes:
+homes, households, affordable rent, rent below market, homes enabled, affordability
+years, financing gap. A screen that speaks only the first list has failed the owner's
+clarification even if every term is plain.
 
 **Tier 2 — the deliberate "bit of financial jargon"** — use freely in headings and labels,
 always with an InfoDot one-liner on first appearance per screen, each with a stable
@@ -129,6 +146,11 @@ The bundle voice (sentence case, warm, "we/you", no hype) stays. Two register sh
   it's the differentiator and currently undersold): "Private by design", "Zero-knowledge
   verified", "Only you can see your position." Short badge-like statements near the
   TrustChip and on Invest/Portfolio — never paragraphs, never mechanism explanations.
+- **Every headline pairs money with outcome.** The finance clause says what your money
+  does for you; the outcome clause says what it does in the world. Pattern: "Earn a
+  capped 3% from rent — so families pay below-market rent." Applied to the Home hero,
+  the Invest ticket, the Portfolio headline, and vote cards (§4) — woven into the money
+  sentences themselves, never split off as mission prose the user must go find.
 
 ---
 
@@ -152,17 +174,31 @@ exactly one place (Portfolio), every education paragraph in exactly one place.
 
 ---
 
-## 3. One canonical money model on every screen
+## 3. One canonical model on every screen: your money, and what it makes possible
 
-The average user must meet the same three-number mental model everywhere, in this order:
+The average user must meet the same four-line mental model everywhere, in this order:
 
 1. **What you own** — N shares (FSFT) × share price (NAV) = position value.
 2. **What it pays you** — rental income (claimable €) + rewards (FSP).
-3. **How you exit** — withdraw (fund) or sell (secondary market).
+3. **What it makes possible** — the real-world output your money is part of: homes
+   enabled, households paying below-market rent, affordability years locked in by
+   covenant. This is the one goal the group of investors — big or small — shares, and
+   it renders *next to* the money figures on every surface, never on a separate
+   mission page.
+4. **How you exit** — withdraw (fund) or sell (secondary market).
 
 Every screen that shows money must map its figures onto this model, with income never
 folded into share value (existing rule, kept). This becomes a stated rule in CLAUDE.md's
 product-rules section when the overhaul lands.
+
+**Impact obeys the honesty rule.** Line 3 is data, not decoration, so it is sourced like
+every other number: homes/deeds held and covenant terms come from chain and render
+untagged; pro-rata attribution ("your stake financed ~0.3 homes") is arithmetic on real
+data but the attribution itself is a model — it carries `ModelledChip`. The "% below
+market" figure is a baseline claim whose market-rent reference is not yet on-chain
+(WEBSITE_ALIGNMENT §3.2 / JOURNEY_COMPLETION_PLAN J3): until J3 lands it renders
+modelled; when J3 lands it flips to untagged. The copy is written once — the chip does
+the honesty work.
 
 ---
 
@@ -174,22 +210,28 @@ Addresses each audited hotspot. Per screen: the job, what changes, what moves wh
 
 *Job: disconnected → understand the product in 60 s; connected → position + one next step.*
 
-- Disconnected hero keeps the mission line but adds the **finance one-liner** right under
-  it: "Invest in Dutch affordable housing. Earn a capped 3% from rent. Backed by real
-  homes, private by design." — the whole use-case in modern language, above the fold.
+- Disconnected hero keeps the mission line but adds the **finance-plus-outcome one-liner**
+  right under it: "Invest in Dutch affordable housing. Earn a capped 3% from rent, backed
+  by real homes — so families pay below-market rent. Private by design." — the whole
+  use-case, money and outcome in one breath, above the fold.
+- The existing `ImpactStrip` (homes enabled, households, affordability years) stays at
+  the top of **both** Home states — it is the §3 line-3 surface, not marketing chrome,
+  and it does not count against the ≤3 headline-KPI budget (it's outcome, not finance).
 - **Fix the "All fund metrics" disclosure** (`page.tsx:299-338`, hotspot #1): today it's
   raw protocol parameters ("Parked allocation %", "Voting window · N blocks", "Block
   production · on-demand"). Keep only user-meaningful rows (fund size, share price,
-  homes funded, investors, income paid to date); everything else moves to `/reference`
-  (its sanctioned home). The disclosure gets renamed "Fund facts".
-- Connected view: position headline (own/pays/exit, §3) + `OverviewNextStep` unchanged.
+  homes enabled · households housed, investors, income paid to date); everything else
+  moves to `/reference` (its sanctioned home). The disclosure gets renamed "Fund facts".
+- Connected view: position headline (the §3 strip: own · pays · makes possible · exit)
+  + `OverviewNextStep` unchanged.
 
 ### 4.2 Portfolio (`app/portfolio/page.tsx`) — becomes the money hub
 
 *Job: investor source of truth; every collectable euro visible and claimable here, and
 only here.*
 
-- **Reorder to brokerage logic**: (1) headline "Total value" + own/pays/exit strip;
+- **Reorder to brokerage logic**: (1) headline "Total value" + the §3 strip
+  (own · pays · makes possible · exit);
   (2) **"Money to collect"** panel — rental income, rewards, project payouts, unfilled
   market orders — one panel, one claim pattern (absorbs the `/rewards` claim and becomes
   the single claim surface hotspot #9 asks for; `/fund` and `/governance/[id]` keep
@@ -197,6 +239,11 @@ only here.*
   (3) positions table (shares × NAV, income history);
   (4) readiness/verification status;
   (5) activity.
+- **Personal impact, honestly attributed** (owner decision D8): a compact line in the
+  headline area — "Your stake is ~0.4% of a fund housing N households at covenant-capped
+  rents" — the fund-level figures are real; the pro-rata attribution carries
+  `ModelledChip` per §3. This is the panel that answers the investor's real question:
+  *did my money do the thing we all put it in for?*
 - **Kill the dead-end** (hotspot #10): "Transaction history" is a permanent EmptyState
   ("The protocol does not yet expose a per-account event feed", `portfolio/page.tsx:384`).
   Smallest honest fix: a client-side **session activity log** (record every action the
@@ -215,8 +262,11 @@ only here.*
   verified user lands directly on **Amount**. First-time users still get the full
   stepper with inline gate resolution (unchanged pattern).
 - **Review becomes a brokerage order ticket**: "You pay €1,000 → you receive 780.5 shares
-  (FSFT) @ €1.2810 share price (NAV)" + one line each for terms (capped return), exit
-  (withdraw/secondary market), privacy ("your position is private"). All existing
+  (FSFT) @ €1.2810 share price (NAV)" + one line each for **what it makes possible**
+  ("your €1,000 goes toward closing the €120k financing gap on Maashaven — 12 affordable
+  homes", sourced per §3), terms (capped return), exit (withdraw/secondary market), and
+  privacy ("your position is private"). The ticket's last row before Confirm is the
+  outcome row — the user signs off on the goal, not just the amount. All existing
   honesty caveats stay, phrased in ticket rows instead of paragraphs.
 - Confirm copy per §1.2 ("Processing your private deposit…"; internals → AdvancedDetails).
 
@@ -224,8 +274,11 @@ only here.*
 
 *Job: deal room → investment memo. Hotspots #6, #8.*
 
-- `/fund` list: already good. Card labels move to lexicon terms; each card gets the same
-  three-line finance summary (gap being closed · capped return · affordability covenant).
+- `/fund` list: already good. Card labels move to lexicon terms; each card **leads with
+  the human story** — who will live here and what they'll pay (covenant rent, vs market
+  once J3 lands) — then the same three-line finance summary (gap being closed · capped
+  return · affordability covenant). This strengthens the existing "human identity first,
+  on-chain ID second" route contract rather than replacing it.
 - `/fund/[id]`: **5 tabs → 3 + Advanced**: "Dossier" (default, unchanged),
   **"Funding & votes"** (merges today's Overview + Governance tabs — they both answer
   "how is this being funded/decided"), **"Payouts"** (today's Distribution). Proofs tab
@@ -254,12 +307,20 @@ only here.*
   reframed as a trust feature: "Orders are anonymous — nobody can see who is trading."
 - "Your orders" + collect flow keeps its no-order-number design (already good), with
   §1.1's reserved/collect wording.
+- **Mission framing of the guardrails**: the band and the KYC gate are explained as
+  protections, not friction — "prices stay tied to the value of the homes, and every
+  trader is a verified investor" — turning the constraints users bump into (hotspot #3)
+  into the reason this market is trustworthy and doesn't undermine the fund's goal.
 
 ### 4.6 Votes (`app/governance/*`)
 
 *Job: decision queue. Hotspots #4, #5.*
 
 - Label "Votes"; queue cards already memo-like — keep.
+- **Stakes framing**: the queue header and each card say what the vote decides in the
+  world — "You're deciding whether these homes get financed." A card's three facts are
+  homes enabled, covenant rent terms, and the requested amount (all already in the
+  dossier/proposal data; this surfaces them as the decision's stakes, not as metadata).
 - **Role-gate the keeper actions** ("Record result", "Deploy capital & open payout"):
   rendered only for accounts with the admin flag (the account model already carries
   admin/investor chips in `HeaderWalletButton`). Ordinary investors instead see the
@@ -351,9 +412,9 @@ and the hardest screen (market) lands late with the patterns already proven.
 |---|---|---|---|
 | **0. Foundation** | `lib/lexicon.ts`, `lib/format.ts`, lexicon guard test, `Button href` unification, `GateCard` | `lib/`, `ui/Button.tsx`, new `ui/GateCard.tsx` | Guard test red on seeded Tier-3 strings, green after; no visual regressions |
 | **1. Rename & re-home** | Nav labels (Votes, Secondary market), `/rewards` → portfolio fold + redirect, education de-dup, Home metrics eviction → Reference, lifecycle vocab v2 | `lib/nav.ts`, `app/rewards/*`, `app/learn`, `app/explain`, `app/page.tsx`, `app/reference`, `lib/proposalLifecycle.ts` | Every old deep link resolves; lifecycle Vitest green with new words |
-| **2. Portfolio = money hub** | Reorder, "Money to collect" panel, session activity log, own/pays/exit strip | `app/portfolio/page.tsx`, `components/portfolio/*` | A connected sim user can find and claim every collectable euro from one panel |
-| **3. Invest = order ticket** | Gate collapsing, ticket review, confirm copy | `app/invest/page.tsx`, `components/invest/*` | Verified+funded user reaches Amount in one screen; first-timer still fully guided |
-| **4. Projects & votes** | Tab merge 5→3+Advanced, dossier copy, keeper role gate, eligibility fold-in | `app/fund/[id]/*`, `components/projects/*`, `app/governance/*`, `components/governance/*` | Non-admin sees no keeper buttons; vote flow is one entry point |
+| **2. Portfolio = money hub** | Reorder, "Money to collect" panel, session activity log, §3 strip (own · pays · makes possible · exit), personal impact line (D8) | `app/portfolio/page.tsx`, `components/portfolio/*` | A connected sim user can find and claim every collectable euro from one panel, and say what their stake makes possible |
+| **3. Invest = order ticket** | Gate collapsing, ticket review incl. the outcome row, confirm copy | `app/invest/page.tsx`, `components/invest/*` | Verified+funded user reaches Amount in one screen; first-timer still fully guided |
+| **4. Projects & votes** | Tab merge 5→3+Advanced, dossier copy, human-story card lead, vote stakes framing, keeper role gate, eligibility fold-in | `app/fund/[id]/*`, `components/projects/*`, `app/governance/*`, `components/governance/*` | Non-admin sees no keeper buttons; vote flow is one entry point; a voter can say what the vote decides in the world |
 | **5. Secondary market** | Price hierarchy, inline private-balance step, depth summary + advanced book | `app/dex/page.tsx`, `components/trade/*` | A user who has never seen an order book can place a buy within the band unaided |
 | **6. Sweep & audit** | Debug/admin cleanup (§5.1), mobile + a11y pass (§5.4), copy QA, CLAUDE.md updates (route contracts, lifecycle words, the stale "Plus Jakarta Sans" reference → DM Sans/Nexa) | shell components, all routes, CLAUDE.md | §8 script passes; screenshots desktop+mobile per route |
 
@@ -368,8 +429,10 @@ The overhaul is done when a tester matching the §0 persona completes these unai
 sim-mode session, and the automated guards hold:
 
 1. **60-second test (kept, sharpened):** after Home only, they can say what is funded,
-   what they'd receive ("~3% capped return from rent"), the main risk, and the next action.
-2. **Invest €100** starting from Home, without opening More.
+   **who benefits and how** (families renting below market, locked by covenant), what
+   they'd receive ("~3% capped return from rent"), the main risk, and the next action.
+2. **Invest €100** starting from Home, without opening More — and say afterwards what
+   the €100 makes possible.
 3. **Find and claim** their rental income, and say in one sentence how it differs from
    their share value.
 4. **Vote** on the open funding request, and say what stayed private.
@@ -392,6 +455,7 @@ sim-mode session, and the automated guards hold:
 | D5 | Activity feed: session-local log (frontend-only) vs real per-account event feed (API work) | **Session-local now**, real feed as a follow-up ticket — keeps this overhaul frontend-only |
 | D6 | Phrasing the capped return as a rate ("3% target annual return, capped by design") given the no-APY rule | **Adopt the phrasing** — it's the ROR formula stated honestly, not a market-yield claim; the no-APY rule itself stays |
 | D7 | Number locale: nl-NL (`€1.281,50`) vs en (`€1,281.50`) | **en formatting with € symbol** — matches the app's English copy; revisit if the app localizes |
+| D8 | Personal impact attribution on Portfolio ("your stake finances ~0.3 homes / houses N households") — show vs omit | **Show**, with `ModelledChip` on the attribution per §3 — it answers the investor's "did my money do the thing" question honestly; omit only the per-home framing if it reads as over-claiming at tiny stakes (fall back to "part of a fund housing N households") |
 
 ---
 
@@ -417,4 +481,6 @@ KYC `Phase:` debug line (`components/KYCFlow.tsx:192`).
 
 Known-good to preserve: ModelledChip honesty system, TrustChip/privacy-as-assurance,
 canonical lifecycle vocabulary + its Vitest guard, skeleton/empty/error state coverage,
-account-switch race guards, the no-order-number DEX claim design.
+account-switch race guards, the no-order-number DEX claim design, and the
+`ImpactStrip`/`aggregateImpact` impact layer — promoted by this plan from an Overview
+widget to the §3 line-3 surface rendered beside money figures app-wide.
