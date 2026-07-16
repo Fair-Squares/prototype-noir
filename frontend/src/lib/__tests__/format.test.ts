@@ -2,29 +2,30 @@ import { describe, expect, it } from "vitest";
 import {
   formatCount,
   formatDateTime,
-  formatEur,
+  formatEUR,
+  formatEURDecimals,
+  formatFSFT,
   formatPct,
   formatPctFromBps,
   formatRelative,
-  formatShares,
 } from "../format";
 
 describe("format — canonical D7 English formatting", () => {
   it("formats whole euros by default (protocol money is whole-EUR)", () => {
-    expect(formatEur(1281)).toBe("€1,281");
-    expect(formatEur(0)).toBe("€0");
-    expect(formatEur(500_000)).toBe("€500,000");
+    expect(formatEUR(1281)).toBe("€1,281");
+    expect(formatEUR(0)).toBe("€0");
+    expect(formatEUR(500_000)).toBe("€500,000");
   });
 
   it("formats price-like euros at the requested precision", () => {
-    expect(formatEur(1281.5, 2)).toBe("€1,281.50");
-    expect(formatEur(1.281, 4)).toBe("€1.2810");
+    expect(formatEUR(1281.5, 2)).toBe("€1,281.50");
+    expect(formatEUR(1.281, 4)).toBe("€1.2810");
+    expect(formatEURDecimals(1281.5)).toBe("€1,281.50");
   });
 
-  it("formats shares with separators, up to 4 dp, trimmed", () => {
-    expect(formatShares(780.5)).toBe("780.5");
-    expect(formatShares(12_000)).toBe("12,000");
-    expect(formatShares(0.12345)).toBe("0.1235");
+  it("formats FSFT as a share count with the ticker, never as currency", () => {
+    expect(formatFSFT(20_000)).toBe("20,000 FSFT");
+    expect(formatFSFT(1)).toBe("1 FSFT");
   });
 
   it("formats counts as integers", () => {

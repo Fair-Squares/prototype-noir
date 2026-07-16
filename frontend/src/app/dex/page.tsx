@@ -176,7 +176,7 @@ export default function DexPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Trade"
+        eyebrow="Secondary market"
         title="Trade shares"
         description="Move fund shares to another verified investor. Optional — most people never need it."
         actions={

@@ -2,9 +2,12 @@
  * Canonical number/date formatting (UX overhaul Phase 0; owner decision D7:
  * English formatting with the euro symbol — `€1,281.50`).
  *
- * Every user-facing surface formats through these helpers instead of ad-hoc
- * `toLocaleString` calls, so euros, shares, percentages and times read the
- * same on every screen. See docs/UX_FINAL_SIMPLIFICATION_PLAN.md §5.2.
+ * This is the single home for user-facing formatting. formatEUR /
+ * formatEURDecimals / formatFSFT keep their long-standing names (they predate
+ * this module in contracts.ts, which now re-exports them) so existing call
+ * sites keep working; new helpers cover percentages (bps never reaches the
+ * UI — lexicon Tier 3), counts, and time. See
+ * docs/UX_FINAL_SIMPLIFICATION_PLAN.md §5.2.
  */
 
 const EUR_WHOLE = new Intl.NumberFormat("en-US", {
@@ -21,7 +24,7 @@ const INT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
  * the default renders no decimals ("€1,282"). Pass `decimals` for price-like
  * values that need precision (e.g. share price at 4 dp → "€1.2810").
  */
-export function formatEur(value: number | bigint, decimals = 0): string {
+export function formatEUR(value: number | bigint, decimals = 0): string {
   if (decimals === 0) return EUR_WHOLE.format(value);
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -31,11 +34,19 @@ export function formatEur(value: number | bigint, decimals = 0): string {
   }).format(value);
 }
 
-/** Format a share amount (FSFT): thousands separators, up to 4 dp, trimmed. */
-export function formatShares(value: number | bigint): string {
-  return new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: 4,
-  }).format(value);
+/** Cent-precision euros ("€1,281.50") — the historical two-decimal helper. */
+export function formatEURDecimals(value: number | bigint): string {
+  return formatEUR(value, 2);
+}
+
+/**
+ * Format an FSFT (Fund Shares) amount. FSFT is a token COUNT representing
+ * ownership — never a currency, so this renders e.g. "20,000 FSFT", not
+ * "€20,000". Use for distribution pools/claims (minted FSFT), NOT for EUR
+ * figures like the proposal funding request or rent income.
+ */
+export function formatFSFT(value: number | bigint): string {
+  return `${INT.format(value)} FSFT`;
 }
 
 /** Format a plain count (investors, homes, votes): integer with separators. */
@@ -50,7 +61,7 @@ export function formatPct(pct: number, decimals = 1): string {
 
 /**
  * Format a percentage given in basis points: 300 → "3.0%". The UI never shows
- * "bps" outside `/reference` (lexicon Tier 3) — convert at the edge.
+ * "bps" outside `/reference`-style advanced surfaces — convert at the edge.
  */
 export function formatPctFromBps(bps: number, decimals = 1): string {
   return formatPct(bps / 100, decimals);

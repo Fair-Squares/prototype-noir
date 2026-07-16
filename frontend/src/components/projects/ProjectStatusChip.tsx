@@ -1,5 +1,5 @@
 import { StatusChip, type StatusKind } from "@/components/ui";
-import { displayStatus } from "@/lib/proposalLifecycle";
+import { displayStatus, PAYOUT_LABELS } from "@/lib/proposalLifecycle";
 import type { ProjectRow } from "./ProjectRow";
 
 /**
@@ -11,8 +11,8 @@ import type { ProjectRow } from "./ProjectRow";
  * including the honest "voting ended, awaiting finalisation" state that a naive
  * status-enum read would miss.
  *
- * Once an executed proposal opens its distribution, the payout lifecycle takes
- * precedence (Distributing → Fully claimed) because that is the more current,
+ * Once an executed proposal opens its payout, the payout lifecycle takes
+ * precedence (Paying out → Fully paid) because that is the more current,
  * more useful truth for a funded home.
  */
 export function projectStatus(row: ProjectRow): { status: StatusKind; label: string } {
@@ -20,9 +20,9 @@ export function projectStatus(row: ProjectRow): { status: StatusKind; label: str
     const amount = row.distributionAmount ?? 0;
     const claimed = row.distributionClaimed ?? 0;
     if (amount > 0 && claimed >= amount) {
-      return { status: "claimed", label: "Fully claimed" };
+      return { status: "claimed", label: PAYOUT_LABELS.fullyPaid };
     }
-    return { status: "open", label: "Distributing" };
+    return { status: "open", label: PAYOUT_LABELS.payingOut };
   }
 
   // Reuse the governance board's canonical lifecycle label verbatim

@@ -5,6 +5,7 @@ import { DataTable, ModelledChip, StatusChip, type Column } from "@/components/u
 import { formatEUR, type Proposal } from "@/lib/contracts";
 import {
   displayStatus,
+  PAYOUT_LABELS,
   proposalLabel,
   votingWindowFor,
 } from "@/lib/proposalLifecycle";
@@ -27,7 +28,7 @@ function StatusCell({ proposal }: { proposal: Proposal }) {
   // A funded request whose distribution has opened is the most actionable
   // signal for members, so surface it ahead of the raw lifecycle status.
   if (proposal.distributionOpened) {
-    return <StatusChip status="open" label="Distributing" />;
+    return <StatusChip status="open" label={PAYOUT_LABELS.payingOut} />;
   }
   const s = displayStatus(proposal);
   return <StatusChip status={s.kind} label={s.label} />;

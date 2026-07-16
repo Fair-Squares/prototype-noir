@@ -840,37 +840,10 @@ export async function fetchAccounts(): Promise<string[]> {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-export function formatEUR(amount: number): string {
-  return new Intl.NumberFormat("en-EU", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
-export function formatEURDecimals(amount: number): string {
-  return new Intl.NumberFormat("en-EU", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
-
-/**
- * Format an FSFT (Fund Shares) amount. FSFT is a token COUNT representing
- * ownership — never a currency, so this renders e.g. "20,000 FSFT", not "€20,000".
- * Use for distribution pools/claims (minted FSFT), NOT for EUR figures like the
- * proposal funding request or rent income.
- */
-export function formatFSFT(amount: number): string {
-  const n = new Intl.NumberFormat("en-EU", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-  return `${n} FSFT`;
-}
+// Formatting moved to the canonical lib/format.ts (UX overhaul Phase 0);
+// re-exported here so the many existing call sites keep importing from the
+// data seam. New code should import from "@/lib/format" directly.
+export { formatEUR, formatEURDecimals, formatFSFT } from "./format";
 
 export interface ChainParams {
   timing: {

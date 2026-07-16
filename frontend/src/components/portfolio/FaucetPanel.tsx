@@ -44,7 +44,7 @@ export function FaucetPanel({ address, accountIndex, onDripped }: FaucetPanelPro
     <div>
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <p className="text-caption max-w-md text-text-2">
-          Mint test EURs to your account via the on-chain Dripper (AIP-20). For the
+          Mint test EURs to your account via the on-chain test faucet (Dripper). For the
           demo only — these are not real funds.
         </p>
         <StatusChip status="simulation" label="Test only" />
