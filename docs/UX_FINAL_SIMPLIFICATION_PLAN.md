@@ -466,6 +466,28 @@ doc's original recommendation; the D4-dependent sections (§0, §1 Tier-2 table,
 
 ---
 
+## Implementation log
+
+- **Phase 0 landed** (`e87e1d3`): `lib/lexicon.ts`, `lib/format.ts` (+tests), the
+  Tier-3 ratchet guard (`lexicon.test.ts`, baseline: 17 files), `ui/Button href`,
+  `ui/GateCard`. Also removed an upstream-committed `frontend/node_modules` symlink
+  and hardened `.gitignore` (`c3cbc5c`).
+- **Re-baseline note (2026-07-15):** the §4/§Appendix audit mapped the local main
+  checkout, which turned out to be *behind origin* — origin's branch had already
+  delivered several §2 items before implementation started: `/invest`, `/rewards`,
+  `/explain`, `/reference` are folded and redirect via `next.config.ts`; primary nav
+  is Home · Homes · Portfolio with Vote/Trade/Verification under More; learn+explain
+  are merged into one About door (`components/about/`). File:line references in §4
+  and the Appendix describe the audited tree, not necessarily origin — phases 2–5
+  re-verify against the live tree before editing. The Phase 0 ratchet baseline was
+  computed on origin's tree and is accurate.
+- **Phase 1 landed, adapted to the re-baseline** (`87251b0`): "Votes" +
+  "Secondary market" nav renames (D3/§2); payout vocabulary v2 via canonical
+  `PAYOUT_LABELS` ("Paying out"/"Fully paid", §5.3) with the Vitest guard extended;
+  `lib/format.ts` made the canonical home of the pre-existing
+  formatEUR/formatEURDecimals/formatFSFT (contracts.ts re-exports); ratchet
+  burn-down 17 → 12 files (record_rent and AIP-* mentions rewritten).
+
 ## Appendix: audit trace
 
 This plan is grounded in a 2026-07-15 full-frontend audit (13 routes, ~21.6k lines).
