@@ -39,6 +39,9 @@ export { Button } from "./Button";
 export type { ButtonProps, ButtonVariant, ButtonSize } from "./Button";
 
 export { Alert } from "./Alert";
+
+export { GateCard } from "./GateCard";
+export type { GateCardProps } from "./GateCard";
 export type { AlertProps, AlertTone } from "./Alert";
 
 export { EmptyState } from "./EmptyState";
