@@ -71,7 +71,7 @@ export function ProjectsTable({ rows }: ProjectsTableProps) {
     },
     {
       key: "pool",
-      header: "Distribution pool",
+      header: "Payout pool",
       align: "right",
       hideOnMobile: true,
       // Distributions mint Fund Shares (FSFT), not euros — see formatFSFT.

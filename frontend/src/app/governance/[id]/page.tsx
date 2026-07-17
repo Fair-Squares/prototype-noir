@@ -222,7 +222,7 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
 
   const tabs: TabItem[] = [
     { value: "overview", label: "Overview" },
-    { value: "distribution", label: "Distribution & allocation" },
+    { value: "distribution", label: "Payouts" },
     { value: "deed", label: "Deed" },
     { value: "votes", label: "Votes" },
   ];

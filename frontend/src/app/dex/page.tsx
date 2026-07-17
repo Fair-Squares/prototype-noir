@@ -9,7 +9,7 @@ import {
   Button,
   DataTable,
   EmptyState,
-  KpiCard,
+  InfoDot,
   KpiGrid,
   PageHeader,
   Section,
@@ -19,6 +19,8 @@ import {
 } from "@/components/ui";
 import { TradeBalances, TradeTicket } from "@/components/trade";
 import { useWallet } from "@/contexts/WalletContext";
+import { formatPctFromBps } from "@/lib/format";
+import { logActivity } from "@/lib/sessionActivity";
 import {
   cancelDexOrder,
   claimDexProceeds,
@@ -33,6 +35,41 @@ import {
   type MyDexOrder,
   type PortfolioData,
 } from "@/lib/contracts";
+
+/** §4.5 depth summary — one side of the book as a sentence, not a table. */
+function DepthSummary({
+  heading,
+  orders,
+  fundSymbol,
+  bestLabel,
+  emptyText,
+}: {
+  heading: string;
+  orders: DexOrder[];
+  fundSymbol: string;
+  bestLabel: string;
+  emptyText: string;
+}) {
+  const open = orders.filter((o) => o.remaining > 0);
+  const best = open[0] ?? null; // book arrives best-price-first
+  const totalShares = open.reduce((sum, o) => sum + o.remaining, 0);
+  return (
+    <div className="rounded-md border border-border px-4 py-3">
+      <p className="text-label">{heading}</p>
+      {best ? (
+        <p className="text-body mt-1 text-text-1">
+          {bestLabel} <span className="text-mono">€{best.priceEur.toFixed(4)}</span>{" "}
+          <span className="text-caption text-text-2">
+            · {totalShares.toLocaleString("en-US")} {fundSymbol} across {open.length}{" "}
+            {open.length === 1 ? "order" : "orders"}
+          </span>
+        </p>
+      ) : (
+        <p className="text-caption mt-1 text-text-3">{emptyText}</p>
+      )}
+    </div>
+  );
+}
 
 function formatTtl(blocks: number, seconds: number): string {
   const mins = Math.round(seconds / 60);
@@ -126,6 +163,11 @@ export default function DexPage() {
       // The placement matches on-chain if it crosses; otherwise it rests — it
       // shows up under "Your orders" below, no number to remember.
       notify("success", result.message ?? "Order placed.");
+      logActivity(
+        address,
+        "order",
+        `Placed a ${side} order for ${amount.toLocaleString("en-US")} shares`
+      );
       await refresh();
     } catch (err: unknown) {
       notify("error", err instanceof Error ? err.message : "Order could not be placed.");
@@ -149,7 +191,10 @@ export default function DexPage() {
     try {
       const result = await action(address);
       notify(result.success ? "success" : "error", result.success ? (result.message ?? fallback.ok) : (result.error ?? fallback.fail));
-      if (result.success) await refresh();
+      if (result.success) {
+        logActivity(address, "order", result.message ?? fallback.ok);
+        await refresh();
+      }
     } catch (err: unknown) {
       notify("error", err instanceof Error ? err.message : fallback.fail);
     } finally {
@@ -195,32 +240,55 @@ export default function DexPage() {
 
       {msg ? <Alert tone={msg.type === "success" ? "success" : "danger"}>{msg.text}</Alert> : null}
 
-      <KpiGrid cols={3}>
-        {loading && !orderbook ? (
-          <>
-            <SkeletonKpi />
-            <SkeletonKpi />
-            <SkeletonKpi />
-          </>
-        ) : orderbook ? (
-          <>
-            <KpiCard label="Last issuance reference price" value={`€${orderbook.priceReferenceEur.toFixed(4)}`} sub={`Per ${fundSymbol}`} tone="accent" hint="The reference used to bound orders. It is the token price recorded at the most recent asset distribution — NOT current NAV per share, and not an open-market quote." />
-            <KpiCard label="Allowed price band" value={`€${orderbook.priceBandMinEur.toFixed(4)}`} sub={`to €${orderbook.priceBandMaxEur.toFixed(4)} · indicative reference guardrail`} />
-            <KpiCard label="Max order lifetime" value={chainParams ? formatTtl(chainParams.dex.maxTtlBlocks, chainParams.dex.maxTtlSecondsEstimate) : "-"} sub="After expiry an order can no longer settle" />
-          </>
-        ) : null}
-      </KpiGrid>
+      {/* §4.5: ONE price concept — the reference price leads; the band is a
+          guardrail sentence under it, not a standalone stat. */}
+      {loading && !orderbook ? (
+        <KpiGrid cols={1}>
+          <SkeletonKpi />
+        </KpiGrid>
+      ) : orderbook ? (
+        <section className="surface p-5">
+          <div className="flex items-center gap-1.5">
+            <span className="text-label">Reference price</span>
+            <InfoDot
+              label="About the reference price"
+              content="The price recorded at the most recent share issuance — NOT current NAV per share, and not an open-market quote. Every order must stay near it."
+            />
+          </div>
+          <p className="text-display text-text-1">
+            €{orderbook.priceReferenceEur.toFixed(4)}
+            <span className="text-caption ml-2 text-text-3">per {fundSymbol} · last issue price</span>
+          </p>
+          <p className="text-caption mt-2 text-text-2">
+            Orders must stay between{" "}
+            <span className="text-mono">€{orderbook.priceBandMinEur.toFixed(4)}</span> and{" "}
+            <span className="text-mono">€{orderbook.priceBandMaxEur.toFixed(4)}</span>
+            {chainParams ? ` (±${formatPctFromBps(chainParams.dex.priceBandBps)})` : ""} — so
+            prices stay tied to the value of the homes, and every trader is a
+            verified investor.
+          </p>
+        </section>
+      ) : null}
 
       <AdvancedDetails summary="How secondary trading works">
-        <p className="text-body text-text-2">
-          The order book below is <strong>public</strong>, but <strong>who</strong> posted each order is not —
-          orders carry no owner on chain. Matching is <strong>automatic, on-chain</strong>: when you place an
-          order that crosses a resting one at the same price, it settles in the same transaction (no bot, no
-          waiting). Settlement is over <strong>private balances</strong> — buying uses the private part of your
-          {eurSymbol} (the app moves the needed amount there for you when you place an order); selling uses
-          your private {fundSymbol}.
-          Proceeds accrue to your order and you <strong>claim</strong> them from <strong>Your orders</strong> below.
-        </p>
+        <div className="space-y-2">
+          <p className="text-body text-text-2">
+            The order book below is <strong>public</strong>, but <strong>who</strong> posted each order is not —
+            orders carry no owner on chain. Matching is <strong>automatic, on-chain</strong>: when you place an
+            order that crosses a resting one at the same price, it settles in the same transaction (no bot, no
+            waiting). Settlement is over <strong>private balances</strong> — buying uses the private part of your
+            {eurSymbol} (the app moves the needed amount there for you when you place an order); selling uses
+            your private {fundSymbol}.
+            Proceeds accrue to your order and you <strong>claim</strong> them from <strong>Your orders</strong> below.
+          </p>
+          {chainParams ? (
+            <p className="text-caption text-text-3">
+              Orders rest for at most{" "}
+              {formatTtl(chainParams.dex.maxTtlBlocks, chainParams.dex.maxTtlSecondsEstimate)} — after
+              expiry an order can no longer settle and its funds become claimable.
+            </p>
+          ) : null}
+        </div>
       </AdvancedDetails>
 
       <p className="text-caption text-text-3">
@@ -257,14 +325,43 @@ export default function DexPage() {
         </Section>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Section title={`Bids - buying ${fundSymbol}`} description="Resting buy orders (best price first). Owners are anonymous.">
-          <DataTable columns={orderColumns} rows={orderbook?.buyOrders ?? []} dense empty={{ title: "No buy orders", description: "No one is bidding for shares right now." }} />
-        </Section>
-        <Section title={`Asks - selling ${fundSymbol}`} description="Resting sell orders (best price first). Owners are anonymous.">
-          <DataTable columns={orderColumns} rows={orderbook?.sellOrders ?? []} dense empty={{ title: "No sell orders", description: "No shares are offered for sale right now." }} />
-        </Section>
-      </div>
+      {/* §4.5: depth summary first — a reader who has never seen an order
+          book gets best-price/size/count sentences; the full public book is
+          one disclosure away. Orders are anonymous — nobody can see who is
+          trading. */}
+      <Section
+        title="Open interest"
+        description="What other investors are offering right now. Orders are anonymous — nobody can see who is trading."
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <DepthSummary
+            heading="Buyers"
+            orders={orderbook?.buyOrders ?? []}
+            fundSymbol={fundSymbol}
+            bestLabel="Best bid"
+            emptyText="No one is bidding for shares right now."
+          />
+          <DepthSummary
+            heading="Sellers"
+            orders={orderbook?.sellOrders ?? []}
+            fundSymbol={fundSymbol}
+            bestLabel="Best ask"
+            emptyText="No shares are offered for sale right now."
+          />
+        </div>
+        <AdvancedDetails summary="Full order book" className="mt-4">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div>
+              <p className="text-label mb-2">Bids — buying {fundSymbol}</p>
+              <DataTable columns={orderColumns} rows={orderbook?.buyOrders ?? []} dense empty={{ title: "No buy orders", description: "No one is bidding for shares right now." }} />
+            </div>
+            <div>
+              <p className="text-label mb-2">Asks — selling {fundSymbol}</p>
+              <DataTable columns={orderColumns} rows={orderbook?.sellOrders ?? []} dense empty={{ title: "No sell orders", description: "No shares are offered for sale right now." }} />
+            </div>
+          </div>
+        </AdvancedDetails>
+      </Section>
 
       <Section
         title="Your orders"
