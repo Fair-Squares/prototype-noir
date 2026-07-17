@@ -514,6 +514,19 @@ doc's original recommendation; the D4-dependent sections (§0, §1 Tier-2 table,
   `<Link className="btn …">` sites onto `Button href` is DEFERRED — both paths
   render the identical class contract, so the sweep has no user-visible value;
   `Button href` exists for all new code. Revisit opportunistically.
+- **§4.6 eligibility fold-in + Phase 6 sync landed** (final iteration): the
+  one-time private eligibility check is offered INLINE in the ballot
+  (VotePanel `onRunCheck`, wired on /governance/[id]) and relabeled "Confirm
+  eligibility (private)" everywhere; CLAUDE.md's canonical sections updated to
+  match the built reality (payout vocabulary v2 + PAYOUT_LABELS, nav tiers
+  Home·Homes·Portfolio + Votes/Secondary market/About, "Fund facts", the
+  lexicon/format/sessionActivity modules, keeper role-gating, DM Sans/Nexa
+  font correction); TODO.md a11y item closed.
+- **Phase 6 residual (honest):** the device-level mobile audit (real phone
+  viewport pass across all routes) remains open in TODO.md — new components
+  built in this overhaul are responsive by construction (flex-col→sm:flex-row,
+  2-col grids, 44px touch targets on nav/menu), but the dedicated audit was not
+  performed here. The §8 user-script test needs a human tester session.
 
 ## Appendix: audit trace
 

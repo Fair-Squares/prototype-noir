@@ -229,11 +229,11 @@ export default function GovernancePage() {
 
       {address && kycProfile.isInvestor && !canVote ? (
         <Section
-          title="Get cleared to vote"
-          description="Voting requires a private proof that you hold Fund Shares. Running this check never reveals your balance — only that it is non-zero."
+          title="Confirm your eligibility"
+          description="Voting needs a one-time private check that you hold fund shares. Your balance is never revealed — only that it is non-zero."
         >
           <Button onClick={handleAttestFsft} loading={attesting}>
-            {attesting ? "Running private check…" : "Run private Fund Shares check"}
+            {attesting ? "Confirming privately…" : "Confirm eligibility (private)"}
           </Button>
           {eligibility?.reason ? (
             <p className="text-caption mt-3">{eligibility.reason}</p>

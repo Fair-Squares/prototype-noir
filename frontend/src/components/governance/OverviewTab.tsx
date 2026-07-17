@@ -13,6 +13,9 @@ export interface OverviewTabProps {
   isVoting: boolean;
   eligibilityReason?: string;
   onVote: (voteYes: boolean) => void;
+  /** §4.6 inline gate: the one-time private eligibility check, offered in place. */
+  onRunCheck?: () => void;
+  isRunningCheck?: boolean;
   /** Finalise the tally once voting has ended (status ACTIVE, window closed). */
   onFinalize: () => void;
   isFinalizing: boolean;
@@ -40,6 +43,8 @@ export function OverviewTab({
   isVoting,
   eligibilityReason,
   onVote,
+  onRunCheck,
+  isRunningCheck,
   onFinalize,
   isFinalizing,
   onExecute,
@@ -158,6 +163,8 @@ export function OverviewTab({
           eligibilityReason={eligibilityReason}
           windowClosed={window.closed}
           onVote={onVote}
+          onRunCheck={onRunCheck}
+          isRunningCheck={isRunningCheck}
         />
       </Section>
 
