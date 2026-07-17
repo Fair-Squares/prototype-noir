@@ -388,11 +388,17 @@ export function DepositFlow({ onDeposited }: { onDeposited?: () => void }) {
               />
 
               {submitting ? (
-                <Alert tone="info" title={`Submitting deposit… (${formatEUR(amountEur)})`}>
-                  Generating the private proof and sending two on-chain
-                  transactions — an EUR transfer and your private deposit. This
-                  usually takes 30&ndash;60 seconds; your position updates once the
-                  deposit is included in a block.
+                <Alert tone="info" title={`Processing your private deposit… (${formatEUR(amountEur)})`}>
+                  This usually takes 30&ndash;60 seconds; your position updates
+                  once the deposit lands on-chain.
+                  <AdvancedDetails summary="What happens under the hood" className="mt-2">
+                    <p className="text-caption text-text-2">
+                      Two on-chain transactions are sent: an EUR transfer to the
+                      fund and your private deposit note, proven with a
+                      zero-knowledge proof so the amount and your identity stay
+                      private.
+                    </p>
+                  </AdvancedDetails>
                 </Alert>
               ) : null}
 

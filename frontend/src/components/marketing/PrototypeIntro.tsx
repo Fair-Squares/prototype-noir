@@ -11,9 +11,23 @@ import { useWallet } from "@/contexts/WalletContext";
  * Deliberately word-lean — subtraction is the design.
  */
 /** isSimulation: null = mode not known yet (stats still loading) — make no
- * environment claim rather than guessing (the first frame must not lie). */
-export function PrototypeIntro({ isSimulation }: { isSimulation: boolean | null }) {
+ * environment claim rather than guessing (the first frame must not lie).
+ * rorPct: the fund's real on-chain return parameter in percent (null while
+ * loading / unset) — the headline states the rate only when it's real (D6). */
+export function PrototypeIntro({
+  isSimulation,
+  rorPct,
+}: {
+  isSimulation: boolean | null;
+  rorPct: number | null;
+}) {
   const { connect } = useWallet();
+
+  // §4.1 finance-plus-outcome one-liner: money and outcome in one breath.
+  const dealLine =
+    rorPct != null
+      ? `Invest in affordable housing. Earn a ${rorPct.toFixed(0)}% target annual return from rent, capped by design — so families pay below-market rent.`
+      : "Invest in affordable housing. Earn a capped target annual return from rent — so families pay below-market rent.";
 
   const paths = [
     { label: "Invest demo euros, earn a capped return", href: "/portfolio#deposit" },
@@ -30,11 +44,12 @@ export function PrototypeIntro({ isSimulation }: { isSimulation: boolean | null 
       </h1>
 
       <p className="text-body mt-3 text-text-2">
+        {dealLine}{" "}
         {isSimulation == null
-          ? "Private, community-owned housing investment — working end to end."
+          ? "Working end to end."
           : isSimulation
-            ? "Private, community-owned housing investment — working end to end with simulated euros. Nothing here is real money."
-            : "Private, community-owned housing investment — working end to end on a live network."}
+            ? "Working end to end with simulated euros — nothing here is real money."
+            : "Working end to end on a live network."}
       </p>
 
       <ul className="mt-6 space-y-2">

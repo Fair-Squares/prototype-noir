@@ -72,13 +72,18 @@ function extractVisibleText(source: string): string[] {
   for (const match of stripped.match(literal) ?? []) {
     out.push(match.slice(1, -1));
   }
-  // JSX text: letters between a closing `>` and the next `<`, no expressions.
-  // TS generics (`useState<T>(...)`) produce pseudo-captures of code — real
-  // copy never contains `;` or `=`, so those captures are dropped.
-  const jsxText = />([^<>{}"'`]*[A-Za-z][^<>{}"'`]*)</g;
+  // JSX text: letters between a closing `>`/`}` and the next `<`/`{` — the
+  // `}` start covers text that follows an embedded expression
+  // (`#{id} (AIP-721) is held…`). TS generics (`useState<T>(...)`) and code
+  // blocks produce pseudo-captures — real copy never contains `;` or `=`, so
+  // those captures are dropped.
+  const jsxText = /[>}]([^<>{}"'`]*[A-Za-z][^<>{}"'`]*)[<{]/g;
   let m: RegExpExecArray | null;
   while ((m = jsxText.exec(stripped)) !== null) {
     if (!/[;=]/.test(m[1])) out.push(m[1]);
+    // Re-scan from just after the capture so back-to-back segments
+    // (`}text{expr}text{`) aren't skipped by the consumed delimiter.
+    jsxText.lastIndex = m.index + m[0].length - 1;
   }
   return out;
 }

@@ -293,7 +293,7 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
 
       {deed ? (
         <Alert tone="success" title="Home acquired">
-          Deed NFT #{deed.tokenId} (AIP-721) is held by the fund, valued at{" "}
+          Property deed #{deed.tokenId} is held by the fund, valued at{" "}
           {formatEUR(deed.valuationEur)}. See the Deed tab for details.
         </Alert>
       ) : null}
@@ -312,6 +312,7 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
             isFinalizing={isFinalizing}
             onExecute={handleExecute}
             isExecuting={isExecuting}
+            isAdmin={Boolean(activeAccount?.isAdmin)}
           />
         ) : null}
         {activeTab === "distribution" ? (

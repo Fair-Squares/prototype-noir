@@ -19,6 +19,12 @@ export interface OverviewTabProps {
   /** Execute the passed proposal + open its distribution. Closed-window only. */
   onExecute: () => void;
   isExecuting: boolean;
+  /**
+   * Keeper actions (record result / deploy capital) render only for admin
+   * accounts (UX overhaul §4.6). UI gating only — M16: the demo has no real
+   * per-user auth, so this is presentation, not security.
+   */
+  isAdmin: boolean;
 }
 
 /**
@@ -38,6 +44,7 @@ export function OverviewTab({
   isFinalizing,
   onExecute,
   isExecuting,
+  isAdmin,
 }: OverviewTabProps) {
   const window = votingWindowFor(proposal);
   const quorum = quorumFor(proposal);
@@ -156,18 +163,28 @@ export function OverviewTab({
 
       {votingEnded ? (
         quorum.reached ? (
-          <Section
-            title="Finalise the vote"
-            description={
-              wouldPass
-                ? "Voting has closed with quorum met and the majority in favour. Finalise to record the result on-chain (approved) — then you can execute it to open the distribution and depositors can claim."
-                : "Voting has closed with quorum met, but the majority was against. Finalising will record this request as not passed."
-            }
-          >
-            <Button onClick={onFinalize} loading={isFinalizing}>
-              {isFinalizing ? "Finalising…" : wouldPass ? "Finalise — approve request" : "Finalise — close voting"}
-            </Button>
-          </Section>
+          isAdmin ? (
+            <Section
+              title="Record the result"
+              description={
+                wouldPass
+                  ? "Voting has closed with quorum met and the majority in favour. Record the result on-chain (approved) — then deploy the capital to open the payout so depositors can claim."
+                  : "Voting has closed with quorum met, but the majority was against. Recording will mark this request as not passed."
+              }
+            >
+              <Button onClick={onFinalize} loading={isFinalizing}>
+                {isFinalizing ? "Recording…" : wouldPass ? "Record result — approve request" : "Record result — close voting"}
+              </Button>
+            </Section>
+          ) : (
+            // §4.6: recording the result is a keeper operation — ordinary
+            // investors see the state, not the lever.
+            <Alert tone="info" title="Voting ended — awaiting the result">
+              {wouldPass
+                ? "Quorum was met and the majority is in favour. The fund administrator records the result next; once the capital is deployed, claims appear in your Portfolio."
+                : "Quorum was met, but the majority was against. The fund administrator records the result to close this request."}
+            </Alert>
+          )
         ) : (
           // Quorum was not reached, so finalize_proposal would revert on-chain.
           // Don't offer a button that fails — explain the terminal state instead.
@@ -192,14 +209,21 @@ export function OverviewTab({
       ) : null}
 
       {canExecute ? (
-        <Section
-          title="Finalise & fund"
-          description="This request was approved. Executing it commits the fund's capital and opens the distribution so depositors can claim their Fund Shares."
-        >
-          <Button onClick={onExecute} loading={isExecuting}>
-            {isExecuting ? "Executing…" : "Execute & open distribution"}
-          </Button>
-        </Section>
+        isAdmin ? (
+          <Section
+            title="Deploy the capital"
+            description="This request was approved. Deploying commits the fund's capital and opens the payout so depositors can claim their fund shares."
+          >
+            <Button onClick={onExecute} loading={isExecuting}>
+              {isExecuting ? "Deploying…" : "Deploy capital & open payout"}
+            </Button>
+          </Section>
+        ) : (
+          <Alert tone="info" title="Approved — awaiting capital deployment">
+            The fund administrator deploys the capital and opens the payout.
+            Your claim appears in your Portfolio once it opens.
+          </Alert>
+        )
       ) : null}
 
       {proposal.status === 2 ? (

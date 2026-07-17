@@ -203,7 +203,7 @@ function ProjectDetail({ projectId }: { projectId: number }) {
 
       {deed ? (
         <Alert tone="success" title="Home acquired">
-          Deed NFT #{deed.tokenId} (AIP-721) is held by the fund
+          Property deed #{deed.tokenId} is held by the fund
           {deed.valuationEur > 0 ? <> · valued at {formatEUR(deed.valuationEur)}</> : null}. See
           the Distribution &amp; capital tab for details.
         </Alert>

@@ -158,7 +158,7 @@ export default function GovernancePage() {
       <PageHeader
         eyebrow="Community vote"
         title="Vote on homes"
-        description="Decide which homes we buy. Your ballot is private."
+        description="You're deciding whether these homes get financed — each request shows the homes enabled, the rent terms, and the amount. Your ballot is private."
       />
 
       {loadError ? <Alert tone="danger" title="Something went wrong">{loadError}</Alert> : null}

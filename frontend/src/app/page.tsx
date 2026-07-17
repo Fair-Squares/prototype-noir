@@ -195,8 +195,15 @@ export default function OverviewPage() {
         // brochure (that lives on /learn and fair-squares.nl). What this is,
         // the three things you can do, one action. The FeaturedProject block
         // below bridges into the live fund sections.
-        <PrototypeIntro isSimulation={stats == null ? null : isSimulation} />
+        <PrototypeIntro
+          isSimulation={stats == null ? null : isSimulation}
+          rorPct={stats?.rorBps != null ? stats.rorBps / 100 : null}
+        />
       )}
+
+      {/* IMPACT — the §3 "what it makes possible" surface, at the top of both
+          Home states (outcome, not finance — outside the ≤3-KPI budget). */}
+      {!loading && !error ? <ImpactStrip proposals={proposals} /> : null}
 
       {/* FEATURED PROJECT — the housing-first hero (the product). For the
           disconnected visitor it is the bridge from the marketing stack into the
@@ -288,13 +295,14 @@ export default function OverviewPage() {
         )}
       </Section>
 
-      {/* All fund metrics — impact, fund health, participation, verification,
-          and raw protocol parameters. Opt-in, kept out of the calm primary flow. */}
+      {/* Fund facts — health, participation and data-freshness detail. Opt-in,
+          kept out of the calm primary flow. Raw protocol parameters (price
+          band, voting window in blocks, block production, allocation splits)
+          were evicted to the sanctioned technical surface (/learn#parameters)
+          per the overhaul plan §4.1 — no user meaning here. */}
       {stats || chain ? (
-        <AdvancedDetails summary="All fund metrics">
+        <AdvancedDetails summary="Fund facts">
           <div className="space-y-6">
-            {!loading && !error ? <ImpactStrip proposals={proposals} /> : null}
-
             {stats ? (
               <div className="space-y-3">
                 <FundHealthKpis stats={stats} />
@@ -306,48 +314,19 @@ export default function OverviewPage() {
 
             <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
               {stats ? (
-                <>
-                  <RawRow label="Total deposits" value={formatEUR(stats.totalDeposits)} />
-                  {stats.parkedAllocationBps != null ? (
-                    <RawRow
-                      label="Parked allocation"
-                      value={`${(stats.parkedAllocationBps / 100).toFixed(2)}%`}
-                    />
-                  ) : null}
-                  {stats.tokenPriceBps != null ? (
-                    <RawRow
-                      label="Token price"
-                      value={`${(stats.tokenPriceBps / 100).toFixed(2)}%`}
-                    />
-                  ) : null}
-                  <RawRow label="Data source" value={stats.source ?? "unknown"} />
-                </>
+                <RawRow label="Total deposits" value={formatEUR(stats.totalDeposits)} />
               ) : null}
               {chain ? (
-                <>
-                  <RawRow
-                    label="Governance quorum"
-                    value={`${chain.governance.minQuorumVotes.toLocaleString()} votes`}
-                  />
-                  <RawRow
-                    label="Voting window"
-                    value={`${chain.governance.votingWindowBlocks.toLocaleString()} blocks`}
-                  />
-                  <RawRow
-                    label="Trade price band"
-                    value={`±${(chain.dex.priceBandBps / 100).toFixed(2)}%`}
-                  />
-                  <RawRow
-                    label="Block production"
-                    value={chain.timing.blockProductionMode}
-                  />
-                </>
+                <RawRow
+                  label="Votes needed to decide a request"
+                  value={chain.governance.minQuorumVotes.toLocaleString()}
+                />
               ) : null}
             </dl>
             <p className="text-caption text-text-3">
               See{" "}
               <Link href="/learn#parameters" className="text-fs-teal-dark hover:underline">
-                Reference
+                parameters &amp; transparency
               </Link>{" "}
               for the full parameter set, contract addresses, and verifier keys.
             </p>
