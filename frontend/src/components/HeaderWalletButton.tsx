@@ -93,7 +93,7 @@ export default function HeaderWalletButton() {
                     connect(acc.index);
                     setShowDropdown(false);
                   }}
-                  className="flex w-full items-center gap-3 border-b border-border px-4 py-3 text-left last:border-0 hover:bg-bg"
+                  className="flex w-full items-center gap-3 border-b border-border px-4 py-3 text-left last:border-0 hover:bg-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-accent)]"
                 >
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-fs-mint text-caption font-bold text-fs-teal-dark">
                     {acc.alias[0].toUpperCase()}
@@ -102,7 +102,7 @@ export default function HeaderWalletButton() {
                     <span className="text-caption flex items-center gap-1.5 font-semibold text-text-1">
                       {acc.alias}
                       {acc.isAdmin && <span className="chip chip-accent">admin</span>}
-                      {acc.isGenerated && <span className="chip chip-warning">dev</span>}
+                      {acc.isGenerated && <span className="chip chip-warning">demo</span>}
                     </span>
                     <span className="text-mono text-caption block truncate text-text-3">
                       {acc.address.slice(0, 16)}…{acc.address.slice(-6)}
@@ -110,16 +110,19 @@ export default function HeaderWalletButton() {
                   </span>
                 </button>
               ))}
+              {/* §5.1: demo affordance, visually separated from the everyday
+                  account list — labeled as demo tooling, ghost-styled. */}
               <div className="border-t border-border p-2">
+                <p className="text-label px-2 pb-1 pt-0.5">Demo tools</p>
                 <button
                   type="button"
                   onClick={() => {
                     generateDevAccount();
                     setShowDropdown(false);
                   }}
-                  className="btn btn-secondary btn-sm w-full"
+                  className="btn btn-ghost btn-sm w-full"
                 >
-                  Generate dev account
+                  Generate demo account
                 </button>
               </div>
             </div>
@@ -157,7 +160,7 @@ export default function HeaderWalletButton() {
         <span aria-hidden="true" className="inline-block h-2 w-2 rounded-full bg-fs-teal" />
         <span className="max-w-[7rem] truncate">{alias}</span>
         {isAdmin && <span className="chip chip-accent hidden sm:inline-flex">admin</span>}
-        {activeAccount.isGenerated && <span className="chip chip-warning hidden sm:inline-flex">dev</span>}
+        {activeAccount.isGenerated && <span className="chip chip-warning hidden sm:inline-flex">demo</span>}
         {isInvestor && <span className="chip chip-accent hidden sm:inline-flex">investor</span>}
         {isPropertyOwner && <span className="chip chip-accent hidden sm:inline-flex">owner</span>}
         {isCouncil && <span className="chip chip-success hidden sm:inline-flex">council</span>}
@@ -185,7 +188,7 @@ export default function HeaderWalletButton() {
                       switchAccount(acc.index);
                       setShowDropdown(false);
                     }}
-                    className={`text-caption flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
+                    className={`text-caption flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-accent)] ${
                       acc.index === activeAccount.index
                         ? "bg-fs-mint font-semibold text-fs-teal-dark"
                         : "text-text-2 hover:bg-bg"
@@ -198,7 +201,7 @@ export default function HeaderWalletButton() {
                       }`}
                     />
                     {acc.alias}
-                    {acc.isGenerated && <span className="chip chip-warning">dev</span>}
+                    {acc.isGenerated && <span className="chip chip-warning">demo</span>}
                     <span className="text-mono ml-auto opacity-50">…{acc.address.slice(-6)}</span>
                   </button>
                 ))}
@@ -207,15 +210,16 @@ export default function HeaderWalletButton() {
           )}
 
           <div className="border-b border-border px-4 py-2">
+            <p className="text-label pb-1">Demo tools</p>
             <button
               type="button"
               onClick={() => {
                 generateDevAccount();
                 setShowDropdown(false);
               }}
-              className="text-caption w-full rounded-md px-2 py-1.5 text-left text-text-2 transition-colors hover:bg-bg hover:text-text-1"
+              className="text-caption w-full rounded-md px-2 py-1.5 text-left text-text-2 transition-colors hover:bg-bg hover:text-text-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-accent)]"
             >
-              Generate dev account
+              Generate demo account
             </button>
           </div>
 
@@ -226,7 +230,7 @@ export default function HeaderWalletButton() {
                 disconnect();
                 setShowDropdown(false);
               }}
-              className="text-caption w-full rounded-md px-2 py-1.5 text-left text-text-2 transition-colors hover:bg-bg hover:text-text-1"
+              className="text-caption w-full rounded-md px-2 py-1.5 text-left text-text-2 transition-colors hover:bg-bg hover:text-text-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-accent)]"
             >
               Deselect account
             </button>
