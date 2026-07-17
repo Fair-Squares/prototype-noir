@@ -30,6 +30,10 @@ const EXCLUDED_PREFIXES = [
 ];
 const EXCLUDED_FILES = new Set([
   "components/projects/ProjectDetailProofs.tsx", // sanctioned on-chain record panel
+  // The old /reference surface, folded into /learn behind AdvancedDetails —
+  // the ONE sanctioned dense technical panel (plan §4.8) + its block ticker.
+  "components/about/ParametersPanel.tsx",
+  "components/shell/BlockTicker.tsx",
 ]);
 
 /**
@@ -37,18 +41,7 @@ const EXCLUDED_FILES = new Set([
  * (file → sorted banned-term names). Phases 1-5 delete entries as copy is
  * rewritten; this object must reach {} by Phase 6.
  */
-const KNOWN_OFFENDERS: Record<string, string[]> = {
-  "app/dex/page.tsx": ["escrow"],
-  "components/about/ParametersPanel.tsx": [
-    "aip-standard",
-    "block-height",
-    "bps",
-    "epoch",
-    "nullifier",
-  ],
-  "components/shell/BlockTicker.tsx": ["block-height"],
-  "components/trade/TradeTicket.tsx": ["shield"],
-};
+const KNOWN_OFFENDERS: Record<string, string[]> = {};
 
 function walk(dir: string): string[] {
   const out: string[] = [];

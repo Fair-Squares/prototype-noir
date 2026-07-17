@@ -158,7 +158,7 @@ export default function DexPage() {
   };
 
   const cancelOrder = (seq: number) =>
-    runOrderAction(seq, (addr) => cancelDexOrder(addr, seq, accountIndex), { ok: "Order cancelled — unfilled escrow moved to your claimable balance.", fail: "Cancel failed." });
+    runOrderAction(seq, (addr) => cancelDexOrder(addr, seq, accountIndex), { ok: "Order cancelled — your unfilled amount is now claimable below.", fail: "Cancel failed." });
 
   const claim = (seq: number, token: "eur" | "fsft") =>
     runOrderAction(seq, (addr) => claimDexProceeds(addr, seq, token, accountIndex), { ok: "Claimed to your private balance.", fail: "Nothing to claim." });
@@ -268,7 +268,7 @@ export default function DexPage() {
 
       <Section
         title="Your orders"
-        description="Cancel to reclaim escrow, or claim what a match left you. Only you can see these."
+        description="Cancel to get your unfilled amount back, or claim what a match left you. Only you can see these."
       >
         {!address ? (
           <EmptyState title="Connect a wallet" description="Connect a verified investor account to see your orders." />
@@ -343,7 +343,7 @@ export default function DexPage() {
                             Keep order
                           </Button>
                           <span className="text-caption text-text-3">
-                            Cancelling frees your unfilled escrow back to claimable.
+                            Cancelling returns your unfilled amount to your claimable balance.
                           </span>
                         </>
                       ) : (

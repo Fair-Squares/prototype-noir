@@ -81,7 +81,7 @@ export function TradeTicket({
     });
   }
 
-  const buyHint = `To buy ${fundSymbol}, settlement spends your private ${eurSymbol}. Shield ${eurSymbol} to your private balance first.`;
+  const buyHint = `To buy ${fundSymbol}, settlement spends your private ${eurSymbol}. Move ${eurSymbol} to your private balance first.`;
   const sellHint = `To sell ${fundSymbol}, settlement spends your private ${fundSymbol} balance.`;
 
   return (
