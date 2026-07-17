@@ -135,7 +135,7 @@ export function ProjectDetailGovernance({
                 </dd>
               </div>
               <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
-                <dt className="text-caption text-text-2">Shares attested</dt>
+                <dt className="text-caption text-text-2">Shares confirmed (private)</dt>
                 <dd className="text-meta text-text-1">
                   {eligibility.hasFsftVotingAttestation ? "Yes" : "No"}
                 </dd>

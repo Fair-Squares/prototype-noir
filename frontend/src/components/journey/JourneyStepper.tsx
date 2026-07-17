@@ -9,7 +9,7 @@ import type { KYCProfile, Listing, PortfolioData, Proposal } from "@/lib/contrac
  *  (privacy-first phrasing; no crypto hype). */
 const ON_CHAIN: Record<string, string> = {
   verify:
-    "A verifier attests you privately: eligibility is provable on-chain without your identity documents ever touching the chain.",
+    "A verifier confirms you privately: eligibility is provable on-chain without your identity documents ever touching the chain.",
   deposit:
     "Your euros join the pooled housing fund. How much you deposited stays visible to you, not to other members — only the aggregate is public.",
   properties:

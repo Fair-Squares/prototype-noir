@@ -39,10 +39,6 @@ const EXCLUDED_FILES = new Set([
  */
 const KNOWN_OFFENDERS: Record<string, string[]> = {
   "app/dex/page.tsx": ["escrow"],
-  "app/fund/page.tsx": ["attest"],
-  "app/fund/submit/page.tsx": ["attest"],
-  "app/governance/page.tsx": ["attest"],
-  "app/portfolio/page.tsx": ["attest"],
   "components/about/ParametersPanel.tsx": [
     "aip-standard",
     "block-height",
@@ -50,11 +46,7 @@ const KNOWN_OFFENDERS: Record<string, string[]> = {
     "epoch",
     "nullifier",
   ],
-  "components/journey/JourneyStepper.tsx": ["attest"],
-  "components/projects/ListingCard.tsx": ["attest"],
-  "components/projects/ProjectDetailGovernance.tsx": ["attest"],
   "components/shell/BlockTicker.tsx": ["block-height"],
-  "components/trade/TradeBalances.tsx": ["shield"],
   "components/trade/TradeTicket.tsx": ["shield"],
 };
 
@@ -88,9 +80,13 @@ function extractVisibleText(source: string): string[] {
     out.push(match.slice(1, -1));
   }
   // JSX text: letters between a closing `>` and the next `<`, no expressions.
+  // TS generics (`useState<T>(...)`) produce pseudo-captures of code — real
+  // copy never contains `;` or `=`, so those captures are dropped.
   const jsxText = />([^<>{}"'`]*[A-Za-z][^<>{}"'`]*)</g;
   let m: RegExpExecArray | null;
-  while ((m = jsxText.exec(stripped)) !== null) out.push(m[1]);
+  while ((m = jsxText.exec(stripped)) !== null) {
+    if (!/[;=]/.test(m[1])) out.push(m[1]);
+  }
   return out;
 }
 

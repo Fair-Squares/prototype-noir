@@ -52,7 +52,7 @@ export function ListingCard({ listing, cappedMonthlyRentEur, action, lifecycle, 
           <dd className="text-mono text-body text-text-1">{formatEUR(listing.askEur)}</dd>
         </div>
         <div>
-          <dt className="text-label text-text-3">Market rent (attested)</dt>
+          <dt className="text-label text-text-3">Market rent (certified)</dt>
           <dd className="text-mono text-body text-text-1">
             €{listing.marketRentRefEur.toLocaleString("en-IE")}/mo
           </dd>
