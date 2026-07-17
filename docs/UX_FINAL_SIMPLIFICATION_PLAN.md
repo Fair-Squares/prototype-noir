@@ -488,6 +488,33 @@ doc's original recommendation; the D4-dependent sections (§0, §1 Tier-2 table,
   formatEUR/formatEURDecimals/formatFSFT (contracts.ts re-exports); ratchet
   burn-down 17 → 12 files (record_rent and AIP-* mentions rewritten).
 
+- **Phase 2 landed** (`090140a`): Portfolio §3 strip + D8 impact line
+  (PositionSummary), D5 session activity log (`lib/sessionActivity.ts` +
+  `ActivityLog` replacing the history dead-end), attested→certified copy,
+  scanner artifact filter. Ratchet 12 → 4 files.
+- **Ratchet EMPTY** (`76c09a9`): shield/escrow copy rewritten; ParametersPanel
+  (the folded /reference) wrapped in AdvancedDetails on /learn and sanctioned
+  with BlockTicker; `KNOWN_OFFENDERS = {}` — §8.6 reached ahead of Phase 6.
+- **§4.1/4.3/4.6 landed** (`336cd88`): Home finance-plus-outcome one-liner
+  (real ROR, D6/D4), ImpactStrip hoisted, "Fund facts" disclosure with raw
+  params evicted; deposit ticket Privacy row + outcome line + calm submit copy;
+  keeper actions role-gated with honest non-admin status alerts; vote stakes
+  framing (header + memo-card rent terms). Guard extraction widened (post-
+  expression JSX text) — caught + fixed both "Deed NFT (AIP-721)" alerts.
+- **§4.4/4.5 landed** (`fb8321d`): market page leads with ONE price concept +
+  mission-framed band guardrail; depth summaries with the full anonymous book
+  behind disclosure; order actions logged (D5). /fund/[id] tabs 5 → 3
+  (Dossier · Funding & votes · Payouts) with legacy ?tab= aliases and the
+  Proofs panel demoted verbatim to "On-chain record (technical)"; payout
+  vocabulary swept (DeedTab, DistributionTab, ProjectsTable, governance tab).
+- **Wallet menu** (`48558f4`): focus-visible rings on all menu items (TODO.md
+  a11y item), "Generate demo account" under an explicit "Demo tools" divider,
+  `dev` chips → `demo` (§5.1).
+- **§5.2 scope call:** the mechanical sweep of ~31 existing
+  `<Link className="btn …">` sites onto `Button href` is DEFERRED — both paths
+  render the identical class contract, so the sweep has no user-visible value;
+  `Button href` exists for all new code. Revisit opportunistically.
+
 ## Appendix: audit trace
 
 This plan is grounded in a 2026-07-15 full-frontend audit (13 routes, ~21.6k lines).
