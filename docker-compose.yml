@@ -225,13 +225,18 @@ services:
       # "Insufficient fee payer balance". 30 is the working baseline; the
       # bootstrap script auto-retries spikes that exceed it.
       - WALLET_MIN_FEE_PADDING=${WALLET_MIN_FEE_PADDING:-30}
+      # Contract compiles run as a pool of background jobs, one per core by
+      # default (nargo is single-threaded, ~0.45 GB each). Lower this on a
+      # memory-constrained docker VM.
+      - BOOTSTRAP_COMPILE_JOBS=${BOOTSTRAP_COMPILE_JOBS:-}
     volumes:
       - ./:/workspace
       - contract-env:/out
-      # Persist nargo's git-dependency cache (aztec-nr + the aztec-packages
-      # protocol crates are large clones) so re-bootstraps don't re-fetch deps
-      # every time. NARGO_HOME defaults to /root/.nargo (HOME=/root in the image).
-      - nargo-cache:/root/.nargo
+      # Persist nargo's git-dependency cache so re-bootstraps don't re-clone
+      # aztec-nr. nargo keeps it at $HOME/nargo/github.com/... (no dot --
+      # /root/.nargo only ever held the host installer's bin dir, so the old
+      # mount cached nothing).
+      - nargo-cache:/root/nargo
     entrypoint: ["bash", "./scripts/bootstrap-local-network.sh"]
     restart: "no"
 

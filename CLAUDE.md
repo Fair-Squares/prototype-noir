@@ -96,6 +96,19 @@ still persists git deps across runs for that path.
   strictly serial and upstream's own local-network setup waits for the
   checkpoint for the same reason (a proposed block can in principle be dropped
   before its checkpoint lands). The cli-wallet default is `proposed`.
+- **Compile stage.** nargo is single-threaded (~45 s and ~0.45 GB for
+  housing_fund, ~55 s for the vendored token; v6 `bb` transpile + VK generation
+  adds only ~1 s per contract, even cold), so the bootstrap runs the nine
+  contract compiles as a pool of background jobs, one per core
+  (`BOOTSTRAP_COMPILE_JOBS`). The first needed compile runs in the foreground
+  to populate nargo's git-dependency cache before concurrent jobs touch it.
+  Measured on 4 cores, cold: custom contracts ~85 s, standards ~90 s, versus
+  ~45-55 s per contract serially. Unchanged contracts are skipped
+  (`artifact_is_fresh`, which also requires `"transpiled": true`;
+  `FS_FORCE_COMPILE=1` rebuilds). The nargo dependency cache lives at
+  `$HOME/nargo/github.com/...` (no dot); the compose `nargo-cache` volume
+  mounts that path. `FS_BOOTSTRAP_ROOT=<checkout> AZTEC_BIN=aztec` lets the
+  compile functions run on a host with the toolchain installed.
 - There is **no push/subscription API** for tx completion in v6 aztec.js: the
   only primitives are `send({ wait: NO_WAIT })` (returns the tx hash at once)
   plus `waitForTx(node, txHash, opts)` / `node.getTxReceipt`. The API routes

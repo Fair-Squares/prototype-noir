@@ -10,7 +10,9 @@
 
 set -eu
 
-ROOT_DIR="/workspace"
+# /workspace inside the aztec-bootstrap container; FS_BOOTSTRAP_ROOT lets the
+# compile stage be exercised against a checkout on a host with the aztec CLI.
+ROOT_DIR="${FS_BOOTSTRAP_ROOT:-/workspace}"
 OUT_DIR="${OUT_DIR:-/out}"
 AZTEC_NODE_URL="${AZTEC_NODE_URL:-http://aztec:8080}"
 GOVERNANCE_VOTING_WINDOW_BLOCKS="${GOVERNANCE_VOTING_WINDOW_BLOCKS:-300}"
@@ -44,7 +46,7 @@ STANDARD_CONTRACTS="token_contract dripper nft_contract"
 
 # -- Binary paths (Aztec image doesn't put these in PATH) ---------------------
 # aztec CLI: the main node entrypoint
-AZTEC_BIN="node --no-warnings /usr/src/yarn-project/aztec/dest/bin/index.js"
+AZTEC_BIN="${AZTEC_BIN:-node --no-warnings /usr/src/yarn-project/aztec/dest/bin/index.js}"
 # aztec-wallet: separate package for deploying/sending txs
 AZTEC_WALLET_BIN="node --no-warnings /usr/src/yarn-project/cli-wallet/dest/bin/index.js"
 # aztec-nargo: Aztec wrapper for Noir compile/test flows (preferred over raw nargo)
@@ -56,9 +58,13 @@ AZTEC_NARGO_BIN="$(command -v aztec-nargo 2>/dev/null || true)"
 TOOLCHAIN_BIN="/usr/src/labs-aztec-toolchain/bin"
 if [ -x "$TOOLCHAIN_BIN/nargo" ]; then
   NARGO_BIN="$TOOLCHAIN_BIN/nargo"
-else
+elif [ -x "/usr/src/noir/noir-repo/target/release/nargo" ]; then
   NARGO_BIN="/usr/src/noir/noir-repo/target/release/nargo"
+else
+  # Outside the image (FS_BOOTSTRAP_ROOT host runs): whatever nargo is on PATH.
+  NARGO_BIN=$(command -v nargo 2>/dev/null || echo "")
 fi
+[ -n "$NARGO_BIN" ] || { echo "[bootstrap] FATAL: nargo binary not found" >&2; exit 1; }
 # bb: barretenberg binary — handles AVM transpilation + VK generation.
 # Docker images ship bb-avm (the AVM-enabled build); fall back to bb.
 if [ -x "$TOOLCHAIN_BIN/bb-avm" ]; then
@@ -110,6 +116,9 @@ artifact_is_fresh() {
   [ -z "$newest_artifact" ] && return 1
   # Any source newer than the artifact -> stale.
   [ -n "$(find "$src_dir" \( -name '*.nr' -o -name 'Nargo.toml' \) -newer "$newest_artifact" 2>/dev/null | head -1)" ] && return 1
+  # A raw `nargo compile` leftover (no AVM bytecode / VKs) is not deployable;
+  # treat it as stale so the transpile step runs.
+  grep -q '"transpiled":[[:space:]]*true' "$newest_artifact" || return 1
   return 0
 }
 
@@ -231,90 +240,163 @@ wait_for_pxe() {
 }
 
 # -- 2. Compile contracts ------------------------------------------------------
+# nargo is single-threaded (~45 s and ~0.45 GB RSS for housing_fund on the v6
+# toolchain; the bb transpile + VK generation that follows adds ~1 s), so the
+# nine contract compiles run as a bounded pool of background jobs, one per core
+# by default (BOOTSTRAP_COMPILE_JOBS overrides). The FIRST compile that is
+# actually needed runs in the foreground: it populates nargo's git-dependency
+# cache (~/nargo/github.com/...), which concurrent first-time clones of the same
+# dependency would race on. Each job logs to its own file, replayed on failure,
+# so output never interleaves. Nothing downstream needs an artifact before
+# `finish_compiles` has waited for the whole pool.
+BOOTSTRAP_COMPILE_JOBS="${BOOTSTRAP_COMPILE_JOBS:-$(nproc 2>/dev/null || echo 2)}"
+COMPILE_LOG_DIR=/tmp/fs-bootstrap/compile
+JOB_PIDS=()
+JOB_NAMES=()
+JOB_STARTS=()
+_dep_cache_warm=0
+_standards_compiled=0
+
+run_compile_job() { # run_compile_job <name> <function> [args...]
+  local name=$1; shift
+  mkdir -p "$COMPILE_LOG_DIR"
+  if [ "$_dep_cache_warm" = 0 ]; then
+    local t0=$SECONDS
+    log "Compiling ${name} (foreground: warms the nargo dependency cache)..."
+    if ! ( "$@" ) > "$COMPILE_LOG_DIR/${name}.log" 2>&1; then
+      cat "$COMPILE_LOG_DIR/${name}.log" >&2
+      die "${name} failed to compile"
+    fi
+    _dep_cache_warm=1
+    log "Compiled ${name} in $((SECONDS - t0)) s"
+    return 0
+  fi
+  while [ "$(jobs -rp | wc -l)" -ge "$BOOTSTRAP_COMPILE_JOBS" ]; do sleep 0.5; done
+  log "Compiling ${name} (background, up to ${BOOTSTRAP_COMPILE_JOBS} jobs)..."
+  ( "$@" ) > "$COMPILE_LOG_DIR/${name}.log" 2>&1 &
+  JOB_PIDS+=("$!"); JOB_NAMES+=("$name"); JOB_STARTS+=("$SECONDS")
+}
+
+wait_compile_jobs() {
+  local failed=0 i
+  for i in "${!JOB_PIDS[@]}"; do
+    if wait "${JOB_PIDS[$i]}"; then
+      log "Compiled ${JOB_NAMES[$i]} ($((SECONDS - JOB_STARTS[i])) s after launch)"
+    else
+      log "${JOB_NAMES[$i]} FAILED -- its log:"
+      cat "$COMPILE_LOG_DIR/${JOB_NAMES[$i]}.log" >&2
+      failed=1
+    fi
+  done
+  JOB_PIDS=(); JOB_NAMES=(); JOB_STARTS=()
+  [ "$failed" = 0 ] || die "contract compilation failed (see the logs above)"
+}
+
+# One custom contract: compile + transpile + artifact fix-up. Runs in a subshell.
+_compile_custom() { # _compile_custom <contract>
+  local c=$1
+  local artifact_dir="${ROOT_DIR}/contracts/${c}/target"
+  cd "${ROOT_DIR}/contracts/${c}"
+
+  # Step 1: compile Noir to ACIR.
+  # Prefer `aztec compile` (nargo + bb aztec_process + aztec_version stamp in
+  # one go; it honours the NARGO / BB env exported above); fall back to raw
+  # nargo only if the wrapper is unavailable.
+  local needs_transpile=0
+  if $AZTEC_BIN help compile >/dev/null 2>&1; then
+    $AZTEC_BIN compile 2>&1 || die "Could not compile ${c} with aztec compile"
+  elif [ -n "$AZTEC_NARGO_BIN" ]; then
+    "$AZTEC_NARGO_BIN" compile --silence-warnings 2>&1 || die "Could not compile ${c} with aztec-nargo"
+    needs_transpile=1
+  else
+    $NARGO_BIN compile --silence-warnings 2>&1 || die "Could not compile ${c} with nargo fallback"
+    needs_transpile=1
+  fi
+
+  # Verify artifact was produced
+  if [ ! -d "$artifact_dir" ] || [ -z "$(ls "$artifact_dir"/*.json 2>/dev/null)" ]; then
+    die "No compilation artifact found for ${c} in ${artifact_dir}"
+  fi
+
+  # Step 2 (raw-nargo fallback only): AVM transpilation + VK generation,
+  # required for aztec-wallet deploy. `aztec compile` already did this, and on
+  # v6 a second `bb aztec_process -i <dir>` over its (aztec_version-stamped)
+  # output finds nothing to do, prints "No contract artifacts found" and exits
+  # 1 -- which this guard used to turn into a fatal bootstrap error.
+  # bb aztec_process needs an absolute path — relative paths don't resolve correctly
+  if [ "$needs_transpile" = "1" ]; then
+    log "Transpiling ${c} (AVM + VKs)..."
+    $BB_BIN aztec_process -i "${artifact_dir}" 2>&1 | grep -E "Transpil|complete|Error" || die "AVM transpilation failed for ${c}"
+  fi
+
+  # Step 3: Strip __aztec_nr_internals__ prefix from function names.
+  # The Aztec #[aztec] macro renames functions internally, but public_dispatch
+  # uses the EXTERNAL names (no prefix). The SDK also looks up functions by
+  # external name. This rename makes the artifact match what both expect.
+  local json_file
+  for json_file in "${artifact_dir}"/*.json; do
+    fix_artifact "${json_file}" "${AZTEC_VERSION}" 2>&1
+  done
+  log "Compiled and transpiled ${c} successfully"
+}
 
 compile_contracts() {
+  local c
   for c in $CONTRACTS; do
-    artifact_dir="${ROOT_DIR}/contracts/${c}/target"
-    cd "${ROOT_DIR}/contracts/${c}"
-
-    if artifact_is_fresh "${ROOT_DIR}/contracts/${c}/src" "${artifact_dir}"; then
+    if artifact_is_fresh "${ROOT_DIR}/contracts/${c}/src" "${ROOT_DIR}/contracts/${c}/target"; then
       log "Skipping ${c} (sources unchanged; artifact up to date)"
       continue
     fi
-
-    log "Compiling contract: ${c}"
-
-    # Step 1: compile Noir to ACIR.
-    # Prefer `aztec compile` (nargo + bb aztec_process + aztec_version stamp in
-    # one go; it honours the NARGO / BB env exported above); fall back to raw
-    # nargo only if the wrapper is unavailable.
-    needs_transpile=0
-    if $AZTEC_BIN help compile >/dev/null 2>&1; then
-      $AZTEC_BIN compile 2>&1 || die "Could not compile ${c} with aztec compile"
-    elif [ -n "$AZTEC_NARGO_BIN" ]; then
-      "$AZTEC_NARGO_BIN" compile --silence-warnings 2>&1 || die "Could not compile ${c} with aztec-nargo"
-      needs_transpile=1
-    else
-      $NARGO_BIN compile --silence-warnings 2>&1 || die "Could not compile ${c} with nargo fallback"
-      needs_transpile=1
-    fi
-
-    # Verify artifact was produced
-    if [ ! -d "$artifact_dir" ] || [ -z "$(ls "$artifact_dir"/*.json 2>/dev/null)" ]; then
-      die "No compilation artifact found for ${c} in ${artifact_dir}"
-    fi
-
-    # Step 2 (raw-nargo fallback only): AVM transpilation + VK generation,
-    # required for aztec-wallet deploy. `aztec compile` already did this, and on
-    # v6 a second `bb aztec_process -i <dir>` over its (aztec_version-stamped)
-    # output finds nothing to do, prints "No contract artifacts found" and exits
-    # 1 -- which this guard used to turn into a fatal bootstrap error.
-    # bb aztec_process needs an absolute path — relative paths don't resolve correctly
-    if [ "$needs_transpile" = "1" ]; then
-      log "Transpiling ${c} (AVM + VKs)..."
-      $BB_BIN aztec_process -i "${artifact_dir}" 2>&1 | grep -E "Transpil|complete|Error" || die "AVM transpilation failed for ${c}"
-    fi
-
-    # Step 3: Strip __aztec_nr_internals__ prefix from function names.
-    # The Aztec #[aztec] macro renames functions internally, but public_dispatch
-    # uses the EXTERNAL names (no prefix). The SDK also looks up functions by
-    # external name. This rename makes the artifact match what both expect.
-    for json_file in "${artifact_dir}"/*.json; do
-      fix_artifact "${json_file}" "${AZTEC_VERSION}" 2>&1
-    done
-
-    log "Compiled and transpiled ${c} successfully"
+    # `aztec compile` has its own mtime-based skip that ignores --force, so a
+    # forced rebuild has to drop the old artifacts first.
+    [ "${FS_FORCE_COMPILE:-0}" = "1" ] && rm -rf "${ROOT_DIR}/contracts/${c}/target"
+    run_compile_job "$c" _compile_custom "$c"
   done
-  cd "${ROOT_DIR}"
 }
 
 # -- 2a. Compile vendored aztec-standards --------------------------------------
 # The standards are a separate Nargo workspace; compiling a member writes its
 # artifact to the workspace-level target dir (contracts/vendor/aztec-standards/
-# target/<name>-<Contract>.json). We compile the Phase-1 subset, then run the
-# same AVM-transpile + VK + prefix-strip steps the custom contracts get.
-compile_standards() {
-  std_target="${STANDARDS_DIR}/target"
+# target/<name>-<Contract>.json). We compile the Phase-1 subset (each member as
+# a pool job), then `finish_compiles` runs the same AVM-transpile + VK +
+# prefix-strip steps the custom contracts get over the shared target dir.
+_compile_standard() { # _compile_standard <member>  (runs in a subshell)
+  local c=$1
+  cd "${STANDARDS_DIR}/src/${c}"
+  # nargo ACIR compile (bb aztec_process in finish_compiles adds AVM transpile +
+  # VKs, so the raw-nargo caveat about missing transpilation does not apply).
+  if [ -n "$AZTEC_NARGO_BIN" ]; then
+    "$AZTEC_NARGO_BIN" compile --silence-warnings 2>&1 || die "Could not compile standard ${c}"
+  else
+    $NARGO_BIN compile --silence-warnings 2>&1 || die "Could not compile standard ${c} (nargo)"
+  fi
+  log "Compiled standard ${c}"
+}
 
-  # The vendored standards never change between runs; skip the whole ~44s
-  # compile+transpile when their sources are untouched.
+compile_standards() {
+  local std_target="${STANDARDS_DIR}/target"
+
+  # The vendored standards never change between runs; skip the whole compile +
+  # transpile when their sources are untouched.
   if artifact_is_fresh "${STANDARDS_DIR}/src" "${std_target}"; then
     log "Skipping vendored standards (sources unchanged; artifacts up to date)"
     return
   fi
+  [ "${FS_FORCE_COMPILE:-0}" = "1" ] && rm -rf "${std_target}"
 
+  local c
   for c in $STANDARD_CONTRACTS; do
-    log "Compiling standard contract: ${c}"
-    cd "${STANDARDS_DIR}/src/${c}"
-    # nargo ACIR compile (bb aztec_process below adds AVM transpile + VKs, so the
-    # raw-nargo caveat about missing transpilation does not apply here).
-    if [ -n "$AZTEC_NARGO_BIN" ]; then
-      "$AZTEC_NARGO_BIN" compile --silence-warnings 2>&1 || die "Could not compile standard ${c}"
-    else
-      $NARGO_BIN compile --silence-warnings 2>&1 || die "Could not compile standard ${c} (nargo)"
-    fi
+    run_compile_job "standards-${c}" _compile_standard "$c"
   done
+  _standards_compiled=1
+}
 
+# Waits for every compile job, then post-processes the standards workspace.
+finish_compiles() {
+  wait_compile_jobs
+  [ "$_standards_compiled" = 1 ] || return 0
+
+  local std_target="${STANDARDS_DIR}/target"
   if [ ! -d "$std_target" ] || [ -z "$(ls "$std_target"/*.json 2>/dev/null)" ]; then
     die "No standard artifacts found in ${std_target}"
   fi
@@ -326,6 +408,7 @@ compile_standards() {
   # The generated TS artifact casts the JSON to NoirCompiledContract, which
   # requires aztec_version — fix_artifact injects it (pinned toolchain) so
   # codegen output type-checks (matches the custom contracts' value).
+  local json_file
   for json_file in "${std_target}"/*.json; do
     fix_artifact "${json_file}" "${AZTEC_VERSION}" 2>&1
   done
@@ -792,6 +875,7 @@ main() {
   wait_for_pxe
   compile_contracts
   compile_standards
+  finish_compiles
   generate_typescript
   fix_inquirer
   fix_wallet_fee_padding
