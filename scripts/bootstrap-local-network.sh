@@ -187,6 +187,23 @@ fix_wallet_fee_padding() {
   log "Set cli-wallet MIN_FEE_PADDING=${WALLET_MIN_FEE_PADDING}"
 }
 
+# Post-process a compiled artifact in place: strip the __aztec_nr_internals__
+# prefix the #[aztec] macro adds to function names (public_dispatch + the SDK
+# look functions up by their EXTERNAL names) and stamp aztec_version when a raw
+# `nargo compile` omitted it. Uses node: the release image is a minimal
+# ubuntu:noble with nodejs only (no python3), and node is also on every host.
+fix_artifact() { # fix_artifact <json_file> <aztec_version>
+  node -e '
+    const fs = require("fs");
+    const [file, version] = process.argv.slice(1);
+    const d = JSON.parse(fs.readFileSync(file, "utf8"));
+    for (const fn of d.functions ?? []) fn.name = fn.name.replace(/^__aztec_nr_internals__/, "");
+    if (!d.aztec_version) d.aztec_version = version;
+    fs.writeFileSync(file, JSON.stringify(d));
+    console.log(`Patched functions + aztec_version in ${file}`);
+  ' "$1" "$2"
+}
+
 # -- 1. Wait for PXE ----------------------------------------------------------
 
 wait_for_pxe() {
@@ -242,14 +259,7 @@ compile_contracts() {
     # uses the EXTERNAL names (no prefix). The SDK also looks up functions by
     # external name. This rename makes the artifact match what both expect.
     for json_file in "${artifact_dir}"/*.json; do
-      python3 -c "
-import json, re, sys
-with open('${json_file}') as f: d = json.load(f)
-for fn in d.get('functions', []):
-    fn['name'] = re.sub(r'^__aztec_nr_internals__', '', fn['name'])
-with open('${json_file}', 'w') as f: json.dump(d, f)
-print('Renamed functions in ${json_file}')
-" 2>&1
+      fix_artifact "${json_file}" "${AZTEC_VERSION}" 2>&1
     done
 
     log "Compiled and transpiled ${c} successfully"
@@ -291,21 +301,12 @@ compile_standards() {
   log "Transpiling standards (AVM + VKs)..."
   $BB_BIN aztec_process -i "${std_target}" 2>&1 | grep -E "Transpil|complete|Error" || die "AVM transpilation failed for standards"
 
+  # Raw 'nargo compile' omits the aztec_version field that 'aztec compile' adds.
+  # The generated TS artifact casts the JSON to NoirCompiledContract, which
+  # requires aztec_version — fix_artifact injects it (pinned toolchain) so
+  # codegen output type-checks (matches the custom contracts' value).
   for json_file in "${std_target}"/*.json; do
-    python3 -c "
-import json, re
-with open('${json_file}') as f: d = json.load(f)
-for fn in d.get('functions', []):
-    fn['name'] = re.sub(r'^__aztec_nr_internals__', '', fn['name'])
-# Raw 'nargo compile' omits the aztec_version field that 'aztec compile' adds.
-# The generated TS artifact casts the JSON to NoirCompiledContract, which
-# requires aztec_version — inject it (pinned toolchain) so codegen output
-# type-checks (matches the custom contracts' value).
-if not d.get('aztec_version'):
-    d['aztec_version'] = '${AZTEC_VERSION}'
-with open('${json_file}', 'w') as f: json.dump(d, f)
-print('Patched functions + aztec_version in ${json_file}')
-" 2>&1
+    fix_artifact "${json_file}" "${AZTEC_VERSION}" 2>&1
   done
   log "Compiled and transpiled standards successfully"
   cd "${ROOT_DIR}"
