@@ -42,7 +42,7 @@ function cellValue<Row>(col: Column<Row>, row: Row, index: number): ReactNode {
 }
 
 /**
- * Responsive data table. Renders a real <table> at the sm breakpoint and above,
+ * Responsive data table. Renders a real <table> at the lg breakpoint and above,
  * and a stack of labeled cards below it (one card per row, each cell shown as a
  * label/value pair). Falls back to an EmptyState when there are no rows.
  *
@@ -110,7 +110,7 @@ export function DataTable<Row>({
                 {columns.map((col) => (
                   <td
                     key={col.key}
-                    className={`text-body ${cellPad} text-text-1 ${ALIGN_TEXT[col.align ?? "left"]}`}
+                    className={`text-body ${cellPad} text-text-1 ${ALIGN_TEXT[col.align ?? "left"]} ${col.align === "right" ? "tabular-nums" : ""}`}
                   >
                     {cellValue(col, row, i)}
                   </td>

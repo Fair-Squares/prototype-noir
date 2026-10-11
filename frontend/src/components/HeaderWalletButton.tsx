@@ -71,7 +71,7 @@ export default function HeaderWalletButton() {
             ref={triggerRef}
             type="button"
             aria-expanded={showDropdown}
-            aria-haspopup="dialog"
+            aria-controls="account-options"
             onClick={() => setShowDropdown((v) => !v)}
             className="btn btn-primary btn-sm min-h-11"
             style={{ touchAction: "manipulation" }}
@@ -83,7 +83,7 @@ export default function HeaderWalletButton() {
           </button>
 
           {showDropdown && (
-            <div className="surface absolute right-0 z-50 mt-2 w-64 overflow-hidden p-0 shadow-sm">
+            <div id="account-options" role="region" aria-label="Accounts" className="surface absolute right-0 z-50 mt-2 w-64 max-h-[calc(100dvh-9rem)] overflow-y-auto overscroll-contain p-0 shadow-sm">
               <p className="text-label border-b border-border px-4 py-2.5">Accounts</p>
               {accounts.map((acc) => (
                 <button
@@ -152,7 +152,7 @@ export default function HeaderWalletButton() {
         ref={triggerRef}
         type="button"
         aria-expanded={showDropdown}
-        aria-haspopup="dialog"
+        aria-controls="account-options"
         onClick={() => setShowDropdown((v) => !v)}
         className="btn btn-secondary btn-sm min-h-11"
         style={{ touchAction: "manipulation" }}
@@ -170,7 +170,7 @@ export default function HeaderWalletButton() {
       </button>
 
       {showDropdown && (
-        <div className="surface absolute right-0 z-50 mt-2 w-64 overflow-hidden p-0 shadow-sm">
+        <div id="account-options" role="region" aria-label="Accounts" className="surface absolute right-0 z-50 mt-2 w-64 max-h-[calc(100dvh-9rem)] overflow-y-auto overscroll-contain p-0 shadow-sm">
           <div className="border-b border-border px-4 py-3">
             <p className="text-label mb-1">Active address</p>
             <p className="text-mono text-caption break-all text-text-2">{address}</p>

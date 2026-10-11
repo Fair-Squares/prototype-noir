@@ -8,7 +8,7 @@ const REPO_URL = "https://github.com/Fair-Squares/prototype-noir";
 const SITE_URL = "https://fair-squares.nl";
 
 const LINK_CLASS =
-  "text-fs-mint/80 transition-opacity hover:text-fs-mint hover:opacity-100 w-fit";
+  "inline-flex min-h-11 items-center text-fs-mint/80 transition-opacity hover:text-fs-mint hover:opacity-100 w-fit";
 
 export function SiteFooter() {
   return (
@@ -18,7 +18,7 @@ export function SiteFooter() {
           {/* Brand */}
           <div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/logo-light.png" alt="Fair Squares" className="h-8 w-auto" />
+            <img src="/brand/logo-light.png" alt="Fair Squares" width={330} height={86} className="h-8 w-auto" />
             <p className="text-body mt-4 max-w-[280px] text-fs-mint/85">
               Community-funded affordable homes.
             </p>

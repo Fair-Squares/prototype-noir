@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 
 export interface TabItem {
   value: string;
@@ -35,6 +35,7 @@ export function Tabs({
   ...rest
 }: TabsProps) {
   const ariaLabel = rest["aria-label"];
+  const id = useId();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const enabledIndexes = tabs
@@ -83,7 +84,7 @@ export function Tabs({
       <div
         role="tablist"
         aria-label={ariaLabel}
-        className="flex gap-1 overflow-x-auto border-b border-border no-scrollbar"
+        className="tab-strip flex gap-1 overflow-x-auto border-b border-border pb-1"
       >
         {tabs.map((tab, i) => {
           const selected = tab.value === value;
@@ -95,9 +96,9 @@ export function Tabs({
               }}
               role="tab"
               type="button"
-              id={`tab-${tab.value}`}
+              id={`${id}-tab-${tab.value}`}
               aria-selected={selected}
-              aria-controls={`tabpanel-${tab.value}`}
+              aria-controls={`${id}-tabpanel-${tab.value}`}
               tabIndex={selected ? 0 : -1}
               disabled={tab.disabled}
               onClick={() => !tab.disabled && onValueChange(tab.value)}
@@ -116,8 +117,8 @@ export function Tabs({
       {children != null ? (
         <div
           role="tabpanel"
-          id={`tabpanel-${value}`}
-          aria-labelledby={`tab-${value}`}
+          id={`${id}-tabpanel-${value}`}
+          aria-labelledby={`${id}-tab-${value}`}
           className="pt-4 focus-visible:outline-none"
         >
           {children}
