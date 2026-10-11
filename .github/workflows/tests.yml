@@ -5,7 +5,7 @@ name: tests
 # silently regressing (previously nothing ran on push/PR).
 on:
   push:
-    branches: [main, "claude/**"]
+    branches: [main, "claude/**", "ccr-**"]
   pull_request:
   workflow_dispatch:
 
@@ -21,28 +21,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The Aztec 4.3.0 host CLI installer requires Node >= 24.12.0.
+      # The Aztec host CLI installer requires Node >= 24.12.0.
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
 
       # Speeds up reruns: the bb verification-key cache and the nargo git-dep
-      # cache are the slow parts of `aztec test`.
+      # cache are the slow parts of `aztec test`. The toolchain version is
+      # pinned once, in .aztec-version (read by scripts/ci/install-aztec.sh).
       - name: Cache bb VK + nargo deps
         uses: actions/cache@v4
         with:
           path: |
             ~/.bb
             ~/nargo
-          key: aztec-4.3.0-${{ runner.os }}-${{ hashFiles('contracts/**/Nargo.toml') }}
+          key: aztec-${{ hashFiles('.aztec-version') }}-${{ runner.os }}-${{ hashFiles('contracts/**/Nargo.toml') }}
           restore-keys: |
-            aztec-4.3.0-${{ runner.os }}-
+            aztec-${{ hashFiles('.aztec-version') }}-${{ runner.os }}-
 
-      - name: Install Aztec toolchain (4.3.0)
+      # NOT `bash <(curl install.aztec.network/<v>)`: the frozen per-version
+      # installer bundles foundry via the moving foundryup bootstrap, which now
+      # emits symlinked binaries and makes the installer abort with
+      # "expected bundled binary 'forge' missing". Compile + TXE tests never
+      # need forge/anvil, so the wrapper script runs the upstream installer with
+      # the foundry step made best-effort (see scripts/ci/install-aztec.sh).
+      - name: Install Aztec toolchain
         run: |
-          curl -sL https://install.aztec.network/4.3.0 -o /tmp/aztec-install.sh
-          VERSION=4.3.0 NON_INTERACTIVE=1 bash /tmp/aztec-install.sh
-          echo "$HOME/.aztec/bin" >> "$GITHUB_PATH"
+          ./scripts/ci/install-aztec.sh
           echo "$HOME/.aztec/current/bin" >> "$GITHUB_PATH"
 
       - name: Verify toolchain
