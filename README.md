@@ -41,7 +41,7 @@ contracts skip the compile step entirely):
 | Anvil (L1) | ~5 s | Local Ethereum chain on port 8545 (automine; the node's AutomineSequencer drives L1 time) |
 | Aztec node | ~30 s | Deploys L1 contracts, starts PXE + sequencer on port 8080 |
 | Bootstrap: compile | ~2 min cold | Compiles 9 Noir contracts in parallel (one nargo job per core, `BOOTSTRAP_COMPILE_JOBS`); skipped when sources are unchanged |
-| Bootstrap: deploy | ~1-2 min | Deploys and wires the contracts (~26 serial transactions via `aztec-wallet`) |
+| Bootstrap: deploy | ~1 min | One SDK process (`scripts/local-deploy.ts`) deploys, wires and seeds the 11 contracts (~26 serial transactions) |
 | Frontend | ~60 s | Production `next build`, then serves on port 3000 with contract addresses in env |
 
 ### Simulation mode (no Aztec needed)

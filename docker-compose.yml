@@ -173,9 +173,12 @@ services:
       # Proverless client/wallet (the node already runs realProofs=false on a
       # local network). Saves ~4 s/tx of ClientIVC proving. Set true for realism.
       PXE_PROVER_ENABLED: ${PXE_PROVER_ENABLED:-false}
-      # Governance demo timing: shrink the voting window + zero the exit delay.
+      # L1 (rollup) governance voting duration for the local chain. Fair Squares'
+      # own Governance contract is unrelated; this only shortens the L1 side.
+      # AZTEC_EXIT_DELAY_SECONDS=0, which used to sit here, is REJECTED by the
+      # v6 L1 deploy ("DeployRollupLib: exitDelaySeconds is zero") and kills the
+      # node at start -- leave the exit delay at its default.
       AZTEC_GOVERNANCE_VOTING_DURATION: ${AZTEC_GOVERNANCE_VOTING_DURATION:-300}
-      AZTEC_EXIT_DELAY_SECONDS: ${AZTEC_EXIT_DELAY_SECONDS:-0}
     entrypoint:
       - sh
       - -c
@@ -205,11 +208,10 @@ services:
     environment:
       - AZTEC_NODE_URL=http://aztec:8080
       - PXE_URL=http://aztec:8080
-      # Proverless deploys by default. The cli-wallet reads PXE_PROVER (value
-      # "none"), NOT PXE_PROVER_ENABLED, so set both: PXE_PROVER=none disables
-      # the cli-wallet's ClientIVC proving (~4 s/tx across ~22 bootstrap txs).
+      # Proverless deploys by default: scripts/local-deploy.ts (one SDK process
+      # for the ~26 deploy/wiring/seed txs) skips ClientIVC proving unless this
+      # is "true" (~4 s/tx of proving otherwise).
       - PXE_PROVER_ENABLED=${PXE_PROVER_ENABLED:-false}
-      - PXE_PROVER=${PXE_PROVER:-none}
       # Governance voting window for the local demo: 12 blocks. Blocks are
       # produced on-demand (only when there are txs), so the window advances
       # with on-chain activity rather than wall-clock time. 5 was too tight for
@@ -219,11 +221,10 @@ services:
       # small enough that seed-fsft.sh can still advance past the deadline to
       # finalise (see MAX_ADVANCE in scripts/seed-fsft.sh — keep it >= this).
       - GOVERNANCE_VOTING_WINDOW_BLOCKS=${GOVERNANCE_VOTING_WINDOW_BLOCKS:-12}
-      # cli-wallet sets maxFeesPerGas = currentMinFees * (1 + MIN_FEE_PADDING).
-      # Too low (default 0.5) -> fee spikes break deploys. Too high (1000) ->
-      # wallet pre-reservation exceeds account fee-juice balance and we get
-      # "Insufficient fee payer balance". 30 is the working baseline; the
-      # bootstrap script auto-retries spikes that exceed it.
+      # The deploy wallet sets maxFeesPerGas = currentMinFees * (1 + padding).
+      # Too low (SDK default 0.5) -> local fee spikes revert sends. Too high
+      # (1000) -> the fee pre-reservation exceeds the account's fee juice
+      # ("Insufficient fee payer balance"). 30 matches serverWallet.ts.
       - WALLET_MIN_FEE_PADDING=${WALLET_MIN_FEE_PADDING:-30}
       # Contract compiles run as a pool of background jobs, one per core by
       # default (nargo is single-threaded, ~0.45 GB each). Lower this on a

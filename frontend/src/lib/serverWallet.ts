@@ -91,6 +91,15 @@ interface WalletWithSchnorrAccounts extends Wallet {
     signingKey: unknown,
     alias?: string
   ) => Promise<SchnorrAccountManager>;
+  // v6: the local-network test accounts are INITIALIZERLESS Schnorr accounts
+  // (funded at genesis, never deployed). Only this constructor derives their
+  // funded addresses; createSchnorrAccount yields a different, unfunded one.
+  createSchnorrInitializerlessAccount: (
+    secret: unknown,
+    salt: unknown,
+    signingKey: unknown,
+    alias?: string
+  ) => Promise<SchnorrAccountManager>;
 }
 
 // ── Module-level cache ─────────────────────────────────────────────────────────
@@ -141,8 +150,9 @@ async function initWallet(): Promise<WalletSingleton> {
   (baseWallet as unknown as { defaultWaitInterval?: number }).defaultWaitInterval = waitInterval;
   console.log(`[serverWallet] tx wait poll interval set to ${waitInterval}s (resolves at PROPOSED)`);
 
-  // 2. Register local-network test accounts in the wallet/PXE.
-  // AccountManager.register() was removed; use createSchnorrAccount instead.
+  // 2. Register local-network test accounts in the wallet/PXE. They are
+  // initializerless Schnorr accounts on v6 (see the interface note above);
+  // the bootstrap's local-deploy.ts and the e2e harness derive them the same way.
   console.log("[serverWallet] Loading deterministic test account data...");
   const testAccounts = await getInitialTestAccountsData();
   console.log(`[serverWallet] Got ${testAccounts.length} test accounts.`);
@@ -150,7 +160,7 @@ async function initWallet(): Promise<WalletSingleton> {
   const accounts: AccountEntry[] = [];
   const walletWithAccounts = baseWallet as WalletWithSchnorrAccounts;
   for (const [i, account] of testAccounts.entries()) {
-    const created = await walletWithAccounts.createSchnorrAccount(
+    const created = await walletWithAccounts.createSchnorrInitializerlessAccount(
       account.secret,
       account.salt,
       account.signingKey

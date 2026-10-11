@@ -91,11 +91,30 @@ still persists git deps across runs for that path.
   first poll skipped by one interval). `serverWallet.ts` and the e2e harness set
   it to **0.25 s** (`WALLET_WAIT_INTERVAL_SECONDS` overrides it) -- the same
   cadence upstream uses for in-process nodes.
-- The **bootstrap** passes `--wait-for-status checkpointed`
-  (`BOOTSTRAP_WAIT_FOR_STATUS`) to every cli-wallet deploy/send: its ~26 txs are
-  strictly serial and upstream's own local-network setup waits for the
-  checkpoint for the same reason (a proposed block can in principle be dropped
-  before its checkpoint lands). The cli-wallet default is `proposed`.
+- **Deploy stage = one SDK process.** `scripts/local-deploy.ts` (run by the
+  bootstrap on the image's Node with the image's own `@aztec-labs/*` packages
+  symlinked in, so no tsx and no npm install) deploys the 11 instances in
+  minter order, wires the links, registers + credentials KYC for test0/1/2,
+  drips EUR and records test0's 500 000 EUR private seed deposit: ~60 s,
+  versus ~26 separate `aztec-wallet` processes before. Every tx is awaited to
+  `checkpointed` (`BOOTSTRAP_WAIT_FOR_STATUS`) because the steps are strictly
+  serial, mirroring upstream's own local-network setup. `npm run deploy` in
+  `scripts/` runs it standalone against a host network.
+- **Local-network test accounts are INITIALIZERLESS on v6.** test0/1/2 are
+  genesis-funded, never-deployed Schnorr accounts; only
+  `createSchnorrInitializerlessAccount(secret, salt, signingKey)` derives their
+  funded addresses. `createSchnorrAccount` yields a different, unfunded address
+  and every send fails with "Not enough balance for fee payer". `serverWallet.ts`,
+  `local-deploy.ts` and `scripts/e2e/harness.ts` all use the initializerless
+  constructor; generated dev accounts and testnet accounts stay regular
+  (deployed, sponsored) Schnorr accounts.
+- **Validated live on v6:** the full bootstrap (compile skip, codegen, deploy,
+  env files, 78 s) and all six `scripts/e2e` private flows pass against a
+  6.0.0-rc.3 `aztec start --local-network` (anvil + node + PXE) on a plain
+  host, using the exact compose env. Only the docker packaging itself has not
+  been exercised. Note `AZTEC_EXIT_DELAY_SECONDS=0` is rejected by the v6 L1
+  deploy ("exitDelaySeconds is zero") and kills the node; it was removed from
+  the compose file.
 - **Compile stage.** nargo is single-threaded (~45 s and ~0.45 GB for
   housing_fund, ~55 s for the vendored token; v6 `bb` transpile + VK generation
   adds only ~1 s per contract, even cold), so the bootstrap runs the nine
