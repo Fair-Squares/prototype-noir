@@ -12,15 +12,16 @@
 #   docker compose --profile sim up
 #
 # WHY ONE SERVICE (and why it's fast):
-#   `aztec start --local-network` is designed to manage its own L1. The node
-#   ships an `AnvilTestWatcher` that, WHEN ANVIL IS IN AUTOMINE MODE, warps L1
-#   time to the next L2 slot ~2 s after a tx is pending -- giving near-instant
-#   blocks. The previous setup ran a SEPARATE anvil with `--block-time 12`
-#   (interval mining), which makes `isAutoMining()` return false, so the watcher
-#   never starts and every tx waits a full wall-clock slot (~22 s). Across ~22
-#   bootstrap txs that was ~10 min. Here the entrypoint starts `anvil` with NO
-#   `--block-time` (automine) in the same container, so the watcher kicks in and
-#   the whole bootstrap lands in well under a minute.
+#   `aztec start --local-network` is designed to manage its own L1. On Aztec v6
+#   the local network runs the deterministic `AutomineSequencer` (it replaced
+#   the pre-v6 `AnvilTestWatcher`): it switches anvil into automine itself,
+#   polls the mempool every 50 ms, builds a single-block checkpoint as soon as
+#   one tx is pending, warps L1 time to the next L2 slot with cheat codes,
+#   publishes the checkpoint to L1 in the same step and synthetically settles
+#   epochs. No wall-clock slot is ever waited on, so a tx is proposed in well
+#   under a second and the whole bootstrap lands in about a minute. The
+#   entrypoint below starts a bare `anvil` (no --block-time) in the same
+#   container, exactly like the upstream `aztec.sh` host wrapper does.
 
 # Aztec v6 moved the node/CLI image to the azteclabs org (aztec-labs-eng/aztec-node).
 # Keep this in step with .aztec-version (host toolchain) and the @aztec-labs/*
@@ -52,8 +53,8 @@ services:
       - PXE_PROVER_ENABLED=${PXE_PROVER_ENABLED:-false}
       # Surface the live chain timing so /api/chain/params (Reference page)
       # reflects the network's slot duration. local-network uses the protocol
-      # default (36 s L2 / 12 s L1); with automine the watcher warps across it,
-      # so this is a DISPLAY value only -- it does not gate wall-clock speed.
+      # default (36 s L2 / 12 s L1); the AutomineSequencer warps L1 time across
+      # it, so this is a DISPLAY value only -- it does not gate wall-clock speed.
       - AZTEC_SLOT_DURATION=${AZTEC_SLOT_DURATION:-36}
       - ETHEREUM_SLOT_DURATION=${ETHEREUM_SLOT_DURATION:-12}
       # Run mode. DEFAULT is PRODUCTION (next build + next start): routes are
@@ -138,9 +139,9 @@ services:
   # -- Aztec Local Network (automine L1 + Node + PXE, single container) ---------
   # The image ENTRYPOINT is the raw node binary, which does NOT auto-start anvil
   # (only the `aztec.sh` host wrapper does). So we replicate the wrapper's
-  # local-network preamble here: start an AUTOMINE anvil (no --block-time) and
-  # point the node at it via ETHEREUM_HOSTS=127.0.0.1. Automine is the whole
-  # ballgame -- it's what activates the node's slot-warping watcher.
+  # local-network preamble here: start a bare anvil and point the node at it via
+  # ETHEREUM_HOSTS=127.0.0.1. The node's AutomineSequencer then owns L1 time
+  # (see the header comment).
   aztec:
     image: *aztec-image
     profiles: ["aztec"]
@@ -153,24 +154,22 @@ services:
       # (matches the host wrapper's local-network default).
       LOG_LEVEL: ${AZTEC_LOG_LEVEL:-info;silent:sequencer}
       L1_CHAIN_ID: "31337"
-      # Point the node at the automine anvil started in the entrypoint below.
+      # Point the node at the anvil started in the entrypoint below.
       ETHEREUM_HOSTS: http://127.0.0.1:8545
       # Ship the prefunded test accounts (test0/test1/test2) on start.
       TEST_ACCOUNTS: "true"
       # Fast polling intervals -- copied from the `aztec.sh` local-network path
-      # so the node reacts to new txs/blocks within ~500 ms.
+      # so the archiver / world state / p2p pick up new blocks within ~500 ms.
+      # (v6 dropped SEQ_TX_POLLING_INTERVAL_MS: the AutomineSequencer polls the
+      # mempool every 50 ms on its own.)
       ARCHIVER_POLLING_INTERVAL_MS: "500"
       P2P_BLOCK_CHECK_INTERVAL_MS: "500"
-      SEQ_TX_POLLING_INTERVAL_MS: "500"
       WS_BLOCK_CHECK_INTERVAL_MS: "500"
       ARCHIVER_VIEM_POLLING_INTERVAL_MS: "500"
-      # Per-tx latency knobs for fast local iteration. On a single-node network
-      # there is no real p2p, so the 2 s attestation-propagation assumption and
-      # the 2 s minimum tx-pool age are pure delay stacked on every tx. Zero them
-      # so a tx is included as soon as the automine watcher warps the slot
-      # (~6.5 s/tx -> ~3 s/tx across the ~26 bootstrap txs).
+      # The automine build only picks txs that have aged past the p2p min pool
+      # age. On a single-node network that 2 s is pure delay stacked on every
+      # tx, so zero it: a tx is built the next 50 ms poll after it arrives.
       P2P_MIN_TX_POOL_AGE_MS: "0"
-      SEQ_ATTESTATION_PROPAGATION_TIME: "0"
       # Proverless client/wallet (the node already runs realProofs=false on a
       # local network). Saves ~4 s/tx of ClientIVC proving. Set true for realism.
       PXE_PROVER_ENABLED: ${PXE_PROVER_ENABLED:-false}
@@ -182,7 +181,7 @@ services:
       - -c
       - |
         set -e
-        echo "[aztec] starting automine anvil (no --block-time) on :8545"
+        echo "[aztec] starting anvil (no --block-time; the node's AutomineSequencer drives it) on :8545"
         anvil --silent --host 0.0.0.0 --port 8545 &
         echo "[aztec] waiting for L1..."
         until cast block-number --rpc-url http://127.0.0.1:8545 >/dev/null 2>&1; do sleep 0.2; done

@@ -71,6 +71,37 @@ access during the install step). Run with `FS_AZTEC_TEST_DOCKER=1
 ./scripts/aztec-test.sh`. The named `aztec-nargo-cache` docker volume
 still persists git deps across runs for that path.
 
+### Local stack timing on v6 (docker compose, `--profile aztec`)
+
+- The v6 local network runs the deterministic **`AutomineSequencer`** (the
+  pre-v6 `AnvilTestWatcher` is gone). It forces anvil into automine itself,
+  polls the mempool every 50 ms, builds a single-block checkpoint as soon as a
+  tx is pending, warps L1 time to the next slot with cheat codes, publishes to
+  L1 in the same step and settles epochs synthetically. There is no wall-clock
+  slot wait, so `docker-compose.yml` only needs a bare `anvil` (no
+  `--block-time`) plus `P2P_MIN_TX_POOL_AGE_MS=0` (the automine build only picks
+  txs older than the p2p min pool age). `SEQ_TX_POLLING_INTERVAL_MS` and
+  `SEQ_ATTESTATION_PROPAGATION_TIME` no longer exist / do nothing on v6.
+- **Tx statuses** are now `pending -> proposed -> checkpointed -> proven ->
+  finalized`. `EmbeddedWallet.send({ from })` resolves at **PROPOSED** (in a
+  sequenced L2 block, before the L1 checkpoint) and the PXE anchors reads on the
+  proposed tip, so a route's follow-up read sees the new state. The receipt
+  `status` field in API responses therefore reads `"proposed"`, not `"mined"`.
+- The wallet polls for the receipt every `interval` seconds (SDK default 1 s,
+  first poll skipped by one interval). `serverWallet.ts` and the e2e harness set
+  it to **0.25 s** (`WALLET_WAIT_INTERVAL_SECONDS` overrides it) -- the same
+  cadence upstream uses for in-process nodes.
+- The **bootstrap** passes `--wait-for-status checkpointed`
+  (`BOOTSTRAP_WAIT_FOR_STATUS`) to every cli-wallet deploy/send: its ~26 txs are
+  strictly serial and upstream's own local-network setup waits for the
+  checkpoint for the same reason (a proposed block can in principle be dropped
+  before its checkpoint lands). The cli-wallet default is `proposed`.
+- There is **no push/subscription API** for tx completion in v6 aztec.js: the
+  only primitives are `send({ wait: NO_WAIT })` (returns the tx hash at once)
+  plus `waitForTx(node, txHash, opts)` / `node.getTxReceipt`. The API routes
+  await the send and answer when the tx is proposed; a non-blocking
+  "submit then poll a status route" flow would be built on those two calls.
+
 ## Error Handling
 
 - NEVER silently swallow errors or fall back to default values. If a value is required, throw if it's missing.

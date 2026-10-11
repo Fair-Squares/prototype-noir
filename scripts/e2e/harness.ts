@@ -79,6 +79,10 @@ export async function connect(): Promise<Harness> {
   // Match bootstrap / serverWallet WALLET_MIN_FEE_PADDING -- local fee spikes
   // otherwise trip maxFeesPerGas >= gasFees and revert sends.
   (wallet as unknown as { setMinFeePadding?: (n: number) => void }).setMinFeePadding?.(30);
+  // Match serverWallet: poll receipts every 0.25 s instead of the SDK's 1 s
+  // (v6 resolves sends at PROPOSED; the local AutomineSequencer proposes within
+  // a few hundred ms, so the default cadence is mostly idle time per tx).
+  (wallet as unknown as { defaultWaitInterval?: number }).defaultWaitInterval = 0.25;
 
   const data = await getInitialTestAccountsData();
   const addresses: AztecAddress[] = [];

@@ -128,6 +128,19 @@ async function initWallet(): Promise<WalletSingleton> {
   (baseWallet as unknown as { setMinFeePadding: (v: number) => void }).setMinFeePadding(feePadding);
   console.log(`[serverWallet] minFeePadding set to ${feePadding}`);
 
+  // Tx wait cadence. On Aztec v6 `.send({ from })` resolves as soon as the tx is
+  // PROPOSED (in a sequenced L2 block, before the L1 checkpoint), and the PXE
+  // anchors reads on the proposed tip, so a route's follow-up read already sees
+  // the new state. The wallet polls the receipt every `interval` seconds and
+  // skips the first poll by that same interval; the SDK default is 1 s, which
+  // leaves up to ~2 s of pure idle time per tx on a local network whose
+  // AutomineSequencer proposes within a few hundred ms. Use the 0.25 s cadence
+  // the upstream in-process TestWallet uses. BaseWallet keeps the field
+  // protected (only TestWallet exposes a setter), hence the cast.
+  const waitInterval = Number(process.env.WALLET_WAIT_INTERVAL_SECONDS ?? "0.25");
+  (baseWallet as unknown as { defaultWaitInterval?: number }).defaultWaitInterval = waitInterval;
+  console.log(`[serverWallet] tx wait poll interval set to ${waitInterval}s (resolves at PROPOSED)`);
+
   // 2. Register local-network test accounts in the wallet/PXE.
   // AccountManager.register() was removed; use createSchnorrAccount instead.
   console.log("[serverWallet] Loading deterministic test account data...");

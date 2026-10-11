@@ -21,6 +21,14 @@ PROTOCOL_REWARDS_CLAIM_MIN="${PROTOCOL_REWARDS_CLAIM_MIN:-1}"
 BOOTSTRAP_RETRY_ATTEMPTS="${BOOTSTRAP_RETRY_ATTEMPTS:-8}"
 BOOTSTRAP_RETRY_DELAY_SECONDS="${BOOTSTRAP_RETRY_DELAY_SECONDS:-6}"
 WALLET_MIN_FEE_PADDING="${WALLET_MIN_FEE_PADDING:-30}"
+# Tx status every cli-wallet deploy/send waits for before the next step. The v6
+# cli-wallet defaults to "proposed" (returns as soon as the tx is in a sequenced
+# L2 block). The bootstrap is ~26 strictly serial txs that each depend on the
+# previous one being durable, so mirror what the upstream local-network setup
+# does for its own serial deploys and wait for the L1 checkpoint ("checkpointed").
+# With the AutomineSequencer the checkpoint is published in the same build, so
+# this costs well under a second per tx.
+BOOTSTRAP_WAIT_FOR_STATUS="${BOOTSTRAP_WAIT_FOR_STATUS:-checkpointed}"
 
 CONTRACTS="kyc_verifier defi_vault housing_fund governance fsft_dex protocol_rewards"
 # Phase 3: FSFT, EUR, and ProtocolToken are ALL instances of the vendored AIP-20
@@ -127,7 +135,9 @@ wallet_send_with_retries() {
   while [ "$attempt" -le "$BOOTSTRAP_RETRY_ATTEMPTS" ]; do
     log "${label} (attempt ${attempt}/${BOOTSTRAP_RETRY_ATTEMPTS})..."
     set +e
-    output=$("$@" 2>&1)
+    # Every wrapped command is an `aztec-wallet send`; append the wait status
+    # (a `send` option, so it must follow the subcommand).
+    output=$("$@" --wait-for-status "${BOOTSTRAP_WAIT_FOR_STATUS}" 2>&1)
     rc=$?
     set -e
     printf '%s\n' "$output" >&2
@@ -235,13 +245,18 @@ compile_contracts() {
     log "Compiling contract: ${c}"
 
     # Step 1: compile Noir to ACIR.
-    # Prefer Aztec wrapper commands; fall back to raw nargo only if wrapper is unavailable.
+    # Prefer `aztec compile` (nargo + bb aztec_process + aztec_version stamp in
+    # one go; it honours the NARGO / BB env exported above); fall back to raw
+    # nargo only if the wrapper is unavailable.
+    needs_transpile=0
     if $AZTEC_BIN help compile >/dev/null 2>&1; then
       $AZTEC_BIN compile 2>&1 || die "Could not compile ${c} with aztec compile"
     elif [ -n "$AZTEC_NARGO_BIN" ]; then
       "$AZTEC_NARGO_BIN" compile --silence-warnings 2>&1 || die "Could not compile ${c} with aztec-nargo"
+      needs_transpile=1
     else
       $NARGO_BIN compile --silence-warnings 2>&1 || die "Could not compile ${c} with nargo fallback"
+      needs_transpile=1
     fi
 
     # Verify artifact was produced
@@ -249,10 +264,16 @@ compile_contracts() {
       die "No compilation artifact found for ${c} in ${artifact_dir}"
     fi
 
-    # Step 2: AVM transpilation + VK generation (required for aztec-wallet deploy)
+    # Step 2 (raw-nargo fallback only): AVM transpilation + VK generation,
+    # required for aztec-wallet deploy. `aztec compile` already did this, and on
+    # v6 a second `bb aztec_process -i <dir>` over its (aztec_version-stamped)
+    # output finds nothing to do, prints "No contract artifacts found" and exits
+    # 1 -- which this guard used to turn into a fatal bootstrap error.
     # bb aztec_process needs an absolute path — relative paths don't resolve correctly
-    log "Transpiling ${c} (AVM + VKs)..."
-    $BB_BIN aztec_process -i "${artifact_dir}" 2>&1 | grep -E "Transpil|complete|Error" || die "AVM transpilation failed for ${c}"
+    if [ "$needs_transpile" = "1" ]; then
+      log "Transpiling ${c} (AVM + VKs)..."
+      $BB_BIN aztec_process -i "${artifact_dir}" 2>&1 | grep -E "Transpil|complete|Error" || die "AVM transpilation failed for ${c}"
+    fi
 
     # Step 3: Strip __aztec_nr_internals__ prefix from function names.
     # The Aztec #[aztec] macro renames functions internally, but public_dispatch
@@ -374,6 +395,7 @@ deploy_contracts() {
         "${ROOT_DIR}/contracts/${artifact}" \
         --init "${DEPLOY_INIT:-constructor}" \
         --from accounts:test0 \
+        --wait-for-status "${BOOTSTRAP_WAIT_FOR_STATUS}" \
         "$@" \
         -a "${label}" 2>&1)
       rc=$?
@@ -634,9 +656,11 @@ wire_contracts() {
   # hint from PXE and threads it into HousingFund.deposit_private.
   # NOTE: this is best-effort and NON-fatal. A fresh EmbeddedWallet PXE
   # created here syncs from genesis and, when registering a contract whose
-  # on-chain anchor is an early block, can hit "Block hash not found when
-  # querying world state" because the local-network EpochTestSettler reorgs
-  # early blocks out of the node's pruned world state. The public EUR
+  # on-chain anchor is an early block, could hit "Block hash not found when
+  # querying world state" on pre-v6 images, where the local-network
+  # EpochTestSettler reorged early blocks out of the node's pruned world state
+  # (v6's AutomineSequencer settles epochs in-line instead, but the posture is
+  # kept until the v6 stack has been run end to end). The public EUR
   # transfer above already credited the housing fund; the private DepositNote
   # is a demo nicety, so a failure here must NOT block frontend startup.
   # Override with FS_SEED_V2_REQUIRED=1 to make it fatal again.
