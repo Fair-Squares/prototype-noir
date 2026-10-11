@@ -18,7 +18,7 @@
  */
 
 import assert from "node:assert/strict";
-import { AztecAddress } from "@aztec/aztec.js/addresses";
+import { AztecAddress } from "@aztec-labs/aztec.js/addresses";
 import {
   connect,
   loadContract,
@@ -162,7 +162,7 @@ async function main() {
   // -- 4. the private flow under test ---------------------------------------
   log(TAG, `claim_reward_private(hint, token)`);
   await sendOk(
-    rewards.methods.claim_reward_private(hint, AztecAddress.fromString(tokenAddr)),
+    rewards.methods.claim_reward_private(hint, AztecAddress.fromStringUnsafe(tokenAddr)),
     test0,
     "claim_reward_private",
   );
@@ -188,7 +188,7 @@ async function main() {
   // -- 6. double-claim of the SAME note must be rejected (SingleUseClaim) ----
   log(TAG, `re-claiming the SAME note (must fail)...`);
   const second = await sendExpectFail(
-    rewards.methods.claim_reward_private(hint, AztecAddress.fromString(tokenAddr)),
+    rewards.methods.claim_reward_private(hint, AztecAddress.fromStringUnsafe(tokenAddr)),
     test0,
   );
   assert(second.failed, `re-claim of an already-claimed reward note must fail; instead it ${second.how}`);

@@ -30,7 +30,7 @@
  */
 
 import assert from "node:assert/strict";
-import { AztecAddress } from "@aztec/aztec.js/addresses";
+import { AztecAddress } from "@aztec-labs/aztec.js/addresses";
 import {
   connect,
   loadContract,
@@ -109,7 +109,7 @@ async function main() {
   // -- 7. the private flow under test ----------------------------------------
   log(TAG, `claim_rent_private(epoch=${EPOCH}, depositHint, eur, snapshots...)`);
   await sendOk(
-    hf.methods.claim_rent_private(EPOCH, depHint, AztecAddress.fromString(eurAddr), smallPool, smallTotal, fifoCap, snapBlock),
+    hf.methods.claim_rent_private(EPOCH, depHint, AztecAddress.fromStringUnsafe(eurAddr), smallPool, smallTotal, fifoCap, snapBlock),
     test0,
     "claim_rent_private",
   );
@@ -127,7 +127,7 @@ async function main() {
   // -- 9. double-claim of the SAME (note, epoch) must be rejected ------------
   log(TAG, `re-claiming the SAME note for epoch ${EPOCH} (must fail)...`);
   const second = await sendExpectFail(
-    hf.methods.claim_rent_private(EPOCH, depHint, AztecAddress.fromString(eurAddr), smallPool, smallTotal, fifoCap, snapBlock),
+    hf.methods.claim_rent_private(EPOCH, depHint, AztecAddress.fromStringUnsafe(eurAddr), smallPool, smallTotal, fifoCap, snapBlock),
     test0,
   );
   assert(second.failed, `re-claim of an already-claimed (note,epoch) must fail; instead it ${second.how}`);

@@ -20,7 +20,7 @@
  *                         Defaults to scripts/.testnet/account.json.
  *
  * Output:
- *   - scripts/.testnet/account.json   { secret, salt, address }
+ *   - scripts/.testnet/account.json   { secret, salt, signingKey, address }
  *   - prints the deployed address on stdout.
  *
  * Notes:
@@ -32,12 +32,13 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { createAztecNodeClient } from "@aztec/aztec.js/node";
-import { getContractInstanceFromInstantiationParams } from "@aztec/aztec.js/contracts";
-import { SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee";
-import { Fr } from "@aztec/foundation/curves/bn254";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
-import { SponsoredFPCContract } from "@aztec/noir-contracts.js/SponsoredFPC";
+import { createAztecNodeClient } from "@aztec-labs/aztec.js/node";
+import { getContractInstanceFromInstantiationParams } from "@aztec-labs/aztec.js/contracts";
+import { NO_FROM } from "@aztec-labs/aztec.js/account";
+import { SponsoredFeePaymentMethod } from "@aztec-labs/aztec.js/fee";
+import { Fq, Fr } from "@aztec-labs/foundation/curves/bn254";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
+import { SponsoredFPCContract } from "@aztec-labs/noir-contracts.js/SponsoredFPC";
 
 const DEFAULT_TESTNET_PXE = "https://rpc.testnet.aztec-labs.com";
 
@@ -53,13 +54,28 @@ function accountFilePath(): string {
 type PersistedAccount = {
   secret: string;
   salt: string;
+  // Aztec >= 5: the Schnorr signing key is the account root and is no longer
+  // derivable from `secret`, so it is persisted alongside it.
+  signingKey: string;
   address: string;
 };
 
 function loadAccount(): PersistedAccount | null {
   const p = accountFilePath();
   if (!fs.existsSync(p)) return null;
-  return JSON.parse(fs.readFileSync(p, "utf8")) as PersistedAccount;
+  const parsed = JSON.parse(fs.readFileSync(p, "utf8")) as Partial<PersistedAccount>;
+  if (!parsed.secret || !parsed.salt || !parsed.address) {
+    throw new Error(`Malformed account file ${p}`);
+  }
+  if (!parsed.signingKey) {
+    // Pre-v5 file (secret-derived signing key). Its address cannot be
+    // reproduced on an Aztec >= 5 network, so start over rather than
+    // silently deploying a different account under the old file.
+    throw new Error(
+      `${p} predates Aztec 5 (no signingKey). Delete it and re-run to create a fresh account.`,
+    );
+  }
+  return parsed as PersistedAccount;
 }
 
 function saveAccount(a: PersistedAccount): void {
@@ -107,10 +123,11 @@ async function main() {
     ? Fr.fromString(existing.secret)
     : Fr.random();
   const salt = existing ? Fr.fromString(existing.salt) : Fr.random();
+  const signingKey = existing ? Fq.fromString(existing.signingKey) : Fq.random();
 
   log(existing ? "reusing persisted account" : "generating new account");
 
-  const manager = await wallet.createSchnorrAccount(secret, salt);
+  const manager = await wallet.createSchnorrAccount(secret, salt, signingKey);
   const address = manager.address;
   log(`address = ${address.toString()}`);
 
@@ -118,22 +135,22 @@ async function main() {
   // the contract, we can short-circuit. Otherwise, attempt deploy via the
   // sponsored payment method.
   const isDeployed = await node
-    .getContractClass((await manager.getInstance()).contractClassId)
+    .getContractClass((await manager.getInstance()).currentContractClassId)
     .catch(() => null);
 
   if (!existing || !isDeployed) {
     log("deploying account via SponsoredFPC...");
     const deployMethod = await manager.getDeployMethod();
     const paymentMethod = new SponsoredFeePaymentMethod(sponsoredFpc);
-    const sent = await deployMethod.send({
-      fee: { paymentMethod },
-    } as never);
-    const receipt = await (sent as { wait: () => Promise<{ txHash: string }> }).wait();
-    log(`deploy tx = ${receipt.txHash ?? "(no hash)"}`);
+    // send() waits for mining by default and returns the receipt.
+    // An account deploys itself: there is no sender account yet (NO_FROM).
+    const { receipt } = await deployMethod.send({ from: NO_FROM, fee: { paymentMethod } });
+    log(`deploy tx = ${receipt.txHash.toString()}`);
 
     saveAccount({
       secret: secret.toString(),
       salt: salt.toString(),
+      signingKey: signingKey.toString(),
       address: address.toString(),
     });
   } else {

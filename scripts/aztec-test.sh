@@ -1,15 +1,15 @@
 #!/bin/bash
 # Fair Squares -- aztec test runner (host CLI)
 #
-# Runs `aztec test` per contract using the host-installed aztec CLI
-# (v4.3.0). The host CLI bundles its own TXE binary and orchestrates
-# the oracle resolver automatically, so this script is intentionally
-# tiny compared to the previous docker-based version.
+# Runs `aztec test` per contract using the host-installed aztec CLI (the
+# version pinned in .aztec-version). The host CLI bundles its own TXE binary
+# and orchestrates the oracle resolver automatically, so this script is
+# intentionally tiny compared to the previous docker-based version.
 #
 # Prereq: host CLI must be installed. Install with:
-#   VERSION=4.3.0 bash -i <(curl -sL https://install.aztec.network/4.3.0)
+#   ./scripts/ci/install-aztec.sh          # reads .aztec-version
 # That puts aztec / aztec-nargo / aztec-wallet / aztec-bb under
-# $HOME/.aztec/current/bin and adds them to PATH via .bashrc.
+# $HOME/.aztec/current/bin (add that dir to PATH).
 #
 # If you prefer the legacy docker flow, set FS_AZTEC_TEST_DOCKER=1
 # and the original docker path is taken (kept for parity with CI
@@ -46,10 +46,13 @@ _stage_dep() { # _stage_dep <main_pkg> <dep_pkg> <ContractName> [dep_dir]
   local dep_dir="${4:-contracts/$dep}"
   local src="$ROOT_DIR/$dep_dir/target/${dep}-${contract}.json"
   local dst="$ROOT_DIR/contracts/$main/target/${main}-${contract}.json"
-  if [ ! -f "$src" ]; then
-    echo "[aztec-test] staging: compiling $dep (cross-contract dep of $main)..."
-    ( cd "$ROOT_DIR/$dep_dir" && aztec compile >/dev/null 2>&1 ) || true
-  fi
+  # Always run `aztec compile` in the dep dir: the wrapper is a no-op when the
+  # artifact is fresh, rebuilds it when the dep's sources changed, and (v6)
+  # post-processes any artifact left untranspiled by a bare `nargo compile` or
+  # by a workspace-member compile (member-dir runs write to the workspace
+  # target/ and skip transpilation). TXE rejects untranspiled public bytecode.
+  echo "[aztec-test] staging: compiling $dep (cross-contract dep of $main)..."
+  ( cd "$ROOT_DIR/$dep_dir" && aztec compile >/dev/null 2>&1 ) || true
   if [ -f "$src" ]; then
     mkdir -p "$ROOT_DIR/contracts/$main/target" && cp "$src" "$dst"
     echo "[aztec-test] staged ${dep}-${contract}.json -> ${main}/target/${main}-${contract}.json"
@@ -83,12 +86,14 @@ stage_cross_contract_deps() {
 # -- Docker fallback (legacy path, opt-in) -------------------------------------
 if [ "${FS_AZTEC_TEST_DOCKER:-0}" = "1" ]; then
   cd "$ROOT_DIR"
+  AZTEC_IMAGE="${AZTEC_IMAGE:-azteclabs/aztec:$(tr -d '[:space:]' < "$ROOT_DIR/.aztec-version")}"
   docker run --rm --entrypoint /bin/bash \
     -v aztec-nargo-cache:/root/nargo \
     -v "$ROOT_DIR:/workspace" \
-    aztecprotocol/aztec:4.3.0 -lc "
+    "$AZTEC_IMAGE" -lc "
       set -euo pipefail
-      export PATH=/usr/src/noir/noir-repo/target/release:\$PATH
+      # v6 images ship the pinned noir/bb toolchain under labs-aztec-toolchain/bin.
+      export PATH=/usr/src/labs-aztec-toolchain/bin:/usr/src/noir/noir-repo/target/release:\$PATH
       echo '[aztec-test] (docker) launching TXE on :8080...'
       node --no-warnings /usr/src/yarn-project/txe/dest/bin/index.js > /tmp/txe.log 2>&1 &
       TXE_PID=\$!
@@ -123,11 +128,14 @@ if [ "${FS_AZTEC_TEST_DOCKER:-0}" = "1" ]; then
 fi
 
 # -- Host CLI path (default) ---------------------------------------------------
-export PATH="$HOME/.aztec/current/bin:$HOME/.aztec/bin:$PATH"
+# AZTEC_HOME lets a second toolchain install (e.g. AZTEC_HOME=~/.aztec-next) be
+# selected without touching the default ~/.aztec activation.
+AZTEC_HOME="${AZTEC_HOME:-$HOME/.aztec}"
+export PATH="$AZTEC_HOME/current/bin:$AZTEC_HOME/bin:$PATH"
 
 if ! command -v aztec >/dev/null 2>&1; then
   echo "[aztec-test] aztec CLI not on PATH. Install with:" >&2
-  echo "  VERSION=4.3.0 bash -i <(curl -sL https://install.aztec.network/4.3.0)" >&2
+  echo "  ./scripts/ci/install-aztec.sh   # installs the version pinned in .aztec-version" >&2
   echo "Or run with FS_AZTEC_TEST_DOCKER=1 to use the legacy docker path." >&2
   exit 1
 fi

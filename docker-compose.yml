@@ -22,7 +22,10 @@
 #   `--block-time` (automine) in the same container, so the watcher kicks in and
 #   the whole bootstrap lands in well under a minute.
 
-x-aztec-image: &aztec-image aztecprotocol/aztec:4.3.0
+# Aztec v6 moved the node/CLI image to the azteclabs org (aztec-labs-eng/aztec-node).
+# Keep this in step with .aztec-version (host toolchain) and the @aztec-labs/*
+# npm pins in frontend/ + scripts/.
+x-aztec-image: &aztec-image azteclabs/aztec:6.0.0-rc.3
 
 services:
   # -- Frontend (live Aztec mode) ----------------------------------------------
@@ -226,9 +229,9 @@ services:
     volumes:
       - ./:/workspace
       - contract-env:/out
-      # Persist nargo's git-dependency cache (aztec-packages v4.3.0 is a ~12k-file
-      # clone) so re-bootstraps don't re-fetch deps every time. NARGO_HOME defaults
-      # to /root/.nargo (HOME=/root in the image).
+      # Persist nargo's git-dependency cache (aztec-nr + the aztec-packages
+      # protocol crates are large clones) so re-bootstraps don't re-fetch deps
+      # every time. NARGO_HOME defaults to /root/.nargo (HOME=/root in the image).
       - nargo-cache:/root/.nargo
     entrypoint: ["bash", "./scripts/bootstrap-local-network.sh"]
     restart: "no"

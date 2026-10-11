@@ -45,14 +45,14 @@ export async function GET() {
     }
 
     const { getTestAccount } = await import("@/lib/serverWallet");
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadArtifact } = await import("@/lib/artifactLoader");
 
     const admin = await getTestAccount(0);
-    const from = AztecAddress.fromString(admin.address);
+    const from = AztecAddress.fromStringUnsafe(admin.address);
     const gov = await Contract.at(
-      AztecAddress.fromString(govAddr),
+      AztecAddress.fromStringUnsafe(govAddr),
       await loadArtifact("governance-Governance.json"),
       admin.wallet
     );
@@ -161,17 +161,17 @@ export async function POST(request: NextRequest) {
     }
 
     const { getTestAccount } = await import("@/lib/serverWallet");
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadArtifact } = await import("@/lib/artifactLoader");
 
     const actor = await getTestAccount(accountIndex);
     if (address.toLowerCase() !== actor.address.toLowerCase()) {
       return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
     }
-    const from = AztecAddress.fromString(actor.address);
+    const from = AztecAddress.fromStringUnsafe(actor.address);
     const gov = await Contract.at(
-      AztecAddress.fromString(govAddr),
+      AztecAddress.fromStringUnsafe(govAddr),
       await loadArtifact("governance-Governance.json"),
       actor.wallet
     );

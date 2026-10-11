@@ -32,9 +32,9 @@
  */
 
 import assert from "node:assert/strict";
-import { AztecAddress } from "@aztec/aztec.js/addresses";
-import { Fr } from "@aztec/aztec.js/fields";
-import { poseidon2Hash } from "@aztec/foundation/crypto/poseidon";
+import { AztecAddress } from "@aztec-labs/aztec.js/addresses";
+import { Fr } from "@aztec-labs/aztec.js/fields";
+import { poseidon2Hash } from "@aztec-labs/foundation/crypto/poseidon";
 import {
   connect,
   loadContract,
@@ -142,7 +142,7 @@ async function main() {
     hf.methods.claim_distribution_private(
       prop.proposalId,
       test0Deposit.depositHint,
-      AztecAddress.fromString(fsftAddr),
+      AztecAddress.fromStringUnsafe(fsftAddr),
       snap.smallPool,
       snap.smallTotal,
       snap.fifoCap,
@@ -181,10 +181,10 @@ async function main() {
   // a SELL locks `sellAmount` FSFT from test0 into the DEX's public balance.
   const escrowNonce = Fr.random();
   const escrowCall = await fsft.methods
-    .transfer_private_to_public(test0, AztecAddress.fromString(dexAddr), sellAmount, escrowNonce)
+    .transfer_private_to_public(test0, AztecAddress.fromStringUnsafe(dexAddr), sellAmount, escrowNonce)
     .getFunctionCall();
   const escrowAuthwit = await h.wallet.createAuthWit(test0, {
-    caller: AztecAddress.fromString(dexAddr),
+    caller: AztecAddress.fromStringUnsafe(dexAddr),
     call: escrowCall,
   });
 
@@ -220,10 +220,10 @@ async function main() {
   // happy-path order. The atomic revert refunds it.
   const probeNonce = Fr.random();
   const probeEscrowCall = await fsft.methods
-    .transfer_private_to_public(test0, AztecAddress.fromString(dexAddr), sellAmount, probeNonce)
+    .transfer_private_to_public(test0, AztecAddress.fromStringUnsafe(dexAddr), sellAmount, probeNonce)
     .getFunctionCall();
   const probeAuthwit = await h.wallet.createAuthWit(test0, {
-    caller: AztecAddress.fromString(dexAddr),
+    caller: AztecAddress.fromStringUnsafe(dexAddr),
     call: probeEscrowCall,
   });
   const probeInteraction = dex.methods.place_order(

@@ -60,18 +60,18 @@ export async function GET(request: NextRequest) {
     if (!dexAddr) return NextResponse.json({ error: "NEXT_PUBLIC_FSFT_DEX_ADDRESS not set" }, { status: 500 });
 
     const { getTestAccount } = await import("@/lib/serverWallet");
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
-    const { Fr } = await import("@aztec/aztec.js/fields");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
+    const { Fr } = await import("@aztec-labs/aztec.js/fields");
     const { loadArtifact } = await import("@/lib/artifactLoader");
-    const { poseidon2Hash } = await import("@aztec/foundation/crypto/poseidon");
+    const { poseidon2Hash } = await import("@aztec-labs/foundation/crypto/poseidon");
 
     const actor = await getTestAccount(accountIndex);
     if (address.toLowerCase() !== actor.address.toLowerCase()) {
       return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
     }
-    const from = AztecAddress.fromString(actor.address);
-    const dex = await Contract.at(AztecAddress.fromString(dexAddr), await loadArtifact("fsft_dex-FSFTDex.json"), actor.wallet);
+    const from = AztecAddress.fromStringUnsafe(actor.address);
+    const dex = await Contract.at(AztecAddress.fromStringUnsafe(dexAddr), await loadArtifact("fsft_dex-FSFTDex.json"), actor.wallet);
 
     // 1. Scan the caller's own OrderOwnerNotes (from their PXE).
     const mine = simResult<{ len: bigint; storage: OwnerNote[] }>(

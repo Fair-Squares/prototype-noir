@@ -56,20 +56,20 @@ async function readLiveQueue() {
   }
 
   const { getTestAccount } = await import("@/lib/serverWallet");
-  const { Contract } = await import("@aztec/aztec.js/contracts");
-  const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+  const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+  const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
   const { loadArtifact } = await import("@/lib/artifactLoader");
 
   const admin = await getTestAccount(0);
-  const from = AztecAddress.fromString(admin.address);
+  const from = AztecAddress.fromStringUnsafe(admin.address);
   const [gov, hf] = await Promise.all([
     Contract.at(
-      AztecAddress.fromString(govAddr),
+      AztecAddress.fromStringUnsafe(govAddr),
       await loadArtifact("governance-Governance.json"),
       admin.wallet
     ),
     Contract.at(
-      AztecAddress.fromString(hfAddr),
+      AztecAddress.fromStringUnsafe(hfAddr),
       await loadArtifact("housing_fund-HousingFund.json"),
       admin.wallet
     ),

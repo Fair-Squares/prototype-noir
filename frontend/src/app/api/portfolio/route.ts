@@ -53,15 +53,15 @@ export async function GET(request: NextRequest) {
     }
 
     const { getTestAccount } = await import("@/lib/serverWallet");
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     const selected = await getTestAccount(accountIndex);
     const wallet = selected.wallet;
-    const selectedAddr = AztecAddress.fromString(selected.address);
-    const ownerAddr = AztecAddress.fromString(address);
+    const selectedAddr = AztecAddress.fromStringUnsafe(selected.address);
+    const ownerAddr = AztecAddress.fromStringUnsafe(address);
     if (selected.address.toLowerCase() !== address.toLowerCase()) {
       return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
     }
@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
     const kycRead = (async () => {
       const KycJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
       const kycArtifact = loadContractArtifact(KycJson as Parameters<typeof loadContractArtifact>[0]);
-      const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet);
+      const kycContract = await Contract.at(AztecAddress.fromStringUnsafe(kycAddr), kycArtifact, wallet);
       const credentialsResult = simResult<{ len: bigint }>(
         await kycContract.methods.get_my_kyc_credentials(ownerAddr, 0).simulate({ from: selectedAddr })
       );
@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
     const eurRead = (async () => {
       const EurJson = await loadGeneratedArtifactJson("token_contract-Token.json");
       const eurArtifact = loadContractArtifact(EurJson as Parameters<typeof loadContractArtifact>[0]);
-      const eurContract = await Contract.at(AztecAddress.fromString(eurTokenAddr), eurArtifact, wallet);
+      const eurContract = await Contract.at(AztecAddress.fromStringUnsafe(eurTokenAddr), eurArtifact, wallet);
       const [privateEur, publicEur] = await Promise.all([
         eurContract.methods
           .balance_of_private(ownerAddr)
@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
     const ftRead = (async () => {
       const FtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
       const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);
-      const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, wallet);
+      const ftContract = await Contract.at(AztecAddress.fromStringUnsafe(fundTokenAddr), ftArtifact, wallet);
       const [privateFsft, publicFsft, supply] = await Promise.all([
         ftContract.methods
           .balance_of_private(ownerAddr)
@@ -144,7 +144,7 @@ export async function GET(request: NextRequest) {
     const hfRead = (async () => {
       const HfJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
       const hfArtifact = loadContractArtifact(HfJson as Parameters<typeof loadContractArtifact>[0]);
-      const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, wallet);
+      const hfContract = await Contract.at(AztecAddress.fromStringUnsafe(housingFundAddr), hfArtifact, wallet);
 
       const [stats, depositNotesResult, valuation, totalRentIncome, rentWithdrawn, rentReinvested] = await Promise.all([
         hfContract.methods
@@ -207,7 +207,7 @@ export async function GET(request: NextRequest) {
       ? (async () => {
           const PtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
           const ptArtifact = loadContractArtifact(PtJson as Parameters<typeof loadContractArtifact>[0]);
-          const ptContract = await Contract.at(AztecAddress.fromString(protocolTokenAddr), ptArtifact, wallet);
+          const ptContract = await Contract.at(AztecAddress.fromStringUnsafe(protocolTokenAddr), ptArtifact, wallet);
           const [privateProtocol, publicProtocol] = await Promise.all([
             ptContract.methods
               .balance_of_private(ownerAddr)
@@ -227,7 +227,7 @@ export async function GET(request: NextRequest) {
           const RewardsJson = await loadGeneratedArtifactJson("protocol_rewards-ProtocolRewards.json");
           const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
           const rewardsContract = await Contract.at(
-            AztecAddress.fromString(protocolRewardsAddr),
+            AztecAddress.fromStringUnsafe(protocolRewardsAddr),
             rewardsArtifact,
             wallet
           );

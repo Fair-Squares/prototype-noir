@@ -47,17 +47,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "NEXT_PUBLIC_EUR_TOKEN_ADDRESS not set" }, { status: 500 });
     }
 
-    // @aztec/aztec.js has no main export — use specific subpaths
-    const { Contract, BatchCall } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    // @aztec-labs/aztec.js has no main export — use specific subpaths
+    const { Contract, BatchCall } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
-    const accountAddress = AztecAddress.fromString(account.address);
-    const userAddress = AztecAddress.fromString(address);
+    const accountAddress = AztecAddress.fromStringUnsafe(account.address);
+    const userAddress = AztecAddress.fromStringUnsafe(address);
 
     const KycArtifactJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
     const kycArtifact = loadContractArtifact(KycArtifactJson as Parameters<typeof loadContractArtifact>[0]);
-    const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet);
+    const kycContract = await Contract.at(AztecAddress.fromStringUnsafe(kycAddr), kycArtifact, wallet);
 
     // V2 path: fetch caller's KycCredentialNote hint from their PXE so we
     // can pass it into HousingFund.deposit_private. Fails clearly if the
@@ -84,10 +84,10 @@ export async function POST(request: NextRequest) {
     // from == caller (accountAddress) is self-authorized, so _nonce = 0.
     const EurArtifactJson = await loadGeneratedArtifactJson("token_contract-Token.json");
     const eurArtifact = loadContractArtifact(EurArtifactJson as Parameters<typeof loadContractArtifact>[0]);
-    const eurContract = await Contract.at(AztecAddress.fromString(eurTokenAddr), eurArtifact, wallet);
+    const eurContract = await Contract.at(AztecAddress.fromStringUnsafe(eurTokenAddr), eurArtifact, wallet);
     const eurTransferCall = eurContract.methods.transfer_public_to_public(
       accountAddress,
-      AztecAddress.fromString(housingFundAddr),
+      AztecAddress.fromStringUnsafe(housingFundAddr),
       BigInt(amount),
       0,
     );
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
     const HfArtifactJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
     const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const hfContract = await Contract.at(
-      AztecAddress.fromString(housingFundAddr),
+      AztecAddress.fromStringUnsafe(housingFundAddr),
       hfArtifact,
       wallet
     );

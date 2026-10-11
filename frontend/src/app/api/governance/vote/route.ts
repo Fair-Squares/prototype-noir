@@ -39,19 +39,19 @@ export async function POST(request: NextRequest) {
     if (!housingFundAddr) return NextResponse.json({ error: "NEXT_PUBLIC_HOUSING_FUND_ADDRESS not set" }, { status: 500 });
     if (!fundTokenAddr) return NextResponse.json({ error: "NEXT_PUBLIC_FUND_TOKEN_ADDRESS not set" }, { status: 500 });
 
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
-    const accountAddress = AztecAddress.fromString(account.address);
-    const userAddress = AztecAddress.fromString(address);
+    const accountAddress = AztecAddress.fromStringUnsafe(account.address);
+    const userAddress = AztecAddress.fromStringUnsafe(address);
 
     const KycArtifactJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
     const HfArtifactJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
     const kycArtifact = loadContractArtifact(KycArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
-    const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet);
-    const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, wallet);
+    const kycContract = await Contract.at(AztecAddress.fromStringUnsafe(kycAddr), kycArtifact, wallet);
+    const hfContract = await Contract.at(AztecAddress.fromStringUnsafe(housingFundAddr), hfArtifact, wallet);
 
     // V2: fetch hinted KYC credential + hinted deposit note from caller's
     // PXE. cast_vote_private requires both: KYC for eligibility, deposit
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
 
     const GovArtifactJson = await loadGeneratedArtifactJson("governance-Governance.json");
     const govArtifact = loadContractArtifact(GovArtifactJson as Parameters<typeof loadContractArtifact>[0]);
-    const govContract = await Contract.at(AztecAddress.fromString(govAddr), govArtifact, wallet);
+    const govContract = await Contract.at(AztecAddress.fromStringUnsafe(govAddr), govArtifact, wallet);
 
     void fundTokenAddr; // legacy V1 readonly probe removed; kept env-var required so missing config errors stay actionable
 

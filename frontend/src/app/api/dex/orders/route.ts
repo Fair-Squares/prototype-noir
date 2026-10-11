@@ -41,14 +41,14 @@ export async function GET(request: NextRequest) {
     if (!dexAddr) return NextResponse.json({ error: "NEXT_PUBLIC_FSFT_DEX_ADDRESS not set" }, { status: 500 });
 
     const { getTestAccount } = await import("@/lib/serverWallet");
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadArtifact } = await import("@/lib/artifactLoader");
 
     const actor = await getTestAccount(accountIndex);
-    const from = AztecAddress.fromString(actor.address);
+    const from = AztecAddress.fromStringUnsafe(actor.address);
     const dexArtifact = await loadArtifact("fsft_dex-FSFTDex.json");
-    const dex = await Contract.at(AztecAddress.fromString(dexAddr), dexArtifact, actor.wallet);
+    const dex = await Contract.at(AztecAddress.fromStringUnsafe(dexAddr), dexArtifact, actor.wallet);
 
     const snapshot = simResult<{
       ref_price_bps: bigint; min_price_bps: bigint; max_price_bps: bigint;
@@ -135,17 +135,17 @@ export async function POST(request: NextRequest) {
     }
 
     const { getTestAccount } = await import("@/lib/serverWallet");
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
-    const { Fr } = await import("@aztec/aztec.js/fields");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
+    const { Fr } = await import("@aztec-labs/aztec.js/fields");
     const { loadArtifact } = await import("@/lib/artifactLoader");
 
     const actor = await getTestAccount(accountIndex);
     if (address.toLowerCase() !== actor.address.toLowerCase()) {
       return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
     }
-    const from = AztecAddress.fromString(actor.address);
-    const dexAddress = AztecAddress.fromString(dexAddr);
+    const from = AztecAddress.fromStringUnsafe(actor.address);
+    const dexAddress = AztecAddress.fromStringUnsafe(dexAddr);
 
     const [dexArtifact, tokenArtifact, kycArtifact] = await Promise.all([
       loadArtifact("fsft_dex-FSFTDex.json"),
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
       loadArtifact("kyc_verifier-KYCVerifier.json"),
     ]);
     const dex = await Contract.at(dexAddress, dexArtifact, actor.wallet);
-    const kyc = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, actor.wallet);
+    const kyc = await Contract.at(AztecAddress.fromStringUnsafe(kycAddr), kycArtifact, actor.wallet);
 
     const snapshot = simResult<{ ref_price_bps: bigint; max_ttl_blocks: bigint; order_count: bigint }>(
       await dex.methods.get_orderbook_snapshot().simulate({ from })
@@ -208,7 +208,7 @@ export async function POST(request: NextRequest) {
 
     // Escrow: SELL locks `amount` FSFT; BUY locks floor(amount*price/10000) EUR.
     // Build the one authwit the placement's escrow leg consumes.
-    const escrowTokenAddr = sideCode === 1 ? AztecAddress.fromString(fsftAddr) : AztecAddress.fromString(eurAddr);
+    const escrowTokenAddr = sideCode === 1 ? AztecAddress.fromStringUnsafe(fsftAddr) : AztecAddress.fromStringUnsafe(eurAddr);
     const escrowAmount = sideCode === 1 ? amountU128 : (amountU128 * BigInt(priceBps)) / 10000n;
     const escrowNonce = Fr.random();
     const token = await Contract.at(escrowTokenAddr, tokenArtifact, actor.wallet);

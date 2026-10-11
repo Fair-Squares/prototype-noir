@@ -10,10 +10,10 @@
  * Requires: Contracts compiled (run `aztec compile` in each contract directory first)
  */
 
-import { AztecAddress } from "@aztec/aztec.js/addresses";
-import { createAztecNodeClient } from "@aztec/aztec.js/node";
-import { getInitialTestAccountsData } from "@aztec/accounts/testing";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
+import { AztecAddress } from "@aztec-labs/aztec.js/addresses";
+import { createAztecNodeClient } from "@aztec-labs/aztec.js/node";
+import { getInitialTestAccountsData } from "@aztec-labs/accounts/testing";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -68,9 +68,12 @@ async function main() {
   const wallet = await EmbeddedWallet.create(node);
 
   const [adminData] = await getInitialTestAccountsData();
+  // Aztec >= 5: the signing key is the account root (it is no longer derived
+  // from the privacy secret), so it must be passed explicitly.
   const adminAccount = await wallet.createSchnorrAccount(
     adminData.secret,
-    adminData.salt
+    adminData.salt,
+    adminData.signingKey
   );
   const adminAddress = adminAccount.address;
   log(`Using admin: ${adminAddress}`);

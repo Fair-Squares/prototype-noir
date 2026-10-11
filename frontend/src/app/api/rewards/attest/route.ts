@@ -33,9 +33,9 @@ export async function POST(request: NextRequest) {
     }
 
     const { getTestAccount } = await import("@/lib/serverWallet");
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     const actor = await getTestAccount(accountIndex);
@@ -43,8 +43,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
     }
 
-    const actorAddress = AztecAddress.fromString(actor.address);
-    const userAddress = AztecAddress.fromString(address);
+    const actorAddress = AztecAddress.fromStringUnsafe(actor.address);
+    const userAddress = AztecAddress.fromStringUnsafe(address);
 
     // AIP-20 migration: the explicit attest flow (FSFT.attest_private_holder +
     // ProtocolRewards.attest_private_fsft_for_rewards) is removed. Rewards
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     // No transaction is sent; this endpoint just reports current eligibility.
     const RewardsJson = await loadGeneratedArtifactJson("protocol_rewards-ProtocolRewards.json");
     const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
-    const rewardsContract = await Contract.at(AztecAddress.fromString(rewardsAddr), rewardsArtifact, actor.wallet);
+    const rewardsContract = await Contract.at(AztecAddress.fromStringUnsafe(rewardsAddr), rewardsArtifact, actor.wallet);
 
     const eligible = Boolean(
       simResult(

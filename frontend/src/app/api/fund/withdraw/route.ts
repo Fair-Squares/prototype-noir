@@ -38,18 +38,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "NEXT_PUBLIC_HOUSING_FUND_ADDRESS not set" }, { status: 500 });
     }
 
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
     const HfArtifactJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
     const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const hfContract = await Contract.at(
-      AztecAddress.fromString(housingFundAddr),
+      AztecAddress.fromStringUnsafe(housingFundAddr),
       hfArtifact,
       account.wallet
     );
-    const accountAddress = AztecAddress.fromString(account.address);
+    const accountAddress = AztecAddress.fromStringUnsafe(account.address);
     const notesResult = simResult<{
       len: bigint;
       storage: { note: { amount: bigint } }[];
@@ -98,19 +98,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "NEXT_PUBLIC_HOUSING_FUND_ADDRESS not set" }, { status: 500 });
     }
 
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
     const HfArtifactJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
     const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const hfContract = await Contract.at(
-      AztecAddress.fromString(housingFundAddr),
+      AztecAddress.fromStringUnsafe(housingFundAddr),
       hfArtifact,
       wallet
     );
 
-    const accountAddress = AztecAddress.fromString(account.address);
+    const accountAddress = AztecAddress.fromStringUnsafe(account.address);
 
     // V2 path: withdraw_private consumes a whole DepositNote. Fetch the
     // caller's first note whose amount matches the requested withdraw.

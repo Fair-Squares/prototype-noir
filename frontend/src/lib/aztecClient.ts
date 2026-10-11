@@ -3,10 +3,10 @@
  *
  * Architecture:
  *   Server API routes: connect to the Aztec node via JSON-RPC (plain fetch).
- *     No Aztec SDK bundled server-side — avoids @aztec/bb.js WASM crashes.
+ *     No Aztec SDK bundled server-side — avoids @aztec-foundation/bb.js WASM crashes.
  *   Browser: wallet interactions via BrowserEmbeddedWallet (see useAztecWallet.ts).
  *
- * NEVER import @aztec/bb.js, @aztec/pxe, @aztec/wallets/embedded directly here.
+ * NEVER import @aztec-foundation/bb.js, @aztec-labs/pxe, @aztec-labs/wallets/embedded directly here.
  * Those packages crash the Next.js server worker during webpack initialization.
  */
 

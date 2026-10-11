@@ -23,12 +23,12 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { AztecAddress } from "@aztec/aztec.js/addresses";
-import { createAztecNodeClient } from "@aztec/aztec.js/node";
-import { loadContractArtifact } from "@aztec/aztec.js/abi";
-import { Contract } from "@aztec/aztec.js/contracts";
-import { getInitialTestAccountsData } from "@aztec/accounts/testing";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
+import { AztecAddress } from "@aztec-labs/aztec.js/addresses";
+import { createAztecNodeClient } from "@aztec-labs/aztec.js/node";
+import { loadContractArtifact } from "@aztec-labs/aztec.js/abi";
+import { Contract } from "@aztec-labs/aztec.js/contracts";
+import { getInitialTestAccountsData } from "@aztec-labs/accounts/testing";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
 
 const NODE_URL =
   process.env.AZTEC_NODE_URL ?? process.env.PXE_URL ?? "http://localhost:8080";
@@ -90,8 +90,8 @@ async function main() {
   // method proxy. EmbeddedWallet ships with its own in-process PXE which has
   // no knowledge of contracts deployed via the aztec-wallet CLI, so we have
   // to fetch the instance from the node and register it before simulating.
-  const kycAddress = AztecAddress.fromString(KYC_ADDR);
-  const hfAddress = AztecAddress.fromString(HF_ADDR);
+  const kycAddress = AztecAddress.fromStringUnsafe(KYC_ADDR);
+  const hfAddress = AztecAddress.fromStringUnsafe(HF_ADDR);
   const kycInstance = await node.getContract(kycAddress);
   const hfInstance = await node.getContract(hfAddress);
   if (!kycInstance) throw new Error(`KYCVerifier ${KYC_ADDR} not on node`);

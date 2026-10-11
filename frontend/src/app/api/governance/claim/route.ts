@@ -24,9 +24,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const { getTestAccount } = await import("@/lib/serverWallet");
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     const housingFundAddr = process.env.NEXT_PUBLIC_HOUSING_FUND_ADDRESS ?? "";
@@ -41,8 +41,8 @@ export async function POST(request: NextRequest) {
 
     const HfArtifactJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
     const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
-    const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, actor.wallet);
-    const actorAddress = AztecAddress.fromString(actor.address);
+    const hfContract = await Contract.at(AztecAddress.fromStringUnsafe(housingFundAddr), hfArtifact, actor.wallet);
+    const actorAddress = AztecAddress.fromStringUnsafe(actor.address);
 
     // V2 path: claim_distribution_private needs a hinted DepositNote the
     // caller already owns plus the per-proposal allocation snapshots
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
     // fund/rent/claim. A note already claimed reverts with a duplicate nullifier,
     // and a note with no share reverts/zeroes — both are skipped so the others
     // still claim. The contract's fail-closed ceiling keeps the total <= pool.
-    const fundToken = AztecAddress.fromString(fundTokenAddr);
+    const fundToken = AztecAddress.fromStringUnsafe(fundTokenAddr);
     let claimedNotes = 0;
     let lastTx: string | null = null;
     for (let i = 0; i < Number(depositsResult.len); i++) {

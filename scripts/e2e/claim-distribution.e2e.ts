@@ -36,7 +36,7 @@
  */
 
 import assert from "node:assert/strict";
-import { AztecAddress } from "@aztec/aztec.js/addresses";
+import { AztecAddress } from "@aztec-labs/aztec.js/addresses";
 import {
   connect,
   loadContract,
@@ -149,7 +149,7 @@ async function main() {
     hf.methods.claim_distribution_private(
       proposalId,
       depHint,
-      AztecAddress.fromString(fundAddr),
+      AztecAddress.fromStringUnsafe(fundAddr),
       snapshot.smallPool,
       snapshot.smallTotal,
       snapshot.fifoCap,
@@ -178,7 +178,7 @@ async function main() {
     hf.methods.claim_distribution_private(
       proposalId,
       depHint,
-      AztecAddress.fromString(fundAddr),
+      AztecAddress.fromStringUnsafe(fundAddr),
       snapshot.smallPool,
       snapshot.smallTotal,
       snapshot.fifoCap,

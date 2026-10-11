@@ -54,9 +54,9 @@ export async function GET() {
       { loadGeneratedArtifactJson },
     ] = await Promise.all([
       import("@/lib/serverWallet"),
-      import("@aztec/aztec.js/contracts"),
-      import("@aztec/aztec.js/abi"),
-      import("@aztec/aztec.js/addresses"),
+      import("@aztec-labs/aztec.js/contracts"),
+      import("@aztec-labs/aztec.js/abi"),
+      import("@aztec-labs/aztec.js/addresses"),
       import("@/lib/artifactLoader"),
     ]);
 
@@ -64,10 +64,10 @@ export async function GET() {
       getTestAccount(0),
       loadGeneratedArtifactJson("protocol_rewards-ProtocolRewards.json"),
     ]);
-    const from = AztecAddress.fromString(admin.address);
+    const from = AztecAddress.fromStringUnsafe(admin.address);
 
     const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
-    const rewardsContract = await Contract.at(AztecAddress.fromString(rewardsAddr), rewardsArtifact, admin.wallet);
+    const rewardsContract = await Contract.at(AztecAddress.fromStringUnsafe(rewardsAddr), rewardsArtifact, admin.wallet);
 
     const cfg = simResult<{
       total_distribution_pool: bigint;

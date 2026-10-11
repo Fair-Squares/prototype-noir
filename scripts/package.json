@@ -13,10 +13,11 @@
     "e2e:all": "npm run e2e:rewards && npm run e2e:rent && npm run e2e:reinvest && npm run e2e:vote && npm run e2e:distribution && npm run e2e:dex"
   },
   "dependencies": {
-    "@aztec/accounts": "4.3.0",
-    "@aztec/aztec.js": "4.3.0",
-    "@aztec/noir-contracts.js": "^4.3.0",
-    "@aztec/wallets": "4.3.0"
+    "@aztec-labs/accounts": "6.0.0-rc.3",
+    "@aztec-labs/aztec.js": "6.0.0-rc.3",
+    "@aztec-labs/foundation": "6.0.0-rc.3",
+    "@aztec-labs/noir-contracts.js": "6.0.0-rc.3",
+    "@aztec-labs/wallets": "6.0.0-rc.3"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

@@ -28,7 +28,7 @@
  */
 
 import assert from "node:assert/strict";
-import { AztecAddress } from "@aztec/aztec.js/addresses";
+import { AztecAddress } from "@aztec-labs/aztec.js/addresses";
 import {
   connect,
   loadContract,

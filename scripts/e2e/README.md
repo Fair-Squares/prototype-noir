@@ -34,7 +34,7 @@ straight into the private consumer — **no manual `packAsHintedNote`**. See
    loads artifacts from `frontend/src/artifacts/` (build-generated), not the
    racing target dir.
 3. Deps are already declared in `scripts/package.json`
-   (`@aztec/{aztec.js,accounts,wallets}@4.3.0`, `tsx`). Run `npm install` in
+   (`@aztec-labs/{aztec.js,accounts,wallets}@6.0.0-rc.3`, `tsx`). Run `npm install` in
    `scripts/` once if `node_modules` is absent.
 
 ## Running
@@ -92,7 +92,7 @@ asserts a **real numeric state delta** (never just "no error"), and asserts the
 
 Connection + helpers every flow reuses, so the files match:
 - `connect()` / `loadContract()` — ephemeral PXE + the 3 schnorr accounts; node-instance registration.
-- `simValue()` — tolerant 4.3.0 `simulate()` unwrap; `sendOk()` / `sendExpectFail()` — revert-aware sends (a default `send()` resolves even on a post-mining revert).
+- `simValue()` — tolerant `simulate()` result unwrap (shape introduced in 4.3.0); `sendOk()` / `sendExpectFail()` — revert-aware sends (a default `send()` resolves even on a post-mining revert).
 - `kycHint()`, `depositCursor()`, `depositInProcess()`, `allDepositNotes()` (pages past the 10-note cap), `openRentEpoch()`, `advanceBlocks()`, `runProposalToExecuted()` (create → vote ×quorum → finalize → execute → open_distribution).
 - `fifoShare()` / `smallShare()` / `totalClaim()` — a TS mirror of the on-chain allocation math, so claims assert the **exact** predicted share.
 

@@ -4,7 +4,13 @@ This file is the canonical agent guide for this repo. [AGENTS.md](./AGENTS.md) i
 
 ## Critical: Use the host `aztec` CLI, not `nargo` directly
 
-This is an Aztec smart contract project. The host CLI is installed at
+This is an Aztec smart contract project on **Aztec v6** (`6.0.0-rc.3`: aztec-nr
+from `aztec-labs-eng/aztec-nr`, npm packages under the `@aztec-labs/*` scope,
+node image `azteclabs/aztec`). The single version pin is **`.aztec-version`**
+(read by `scripts/ci/install-aztec.sh`, the docker test path and CI); keep it in
+step with the `tag = "v…"` in every `contracts/**/Nargo.toml`, the
+`x-aztec-image` in `docker-compose.yml` and the `@aztec-labs/*` pins in
+`frontend/package.json` + `scripts/package.json`. The host CLI is installed at
 `$HOME/.aztec/current/bin` (added to PATH via `.bashrc`). Always use the
 `aztec` wrapper instead of calling `nargo` directly:
 
@@ -17,14 +23,34 @@ This is an Aztec smart contract project. The host CLI is installed at
 - **Other nargo commands** like `aztec-nargo fmt` and `aztec-nargo doc`
   are fine to use directly.
 
-Install / reinstall:
+Install / reinstall (needs Node >= 24.12):
 
 ```bash
-VERSION=4.3.0 bash -i <(curl -sL https://install.aztec.network/4.3.0)
+./scripts/ci/install-aztec.sh            # installs the version in .aztec-version
+export PATH="$HOME/.aztec/current/bin:$PATH"
 ```
 
-Confirms with `aztec --version` -> `4.3.0`, `aztec-nargo --version` ->
-`1.0.0-beta.21`, `aztec-wallet --version` -> `4.3.0`.
+Confirms with `aztec --version` -> `6.0.0-rc.3`, `aztec-nargo --version` ->
+`1.0.0-rc.3`. Do NOT use the bare `bash -i <(curl -sL https://install.aztec.network/<v>)`
+one-liner in CI: the frozen per-version installer bundles foundry through the
+moving foundryup bootstrap, which now emits symlinked binaries and aborts the
+whole install with "expected bundled binary 'forge' missing" (that is what broke
+CI for months). `install-aztec.sh` runs the same upstream installer with the
+foundry step made best-effort -- compile + TXE never need forge/anvil.
+
+### Noir 1.0 type-complexity cap (why storage is packed into structs)
+
+The v6 `#[aztec]` macro builds one generic self type over the whole `Storage`
+struct and Noir 1.0 caps that type at `MAX_TYPE_COMPLEXITY = 100k` nodes in
+every PRIVATE function ("Type is too complex"). Each `PublicMutable` field costs
+~2 `PrivateContext` expansions and each `Map` ~4, so a contract gets roughly
+**75 units** of storage. HousingFund / Governance / ProtocolRewards therefore
+keep related scalars in `#[derive(Packable, Eq)]` structs (`FundLinks`,
+`FundTotals`, `EpochSnapshot`, `Proposal`, `Listing`, `Epoch`, ...) stored as ONE
+`PublicMutable` / one `Map` value each, read-modify-written as a unit. When you
+add storage, extend an existing group rather than adding a new top-level field
+(each new `Map` costs 4 units; HousingFund sits at ~54). The external ABI is
+unaffected by grouping.
 
 ### Iteration timings (host CLI, warm cache)
 
@@ -91,7 +117,7 @@ sub-EUR dust), so there is no precision to recover.
 
 ## Testnet smoke test
 
-To verify the pinned `@aztec/aztec.js` (v4.3.0) talks to the public Aztec testnet:
+To verify the pinned `@aztec-labs/aztec.js` (6.0.0-rc.3) talks to the public Aztec testnet:
 
 ```bash
 cd scripts
@@ -135,10 +161,11 @@ Use the wrapper:
 
 By default the script uses the host `aztec` CLI: each contract runs
 `aztec test`, which handles compile + TXE + oracle resolver
-internally. No docker required. The full suite is **81 tests** across the
-5 V2 contracts (kyc_verifier 7, housing_fund 29, governance 16,
+internally. No docker required. The full suite is **109 tests** across the
+5 V2 contracts (kyc_verifier 12, housing_fund 33, governance 35,
 protocol_rewards 18, fsft_dex 11) and runs in CI on every push/PR
-(`.github/workflows/tests.yml`).
+(`.github/workflows/tests.yml`). `AZTEC_HOME=/path/to/other/.aztec` selects a
+second toolchain install (e.g. to trial the next rc) without re-activating.
 
 The script compiles each contract **before** staging cross-contract
 dependency artifacts. This ordering matters: the `aztec compile` / `aztec
@@ -152,7 +179,7 @@ register their dep in `stage_cross_contract_deps` (the vendored AIP-20
 `contracts/vendor/aztec-standards/target`, not the member dir).
 
 Opt-in legacy docker path: `FS_AZTEC_TEST_DOCKER=1 ./scripts/aztec-test.sh`
-spawns TXE inside the pinned `aztecprotocol/aztec:4.3.0` image and runs
+spawns TXE inside the pinned `azteclabs/aztec:<.aztec-version>` image and runs
 `nargo test --oracle-resolver http://127.0.0.1:8080`. Slower (~65 s for
 the full suite) but useful for parity checks with CI. NOTE: the docker
 path's inline staging only covers `housing_fund`'s KYCVerifier; the new

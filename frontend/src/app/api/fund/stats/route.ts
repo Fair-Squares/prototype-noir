@@ -58,13 +58,13 @@ export async function GET() {
     }
 
     const { getTestAccount } = await import("@/lib/serverWallet");
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     const admin = await getTestAccount(0);
-    const from = AztecAddress.fromString(admin.address);
+    const from = AztecAddress.fromStringUnsafe(admin.address);
 
     const [HfJson, FtJson] = await Promise.all([
       loadGeneratedArtifactJson("housing_fund-HousingFund.json"),
@@ -75,8 +75,8 @@ export async function GET() {
     const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);
 
     const [hfContract, ftContract] = await Promise.all([
-      Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, admin.wallet),
-      Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, admin.wallet),
+      Contract.at(AztecAddress.fromStringUnsafe(housingFundAddr), hfArtifact, admin.wallet),
+      Contract.at(AztecAddress.fromStringUnsafe(fundTokenAddr), ftArtifact, admin.wallet),
     ]);
 
     const [

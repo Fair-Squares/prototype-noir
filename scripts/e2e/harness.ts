@@ -20,12 +20,12 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { AztecAddress } from "@aztec/aztec.js/addresses";
-import { createAztecNodeClient, type AztecNode } from "@aztec/aztec.js/node";
-import { loadContractArtifact } from "@aztec/aztec.js/abi";
-import { Contract } from "@aztec/aztec.js/contracts";
-import { getInitialTestAccountsData } from "@aztec/accounts/testing";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
+import { AztecAddress } from "@aztec-labs/aztec.js/addresses";
+import { createAztecNodeClient, type AztecNode } from "@aztec-labs/aztec.js/node";
+import { loadContractArtifact } from "@aztec-labs/aztec.js/abi";
+import { Contract } from "@aztec-labs/aztec.js/contracts";
+import { getInitialTestAccountsData } from "@aztec-labs/accounts/testing";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
 
 export const NODE_URL =
   process.env.AZTEC_NODE_URL ?? process.env.PXE_URL ?? "http://localhost:8080";
@@ -106,7 +106,7 @@ export async function loadContract(
   address: string,
   artifactName: string,
 ): Promise<Contract> {
-  const addr = AztecAddress.fromString(address);
+  const addr = AztecAddress.fromStringUnsafe(address);
   const instance = await h.node.getContract(addr);
   if (!instance) throw new Error(`${artifactName} ${address} not deployed on node ${NODE_URL}`);
   const artifact = loadContractArtifact(loadRawArtifact(artifactName));
@@ -145,7 +145,7 @@ export function txReverted(receipt: unknown): { reverted: boolean; error: string
 }
 
 // A ContractFunctionInteraction -- loosely typed (tsx strips types; the real
-// shape is from @aztec/aztec.js). Just needs `.send({ from })`.
+// shape is from @aztec-labs/aztec.js). Just needs `.send({ from })`.
 type Interaction = { send: (opts: { from: AztecAddress }) => Promise<unknown> };
 
 /** Send a tx that MUST succeed: throws on a pre-mining throw OR a post-mining
@@ -184,7 +184,7 @@ export async function sendExpectFail(
 // These wrap the recurring "read a hint / mint a note in-process / run the
 // admin setup / assert allocation math" steps that the 6 flows share. They are
 // loosely typed on purpose (tsx strips types; the real Contract/Interaction
-// shapes come from @aztec/aztec.js) and each asserts its own preconditions
+// shapes come from @aztec-labs/aztec.js) and each asserts its own preconditions
 // rather than masking a missing note with a fallback (CLAUDE.md error rules).
 //
 // Note on artifact naming (loadContract 2nd arg), so callers stay consistent:
@@ -444,7 +444,7 @@ export async function openRentEpoch(
     );
   }
   await sendOk(
-    hf.methods.set_eur_token(AztecAddress.fromString(args.eurAddr)),
+    hf.methods.set_eur_token(AztecAddress.fromStringUnsafe(args.eurAddr)),
     admin,
     "set_eur_token",
   );

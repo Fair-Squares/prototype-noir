@@ -41,11 +41,23 @@ AZTEC_BIN="node --no-warnings /usr/src/yarn-project/aztec/dest/bin/index.js"
 AZTEC_WALLET_BIN="node --no-warnings /usr/src/yarn-project/cli-wallet/dest/bin/index.js"
 # aztec-nargo: Aztec wrapper for Noir compile/test flows (preferred over raw nargo)
 AZTEC_NARGO_BIN="$(command -v aztec-nargo 2>/dev/null || true)"
-# nargo: Noir compiler (aztec fork)
-NARGO_BIN="/usr/src/noir/noir-repo/target/release/nargo"
-# bb: barretenberg binary — handles AVM transpilation + VK generation
-# Docker image has bb-avm, local installs may have bb — try both
-if [ -x "/usr/src/barretenberg/cpp/build/bin/bb-avm" ]; then
+# nargo: Noir compiler. The v6 image (azteclabs/aztec, built from
+# aztec-labs-eng/aztec-node) ships the pinned noir + bb binaries under
+# /usr/src/labs-aztec-toolchain/bin; the pre-v6 aztecprotocol/aztec images
+# kept them in the noir / barretenberg build dirs. Probe both layouts.
+TOOLCHAIN_BIN="/usr/src/labs-aztec-toolchain/bin"
+if [ -x "$TOOLCHAIN_BIN/nargo" ]; then
+  NARGO_BIN="$TOOLCHAIN_BIN/nargo"
+else
+  NARGO_BIN="/usr/src/noir/noir-repo/target/release/nargo"
+fi
+# bb: barretenberg binary — handles AVM transpilation + VK generation.
+# Docker images ship bb-avm (the AVM-enabled build); fall back to bb.
+if [ -x "$TOOLCHAIN_BIN/bb-avm" ]; then
+  BB_BIN="$TOOLCHAIN_BIN/bb-avm"
+elif [ -x "$TOOLCHAIN_BIN/bb" ]; then
+  BB_BIN="$TOOLCHAIN_BIN/bb"
+elif [ -x "/usr/src/barretenberg/cpp/build/bin/bb-avm" ]; then
   BB_BIN="/usr/src/barretenberg/cpp/build/bin/bb-avm"
 elif [ -x "/usr/src/barretenberg/cpp/build/bin/bb" ]; then
   BB_BIN="/usr/src/barretenberg/cpp/build/bin/bb"
@@ -54,15 +66,22 @@ else
 fi
 [ -z "$BB_BIN" ] && { log "FATAL: bb/bb-avm binary not found"; exit 1; }
 
-# Ensure nargo is on PATH so `aztec compile` (which shells out to bare `nargo`)
-# can find it. The 4.3.0 Docker image ships nargo in the Noir release dir but
-# does NOT add it to PATH, so the CLI's spawn('nargo', ...) fails with ENOENT.
+# `aztec compile` resolves nargo/bb from the NARGO / BB env vars first (v6) and
+# otherwise shells out to bare `nargo` / `bb` on PATH. The images do NOT put the
+# toolchain on PATH, so export both forms.
 if [ -x "$NARGO_BIN" ]; then
+  export NARGO="$NARGO_BIN"
   case ":$PATH:" in
     *":$(dirname "$NARGO_BIN"):"*) ;;
     *) export PATH="$(dirname "$NARGO_BIN"):$PATH" ;;
   esac
 fi
+export BB="$BB_BIN"
+
+# The Aztec stack version baked into this image, stamped into raw-nargo
+# artifacts (see compile_standards) so codegen output type-checks.
+AZTEC_VERSION="$($AZTEC_BIN --version 2>/dev/null | tail -1 | tr -d '[:space:]' || true)"
+[ -n "$AZTEC_VERSION" ] || AZTEC_VERSION="$(tr -d '[:space:]' < "${ROOT_DIR}/.aztec-version")"
 
 # -- Helpers -------------------------------------------------------------------
 
@@ -283,7 +302,7 @@ for fn in d.get('functions', []):
 # requires aztec_version — inject it (pinned toolchain) so codegen output
 # type-checks (matches the custom contracts' value).
 if not d.get('aztec_version'):
-    d['aztec_version'] = '4.3.0'
+    d['aztec_version'] = '${AZTEC_VERSION}'
 with open('${json_file}', 'w') as f: json.dump(d, f)
 print('Patched functions + aztec_version in ${json_file}')
 " 2>&1

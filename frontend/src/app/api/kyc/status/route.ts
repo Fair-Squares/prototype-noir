@@ -81,15 +81,15 @@ export async function GET(request: NextRequest) {
       { loadGeneratedArtifactJson },
     ] = await Promise.all([
       import("@/lib/serverWallet"),
-      import("@aztec/aztec.js/contracts"),
-      import("@aztec/aztec.js/abi"),
-      import("@aztec/aztec.js/addresses"),
+      import("@aztec-labs/aztec.js/contracts"),
+      import("@aztec-labs/aztec.js/abi"),
+      import("@aztec-labs/aztec.js/addresses"),
       import("@/lib/artifactLoader"),
     ]);
     const admin = await getTestAccount(0);
     const wallet = admin.wallet;
 
-    const userAddress = AztecAddress.fromString(address);
+    const userAddress = AztecAddress.fromStringUnsafe(address);
     // Read the user's OWN private notes from their account scope. Simulating
     // from the admin would not see another account's credential / deposit
     // notes, so we use the queried address (all local test accounts are
@@ -108,17 +108,17 @@ export async function GET(request: NextRequest) {
     ]);
     const kycArtifact = loadContractArtifact(KycArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const [kycContract, hfContract, ftContract] = await Promise.all([
-      Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, wallet),
+      Contract.at(AztecAddress.fromStringUnsafe(kycAddr), kycArtifact, wallet),
       hasHfFt
         ? Contract.at(
-            AztecAddress.fromString(housingFundAddr),
+            AztecAddress.fromStringUnsafe(housingFundAddr),
             loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]),
             wallet
           )
         : Promise.resolve(null),
       hasHfFt
         ? Contract.at(
-            AztecAddress.fromString(fundTokenAddr),
+            AztecAddress.fromStringUnsafe(fundTokenAddr),
             loadContractArtifact(FtArtifactJson as Parameters<typeof loadContractArtifact>[0]),
             wallet
           )
