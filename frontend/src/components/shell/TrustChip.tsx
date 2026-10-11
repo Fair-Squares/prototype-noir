@@ -31,6 +31,7 @@ export default function TrustChip() {
   const { items, freshAs } = useProofSignals();
   const { trustOpen, setTrustOpen } = useShell();
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const summary = summarise(items.map((i) => i.state));
 
@@ -41,7 +42,10 @@ export default function TrustChip() {
       if (ref.current && !ref.current.contains(e.target as Node)) setTrustOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setTrustOpen(false);
+      if (e.key === "Escape") {
+        setTrustOpen(false);
+        triggerRef.current?.focus();
+      }
     };
     document.addEventListener("mousedown", onClick);
     document.addEventListener("keydown", onKey);
@@ -52,14 +56,17 @@ export default function TrustChip() {
   }, [trustOpen, setTrustOpen]);
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative" ref={ref} onBlur={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setTrustOpen(false);
+    }}>
       <button
         type="button"
+        ref={triggerRef}
         aria-expanded={trustOpen}
-        aria-haspopup="dialog"
+        aria-controls="trust-details"
         aria-label={`Trust and privacy: ${summary.word}. Open details.`}
         onClick={() => setTrustOpen(!trustOpen)}
-        className={`chip min-h-11 ${TONE[summary.state]} cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]`}
+        className={`chip before:hidden min-h-11 ${TONE[summary.state]} cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]`}
         style={{ touchAction: "manipulation" }}
       >
         {/* No emoji (brand rule) — a plain tone-coloured dot marks the state. */}
@@ -75,9 +82,10 @@ export default function TrustChip() {
 
       {trustOpen ? (
         <div
-          role="dialog"
+          id="trust-details"
+          role="region"
           aria-label="Trust and privacy"
-          className="surface absolute right-0 z-50 mt-2 w-72 max-w-[calc(100vw-2rem)] p-4 shadow-sm"
+          className="surface fixed inset-x-4 top-[calc(4.5rem+env(safe-area-inset-top))] z-50 max-h-[calc(100dvh-9rem)] overflow-y-auto p-4 shadow-sm sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-72 sm:max-w-[calc(100vw-2rem)]"
           style={{ overscrollBehavior: "contain" }}
         >
           <p className="text-label mb-3">Trust &amp; privacy</p>

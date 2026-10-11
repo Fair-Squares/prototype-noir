@@ -253,7 +253,7 @@ function ProjectDetail({ projectId }: { projectId: number }) {
 
       <p className="text-caption">
         Voting and claiming happen in the full governance memo.{" "}
-        <Link href={`/governance/${proposal.id}`} className="text-fs-teal hover:underline">
+        <Link href={`/governance/${proposal.id}`} className="text-fs-teal-dark underline underline-offset-2">
           Open the governance memo
         </Link>
         .

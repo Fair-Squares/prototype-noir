@@ -6,8 +6,6 @@ import {
   AdvancedDetails,
   Alert,
   Button,
-  KpiCard,
-  KpiGrid,
   PageHeader,
   Section,
   SkeletonKpi,
@@ -268,7 +266,7 @@ export default function PortfolioPage() {
       <PageHeader
         eyebrow="Your account"
         title="Portfolio"
-        description="Your money: what you put in, what it's worth, what you can take out."
+        description="Your shares, rental income and available withdrawals."
         actions={
           address ? (
             <>
@@ -297,9 +295,7 @@ export default function PortfolioPage() {
             <div className="min-w-0 max-w-md">
               <h2 className="text-heading text-text-1">Connect to see your portfolio</h2>
               <p className="text-caption mt-1 text-text-2">
-                Once connected you&apos;ll see your position value, fund shares, rent
-                earnings, participation rewards, and anything you can claim or
-                withdraw — read privately from your own account.
+                Select a demo account to view its shares, income and withdrawals.
               </p>
             </div>
             <Button
@@ -309,15 +305,6 @@ export default function PortfolioPage() {
             >
               {isConnecting ? "Connecting…" : "Connect account"}
             </Button>
-          </div>
-          <div className="mt-5">
-            <p className="text-label mb-2">What you&apos;ll see</p>
-            <KpiGrid cols={4}>
-              <KpiCard label="Position value" value="—" sub="Your stake, at value per share" />
-              <KpiCard label="Fund shares" value="—" sub="FSFT you hold" />
-              <KpiCard label="Rent earnings" value="—" sub="Claim or reinvest" />
-              <KpiCard label="Rewards" value="—" sub="FSP participation" />
-            </KpiGrid>
           </div>
         </Section>
       ) : loading && !portfolio ? (
@@ -335,7 +322,7 @@ export default function PortfolioPage() {
           <div id="claims" className="scroll-mt-24">
             <Section
               title="Ready to claim"
-              description="Everything you can collect right now — rent earnings, home payouts, and participation rewards — in one place."
+              description="Collect rental income, home payouts and participation rewards."
             >
               <ReadyToClaim
                 rentClaimable={portfolio.rentClaimable ?? portfolio.estimatedYield}
@@ -374,7 +361,7 @@ export default function PortfolioPage() {
           <div id="deposit" className="scroll-mt-24">
             <Section
               title="Add to your position"
-              description="Deposit cash into the fund to help finance affordable homes. Your deposit and position stay private to your account."
+              description="Deposit into the housing fund to help finance affordable homes."
             >
               <DepositFlow
                 onDeposited={() => {
@@ -389,7 +376,7 @@ export default function PortfolioPage() {
           <div className="grid gap-6 lg:grid-cols-3">
             <Section
               title="Holdings"
-              description="Every balance the fund reports for your account, with its value where one is published."
+              description="Your balances and their available valuations."
               className="lg:col-span-2"
             >
               <HoldingsBreakdown
@@ -407,7 +394,7 @@ export default function PortfolioPage() {
               nullifiers), so no per-account vote feed can exist on-chain. */}
           <Section
             title="Property exposure"
-            description="Your fund share applied to each home the fund holds — weight and euro exposure per deed."
+            description="Your share of the fund’s investment in each home."
           >
             <PropertyExposure properties={properties} portfolio={portfolio} />
           </Section>

@@ -60,7 +60,7 @@ export function FeaturedProject({
             <span className="inline-flex items-center gap-2">
               <ModelledChip />
               <span className="text-caption text-text-3">
-                Homes, gap and covenant are modelled for the demo
+                Illustrative project, not a live offer
               </span>
             </span>
           </div>
@@ -70,6 +70,8 @@ export function FeaturedProject({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/brand/illustrations/housing-fund.png"
+            width={707}
+            height={1095}
             alt=""
             aria-hidden="true"
             className="max-h-60 w-auto object-contain"

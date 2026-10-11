@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PRIMARY_ITEMS, findRoute } from "@/lib/nav";
 import HeaderWalletButton from "@/components/HeaderWalletButton";
-import RuntimeModeChip from "@/components/RuntimeModeChip";
 import Brand from "./Brand";
 import MoreMenu from "./MoreMenu";
 import TrustChip from "./TrustChip";
@@ -57,9 +56,6 @@ export default function TopBar() {
         <span className="flex-1" />
 
         <TrustChip />
-        <div className="hidden xl:block">
-          <RuntimeModeChip withHint hintAlign="right" />
-        </div>
         <HeaderWalletButton />
       </div>
     </header>

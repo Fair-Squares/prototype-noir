@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { MORE_ACCOUNT_ITEMS, MORE_REFERENCE_ITEMS, findRoute, isMoreActive } from "@/lib/nav";
 import { useShell } from "./ShellProvider";
 
@@ -24,6 +24,8 @@ export default function MoreMenu() {
   const moreActive = isMoreActive(pathname);
   const { moreOpen, setMoreOpen } = useShell();
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const id = useId();
 
   useEffect(() => {
     if (!moreOpen) return;
@@ -31,7 +33,10 @@ export default function MoreMenu() {
       if (ref.current && !ref.current.contains(e.target as Node)) setMoreOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMoreOpen(false);
+      if (e.key === "Escape") {
+        setMoreOpen(false);
+        triggerRef.current?.focus();
+      }
     };
     document.addEventListener("mousedown", onClick);
     document.addEventListener("keydown", onKey);
@@ -42,11 +47,14 @@ export default function MoreMenu() {
   }, [moreOpen, setMoreOpen]);
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative" ref={ref} onBlur={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setMoreOpen(false);
+    }}>
       <button
         type="button"
+        ref={triggerRef}
         aria-expanded={moreOpen}
-        aria-haspopup="menu"
+        aria-controls={id}
         data-active={moreActive ? "true" : "false"}
         onClick={() => setMoreOpen(!moreOpen)}
         className="topnav-tab"
@@ -59,8 +67,8 @@ export default function MoreMenu() {
       </button>
 
       {moreOpen ? (
-        <div
-          role="menu"
+        <nav
+          id={id}
           aria-label="More navigation"
           className="surface absolute right-0 z-50 mt-2 w-56 p-2 shadow-sm"
         >
@@ -68,7 +76,6 @@ export default function MoreMenu() {
             <Link
               key={item.href}
               href={item.href}
-              role="menuitem"
               aria-current={active?.href === item.href ? "page" : undefined}
               data-active={active?.href === item.href ? "true" : "false"}
               onClick={() => setMoreOpen(false)}
@@ -85,7 +92,6 @@ export default function MoreMenu() {
             <Link
               key={item.href}
               href={item.href}
-              role="menuitem"
               aria-current={active?.href === item.href ? "page" : undefined}
               data-active={active?.href === item.href ? "true" : "false"}
               onClick={() => setMoreOpen(false)}
@@ -96,7 +102,7 @@ export default function MoreMenu() {
               {item.label}
             </Link>
           ))}
-        </div>
+        </nav>
       ) : null}
     </div>
   );

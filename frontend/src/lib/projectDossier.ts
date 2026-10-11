@@ -149,11 +149,8 @@ const DOSSIERS: ProjectDossier[] = [
     name: "Maashaven Wonen — Rotterdam",
     location: "Rotterdam-Zuid, Netherlands",
     summary:
-      "An illustrative wooncoöperatie transformation: 20 affordable homes for key " +
-      "workers, made financeable by closing the documented onrendabele top (the " +
-      "unprofitable top slice the bank, subsidy and member capital cannot carry). " +
-      "Fair Squares supplies that gap as capped-return capital under a 20-year " +
-      "affordability covenant.",
+      "A proposed housing co-operative in Rotterdam with 20 homes for key workers. " +
+      "Fair Squares would help close its funding gap.",
     totalBudgetEur: 4_600_000,
     financingGapEur: 650_000,
     capitalStack: [

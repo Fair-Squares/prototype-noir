@@ -14,20 +14,20 @@ const DISMISS_KEY = "fs.personaHandOff.dismissed";
 
 const CHOICES = [
   {
-    title: "Grow my savings",
-    body: "Put money into the fund, earn capped rent income, take it out when you need it.",
+    title: "Invest in homes",
+    body: "Help finance affordable homes and share the rental income.",
     href: "/portfolio#deposit",
     cta: "Start with a deposit",
   },
   {
     title: "I have a property",
-    body: "Submit a home with its appraisal dossier — the council reviews it, the community votes.",
+    body: "Submit a property and its valuation for council review.",
     href: "/fund/submit",
     cta: "Submit a property",
   },
   {
     title: "I review homes",
-    body: "Council members judge each home's price-quality before anything reaches a vote.",
+    body: "Council members review proposed homes before a member vote.",
     href: "/governance",
     cta: "Open the review queue",
   },
@@ -49,19 +49,19 @@ export function PersonaHandOff({ hasSignal }: PersonaHandOffProps) {
 
   return (
     <section
-      aria-label="What brings you here?"
+      aria-label="Choose how to take part"
       className="rounded-lg border border-border bg-card p-5"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-heading text-text-1">What brings you here?</h2>
+          <h2 className="text-heading text-text-1">Choose how to take part</h2>
           <p className="text-caption mt-1 text-text-2">
-            Pick your path — everything else stays one tab away.
+            Invest, submit a home or review proposals.
           </p>
         </div>
         <button
           type="button"
-          className="text-caption text-text-3 hover:text-text-1"
+          className="btn btn-ghost btn-sm"
           onClick={() => {
             window.localStorage.setItem(DISMISS_KEY, "1");
             setDismissed(true);

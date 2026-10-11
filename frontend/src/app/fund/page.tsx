@@ -185,7 +185,7 @@ export default function HomesPage() {
       <PageHeader
         eyebrow="Homes"
         title="Homes"
-        description="Every home the community is buying — from first review to owned."
+        description="Browse proposed homes and the homes owned by the fund."
         actions={
           <div className="flex items-center gap-2">
             <Button variant="secondary" onClick={() => void load()} disabled={loading}>
@@ -247,7 +247,7 @@ export default function HomesPage() {
         ) : homes.length === 0 ? (
           <EmptyState
             title="No homes yet"
-            description="The journey starts with an owner submitting a home — the capital ask, the certified market rent and the document dossier. The council reviews it, the community votes, and the fund buys it."
+            description="No homes have been submitted yet. Property owners can submit a home for review."
             action={
               <Link href="/fund/submit" className="btn btn-secondary btn-sm">
                 Submit the first property
@@ -293,7 +293,7 @@ export default function HomesPage() {
       </section>
 
       {projectRows.length > 0 ? (
-        <AdvancedDetails summary="All on-chain fields">
+        <AdvancedDetails summary="Property records">
           <p className="text-caption mb-3 text-text-2">
             Every home with its raw on-chain fields, including the voted affordability terms
             (capped rent, discount vs the certified market reference, lock). Location and unit counts
