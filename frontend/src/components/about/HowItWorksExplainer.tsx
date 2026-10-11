@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { Section } from "@/components/ui";
+import { AdvancedDetails, Section } from "@/components/ui";
 
 /**
  * S4 (UX_SIMPLIFICATION_PLAN.md): the protocol explainer, moved from the
@@ -18,22 +18,22 @@ const FLOW: Step[] = [
   {
     n: "01",
     title: "A home needs funding",
-    body: "The fund exists to acquire and hold affordable homes. Each potential acquisition is brought to the members as a proposal before any capital moves.",
+    body: "Property owners submit homes for review before the fund commits any money.",
   },
   {
     n: "02",
     title: "Members pool capital",
-    body: "Verified investors deposit cash into the housing fund. Pooled capital is what lets the fund acquire homes that no single member could fund alone.",
+    body: "Verified members deposit into the fund to help finance homes together.",
   },
   {
     n: "03",
     title: "Members vote on each acquisition",
-    body: "Governance proposes an acquisition and members vote. Capital is only committed to a home once a proposal passes — members decide what the fund buys.",
+    body: "Members vote on reviewed proposals. The fund commits money only after approval.",
   },
   {
     n: "04",
-    title: "Capital is deployed; the rest waits to be put to work",
-    body: "Approved acquisitions are funded; capital still waiting for the next home sits in the fund. Members hold their position, can trade it, keep voting, and claim rewards.",
+    title: "The fund buys approved homes",
+    body: "Approved homes receive funding. Members can track their shares and claim rental income; unused capital stays in the fund.",
   },
 ];
 
@@ -135,13 +135,10 @@ export function HowItWorksExplainer() {
         description="A deposit becomes a share of the fund. That share is what you own."
       >
         <p className="text-body text-text-2">
-          When you deposit, your cash buys fund shares at the current share
-          price. Those shares represent your slice of the fund&apos;s value —
-          the homes it has acquired plus the capital still waiting to be
-          invested. Your shares are also what give you the right to vote on
-          acquisitions and to receive rewards. You can hold them, trade them
-          with other members inside the protocol&apos;s price bands, or use them
-          to participate in governance.
+          Your deposit buys shares in the fund, not ownership of a specific home.
+          Fund value includes its homes and unused capital. Rental income is
+          separate from that value; participation rewards are separate from rent.
+          Returns are not guaranteed, and selling shares depends on finding a buyer.
         </p>
       </Section>
 
@@ -150,14 +147,15 @@ export function HowItWorksExplainer() {
       <div id="privacy" className="scroll-mt-24">
         <Section
           title="What “private” means here"
-          description="Privacy is used as assurance, not secrecy — it protects members while keeping the protocol verifiable."
+          description="Privacy protects member information while the fund’s rules remain verifiable."
         >
           <div className="space-y-4 text-text-2">
             <p className="text-body">
-              Fair Squares runs on Aztec, which lets a member prove something is
-              true without revealing the underlying details. In practice that
-              means your individual position and identity stay private, while the
-              rules of the fund remain provably enforced.
+              Aztec can verify actions without publishing the private information
+              behind them. This prototype uses shared server-managed test accounts:
+              do not use it for real money or personal documents. The privacy
+              features below describe what is hidden from the public, not from
+              the demo server operator.
             </p>
             <dl className="grid gap-4 sm:grid-cols-2">
               {PRIVACY.map(({ title, body }) => (
@@ -173,23 +171,25 @@ export function HowItWorksExplainer() {
         </Section>
       </div>
 
-      <Section
-        title="Glossary"
-        description="Plain definitions, ordered from what you put in to the instruments behind it."
-      >
-        <dl className="grid gap-4 sm:grid-cols-2">
-          {GLOSSARY.map(({ term, body }) => (
-            <div key={term} className="border-l-2 border-fs-teal/40 pl-3">
-              <dt className="text-body font-semibold text-text-1">{term}</dt>
-              <dd className="text-body mt-1 text-text-2">{body}</dd>
-            </div>
-          ))}
-        </dl>
-      </Section>
+      <AdvancedDetails summary="Financial terms">
+        <Section
+          title="Glossary"
+          description="Plain definitions, ordered from what you put in to the instruments behind it."
+        >
+          <dl className="grid gap-4 sm:grid-cols-2">
+            {GLOSSARY.map(({ term, body }) => (
+              <div key={term} className="border-l-2 border-fs-teal/40 pl-3">
+                <dt className="text-body font-semibold text-text-1">{term}</dt>
+                <dd className="text-body mt-1 text-text-2">{body}</dd>
+              </div>
+            ))}
+          </dl>
+        </Section>
 
+      </AdvancedDetails>
       <Section
         title="The public project"
-        description="This app is the protocol console. The wider Fair Squares mission, pilot terms, and full guide live on the public site."
+        description="Read about the mission and pilot terms on the Fair Squares website."
       >
         <p className="text-body text-text-2">
           For the full public-facing how-it-works guide, project mission, and

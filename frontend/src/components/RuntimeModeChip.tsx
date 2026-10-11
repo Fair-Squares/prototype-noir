@@ -11,16 +11,7 @@ interface RuntimeModeChipProps {
   hintAlign?: "left" | "right" | "center";
 }
 
-/**
- * Quiet runtime indicator that replaces the prominent "PROTOTYPE" stamp.
- *
- * - Simulation mode: a low-key dashed `.chip-sim` labelled "Simulation".
- * - Live mode: a calm neutral chip "Live · local network" with a small dot.
- *
- * Status never relies on colour alone — both states carry a text label. When
- * `withHint` is set, the chip is wrapped in an accessible Tooltip that explains
- * what the current mode means (opt-in help, used in the app shell).
- */
+/** One honest demo indicator, shared by every page. */
 export default function RuntimeModeChip({
   className = "",
   withHint = false,
@@ -32,11 +23,11 @@ export default function RuntimeModeChip({
   const chip =
     mode === "unknown" ? (
       <span className={`chip chip-neutral ${className}`.trim()} aria-label="Runtime mode: checking">
-        Connecting…
+        Checking demo status…
       </span>
     ) : isSimulation ? (
       <span className={`chip chip-sim ${className}`.trim()} aria-label="Runtime mode: simulation">
-        Simulation
+        Demo · no real funds
       </span>
     ) : (
       <span
@@ -51,9 +42,9 @@ export default function RuntimeModeChip({
 
   const hint =
     mode === "unknown"
-      ? "Checking which network this app is connected to — figures appear as soon as it responds."
+      ? "Checking whether this demo uses sample data or a test network."
       : isSimulation
-        ? "Simulation: no real funds move. Figures are read from a local network so you can explore the flow safely."
+        ? "This demo uses sample balances and activity. No real money moves."
         : "Demo network: connected to an Aztec test network with test accounts — no real funds move.";
 
   return (

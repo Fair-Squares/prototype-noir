@@ -3,17 +3,7 @@ import { KpiCard, KpiGrid, ModelledChip } from "@/components/ui";
 import { formatEUR, type Proposal } from "@/lib/contracts";
 import { aggregateImpact } from "@/lib/projectDossier";
 
-/**
- * D4 — the impact strip (FUTURE_DEVELOPMENT_PLAN.md §9.2). A compact, housing-
- * first summary that leads the Overview: homes enabled, affordability-years
- * locked, capital gap closed, and the share floored to small savers. It proves
- * the equity claim at a glance.
- *
- * Homes / affordability-years / gap are MODELLED (from the project dossiers
- * attached to funded proposals) and tagged accordingly; the small-depositor
- * floor is a REAL on-chain parameter (SMALL_POOL_BPS) and is labelled as such.
- * The privacy/proof state lives in the always-visible TrustChip in the top bar.
- */
+/** Optional fund facts: modelled housing totals and the small-depositor allocation. */
 export function ImpactStrip({ proposals }: { proposals: Proposal[] }) {
   const impact = aggregateImpact(proposals);
 
@@ -24,8 +14,7 @@ export function ImpactStrip({ proposals }: { proposals: Proposal[] }) {
         <ModelledChip />
       </div>
       <p className="text-caption text-text-2">
-        Homes, affordability-years and gap closed are modelled for the demo from each project&apos;s
-        dossier; the small-saver floor is a live on-chain parameter.{" "}
+        Housing totals are estimates based on funded project plans.{" "}
         <Link href="/learn#privacy" className="text-fs-teal-dark hover:underline">
           How this stays private
         </Link>
@@ -50,14 +39,14 @@ export function ImpactStrip({ proposals }: { proposals: Proposal[] }) {
         <KpiCard
           label="Capital gap closed"
           value={impact.hasModelledImpact ? formatEUR(impact.gapClosedEur) : "—"}
-          sub="Documented onrendabele top funded"
+          sub="Funding gaps covered"
         />
         <KpiCard
-          label="Floored to small savers"
+          label="Small-saver allocation"
           value={`${impact.smallDepositorFloorPct}%`}
           tone="success"
-          sub="Live on-chain floor on every distribution"
-          hint="A real on-chain parameter (SMALL_POOL_BPS): 30% of every distribution is reserved pro-rata for small depositors, on top of their FIFO share — equity by design."
+          sub="Reserved for small deposits"
+          hint="The fund reserves 30% of each payout for small depositors, divided in proportion to their deposits, in addition to their priority allocation."
         />
       </KpiGrid>
     </section>

@@ -9,6 +9,7 @@ import SkipLink from "@/components/shell/SkipLink";
 import TopBar from "@/components/shell/TopBar";
 import MobileDrawer from "@/components/shell/MobileDrawer";
 import BottomNav from "@/components/shell/BottomNav";
+import RuntimeModeChip from "@/components/RuntimeModeChip";
 import SiteFooter from "@/components/marketing/SiteFooter";
 
 // Body — DM Sans, the geometric-humanist companion to Nexa (per the Fair Squares
@@ -56,15 +57,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   id="main"
                   className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 lg:px-8 lg:py-8"
                 >
+                  <div className="mb-6"><RuntimeModeChip withHint hintAlign="left" /></div>
                   {children}
                 </main>
 
-                {/* App-wide dark marketing footer (brand + real-route link
-                    columns + honest runtime label). Full-bleed: it sits OUTSIDE
-                    <main>'s max-w-6xl column but inside the flex column, as its
-                    last child. Raw chain state (block height) and the
-                    Aztec/Noir build stamp live in Reference, not in this
-                    persistent chrome. */}
+                {/* Secondary project links stay below the main content. */}
                 <SiteFooter />
               </div>
             </ShellProvider>

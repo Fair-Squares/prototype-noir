@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Button, StatusChip, Stepper, type Step } from "@/components/ui";
+import { Button, StatusChip } from "@/components/ui";
 import { formatEUR, type KYCProfile, type PortfolioData } from "@/lib/contracts";
 
 /**
@@ -14,15 +14,6 @@ import { formatEUR, type KYCProfile, type PortfolioData } from "@/lib/contracts"
 
 export type NextStep = "connect" | "verify" | "invest" | "portfolio";
 
-const STEP_ORDER: NextStep[] = ["connect", "verify", "invest", "portfolio"];
-
-const STEPS: Step[] = [
-  { label: "Connect", description: "Select an account" },
-  { label: "Verify", description: "Identity + investor status" },
-  { label: "Invest", description: "Deposit EUR" },
-  { label: "Portfolio", description: "Track your position" },
-];
-
 const COPY: Record<NextStep, { title: string; body: string; href: string; cta: string }> = {
   connect: {
     title: "Connect to begin",
@@ -32,19 +23,19 @@ const COPY: Record<NextStep, { title: string; body: string; href: string; cta: s
   },
   verify: {
     title: "Verify your identity",
-    body: "Complete identity and investor verification before you can commit capital.",
+    body: "Verify your identity before depositing.",
     href: "/kyc",
-    cta: "Go to verification",
+    cta: "Verify identity",
   },
   invest: {
     title: "Make your first deposit",
-    body: "You are verified. Deposit EUR to take a position in the housing fund.",
+    body: "Deposit to help finance affordable homes.",
     href: "/portfolio#deposit",
     cta: "Go to deposit",
   },
   portfolio: {
     title: "Review your position",
-    body: "You hold a position in the fund. Track your balance, share, and rewards.",
+    body: "Check your shares and rental income.",
     href: "/portfolio",
     cta: "Open portfolio",
   },
@@ -78,7 +69,6 @@ export function OverviewNextStep({
 }) {
   const copy = COPY[step];
   const useConnectButton = step === "connect" && Boolean(connectAction);
-  const currentIndex = STEP_ORDER.indexOf(step);
 
   // Only quote a real, held value — never a placeholder.
   const positionEur =
@@ -99,8 +89,6 @@ export function OverviewNextStep({
           label={step === "portfolio" ? "Invested" : "Action needed"}
         />
       </div>
-
-      <Stepper steps={STEPS} current={currentIndex} className="mb-5" />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
