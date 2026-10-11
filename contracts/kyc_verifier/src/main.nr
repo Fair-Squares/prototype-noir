@@ -24,7 +24,7 @@ pub contract KYCVerifier {
             functions::{external, initializer, only_self, view},
             storage::storage,
         },
-        messages::message_delivery::MessageDelivery,
+        messages::delivery::MessageDelivery,
         note::{constants::MAX_NOTES_PER_PAGE, HintedNote, note_getter_options::NoteStatus},
         protocol::{
             address::AztecAddress,
@@ -207,7 +207,7 @@ pub contract KYCVerifier {
 
         let note = KycCredentialNote::new(recipient, nonce);
         self.storage.kyc_credentials.at(recipient).insert(note).deliver(
-            MessageDelivery.ONCHAIN_CONSTRAINED,
+            MessageDelivery::onchain_constrained(),
         );
 
         self.enqueue_self._record_credential_issue();

@@ -12,17 +12,21 @@
 #   docker compose --profile sim up
 #
 # WHY ONE SERVICE (and why it's fast):
-#   `aztec start --local-network` is designed to manage its own L1. The node
-#   ships an `AnvilTestWatcher` that, WHEN ANVIL IS IN AUTOMINE MODE, warps L1
-#   time to the next L2 slot ~2 s after a tx is pending -- giving near-instant
-#   blocks. The previous setup ran a SEPARATE anvil with `--block-time 12`
-#   (interval mining), which makes `isAutoMining()` return false, so the watcher
-#   never starts and every tx waits a full wall-clock slot (~22 s). Across ~22
-#   bootstrap txs that was ~10 min. Here the entrypoint starts `anvil` with NO
-#   `--block-time` (automine) in the same container, so the watcher kicks in and
-#   the whole bootstrap lands in well under a minute.
+#   `aztec start --local-network` is designed to manage its own L1. On Aztec v6
+#   the local network runs the deterministic `AutomineSequencer` (it replaced
+#   the pre-v6 `AnvilTestWatcher`): it switches anvil into automine itself,
+#   polls the mempool every 50 ms, builds a single-block checkpoint as soon as
+#   one tx is pending, warps L1 time to the next L2 slot with cheat codes,
+#   publishes the checkpoint to L1 in the same step and synthetically settles
+#   epochs. No wall-clock slot is ever waited on, so a tx is proposed in well
+#   under a second and the whole bootstrap lands in about a minute. The
+#   entrypoint below starts a bare `anvil` (no --block-time) in the same
+#   container, exactly like the upstream `aztec.sh` host wrapper does.
 
-x-aztec-image: &aztec-image aztecprotocol/aztec:4.3.0
+# Aztec v6 moved the node/CLI image to the azteclabs org (aztec-labs-eng/aztec-node).
+# Keep this in step with .aztec-version (host toolchain) and the @aztec-labs/*
+# npm pins in frontend/ + scripts/.
+x-aztec-image: &aztec-image azteclabs/aztec:6.0.0-rc.3
 
 services:
   # -- Frontend (live Aztec mode) ----------------------------------------------
@@ -49,8 +53,8 @@ services:
       - PXE_PROVER_ENABLED=${PXE_PROVER_ENABLED:-false}
       # Surface the live chain timing so /api/chain/params (Reference page)
       # reflects the network's slot duration. local-network uses the protocol
-      # default (36 s L2 / 12 s L1); with automine the watcher warps across it,
-      # so this is a DISPLAY value only -- it does not gate wall-clock speed.
+      # default (36 s L2 / 12 s L1); the AutomineSequencer warps L1 time across
+      # it, so this is a DISPLAY value only -- it does not gate wall-clock speed.
       - AZTEC_SLOT_DURATION=${AZTEC_SLOT_DURATION:-36}
       - ETHEREUM_SLOT_DURATION=${ETHEREUM_SLOT_DURATION:-12}
       # Run mode. DEFAULT is PRODUCTION (next build + next start): routes are
@@ -135,9 +139,9 @@ services:
   # -- Aztec Local Network (automine L1 + Node + PXE, single container) ---------
   # The image ENTRYPOINT is the raw node binary, which does NOT auto-start anvil
   # (only the `aztec.sh` host wrapper does). So we replicate the wrapper's
-  # local-network preamble here: start an AUTOMINE anvil (no --block-time) and
-  # point the node at it via ETHEREUM_HOSTS=127.0.0.1. Automine is the whole
-  # ballgame -- it's what activates the node's slot-warping watcher.
+  # local-network preamble here: start a bare anvil and point the node at it via
+  # ETHEREUM_HOSTS=127.0.0.1. The node's AutomineSequencer then owns L1 time
+  # (see the header comment).
   aztec:
     image: *aztec-image
     profiles: ["aztec"]
@@ -150,36 +154,37 @@ services:
       # (matches the host wrapper's local-network default).
       LOG_LEVEL: ${AZTEC_LOG_LEVEL:-info;silent:sequencer}
       L1_CHAIN_ID: "31337"
-      # Point the node at the automine anvil started in the entrypoint below.
+      # Point the node at the anvil started in the entrypoint below.
       ETHEREUM_HOSTS: http://127.0.0.1:8545
       # Ship the prefunded test accounts (test0/test1/test2) on start.
       TEST_ACCOUNTS: "true"
       # Fast polling intervals -- copied from the `aztec.sh` local-network path
-      # so the node reacts to new txs/blocks within ~500 ms.
+      # so the archiver / world state / p2p pick up new blocks within ~500 ms.
+      # (v6 dropped SEQ_TX_POLLING_INTERVAL_MS: the AutomineSequencer polls the
+      # mempool every 50 ms on its own.)
       ARCHIVER_POLLING_INTERVAL_MS: "500"
       P2P_BLOCK_CHECK_INTERVAL_MS: "500"
-      SEQ_TX_POLLING_INTERVAL_MS: "500"
       WS_BLOCK_CHECK_INTERVAL_MS: "500"
       ARCHIVER_VIEM_POLLING_INTERVAL_MS: "500"
-      # Per-tx latency knobs for fast local iteration. On a single-node network
-      # there is no real p2p, so the 2 s attestation-propagation assumption and
-      # the 2 s minimum tx-pool age are pure delay stacked on every tx. Zero them
-      # so a tx is included as soon as the automine watcher warps the slot
-      # (~6.5 s/tx -> ~3 s/tx across the ~26 bootstrap txs).
+      # The automine build only picks txs that have aged past the p2p min pool
+      # age. On a single-node network that 2 s is pure delay stacked on every
+      # tx, so zero it: a tx is built the next 50 ms poll after it arrives.
       P2P_MIN_TX_POOL_AGE_MS: "0"
-      SEQ_ATTESTATION_PROPAGATION_TIME: "0"
       # Proverless client/wallet (the node already runs realProofs=false on a
       # local network). Saves ~4 s/tx of ClientIVC proving. Set true for realism.
       PXE_PROVER_ENABLED: ${PXE_PROVER_ENABLED:-false}
-      # Governance demo timing: shrink the voting window + zero the exit delay.
+      # L1 (rollup) governance voting duration for the local chain. Fair Squares'
+      # own Governance contract is unrelated; this only shortens the L1 side.
+      # AZTEC_EXIT_DELAY_SECONDS=0, which used to sit here, is REJECTED by the
+      # v6 L1 deploy ("DeployRollupLib: exitDelaySeconds is zero") and kills the
+      # node at start -- leave the exit delay at its default.
       AZTEC_GOVERNANCE_VOTING_DURATION: ${AZTEC_GOVERNANCE_VOTING_DURATION:-300}
-      AZTEC_EXIT_DELAY_SECONDS: ${AZTEC_EXIT_DELAY_SECONDS:-0}
     entrypoint:
       - sh
       - -c
       - |
         set -e
-        echo "[aztec] starting automine anvil (no --block-time) on :8545"
+        echo "[aztec] starting anvil (no --block-time; the node's AutomineSequencer drives it) on :8545"
         anvil --silent --host 0.0.0.0 --port 8545 &
         echo "[aztec] waiting for L1..."
         until cast block-number --rpc-url http://127.0.0.1:8545 >/dev/null 2>&1; do sleep 0.2; done
@@ -203,11 +208,10 @@ services:
     environment:
       - AZTEC_NODE_URL=http://aztec:8080
       - PXE_URL=http://aztec:8080
-      # Proverless deploys by default. The cli-wallet reads PXE_PROVER (value
-      # "none"), NOT PXE_PROVER_ENABLED, so set both: PXE_PROVER=none disables
-      # the cli-wallet's ClientIVC proving (~4 s/tx across ~22 bootstrap txs).
+      # Proverless deploys by default: scripts/local-deploy.ts (one SDK process
+      # for the ~26 deploy/wiring/seed txs) skips ClientIVC proving unless this
+      # is "true" (~4 s/tx of proving otherwise).
       - PXE_PROVER_ENABLED=${PXE_PROVER_ENABLED:-false}
-      - PXE_PROVER=${PXE_PROVER:-none}
       # Governance voting window for the local demo: 12 blocks. Blocks are
       # produced on-demand (only when there are txs), so the window advances
       # with on-chain activity rather than wall-clock time. 5 was too tight for
@@ -217,19 +221,23 @@ services:
       # small enough that seed-fsft.sh can still advance past the deadline to
       # finalise (see MAX_ADVANCE in scripts/seed-fsft.sh — keep it >= this).
       - GOVERNANCE_VOTING_WINDOW_BLOCKS=${GOVERNANCE_VOTING_WINDOW_BLOCKS:-12}
-      # cli-wallet sets maxFeesPerGas = currentMinFees * (1 + MIN_FEE_PADDING).
-      # Too low (default 0.5) -> fee spikes break deploys. Too high (1000) ->
-      # wallet pre-reservation exceeds account fee-juice balance and we get
-      # "Insufficient fee payer balance". 30 is the working baseline; the
-      # bootstrap script auto-retries spikes that exceed it.
+      # The deploy wallet sets maxFeesPerGas = currentMinFees * (1 + padding).
+      # Too low (SDK default 0.5) -> local fee spikes revert sends. Too high
+      # (1000) -> the fee pre-reservation exceeds the account's fee juice
+      # ("Insufficient fee payer balance"). 30 matches serverWallet.ts.
       - WALLET_MIN_FEE_PADDING=${WALLET_MIN_FEE_PADDING:-30}
+      # Contract compiles run as a pool of background jobs, one per core by
+      # default (nargo is single-threaded, ~0.45 GB each). Lower this on a
+      # memory-constrained docker VM.
+      - BOOTSTRAP_COMPILE_JOBS=${BOOTSTRAP_COMPILE_JOBS:-}
     volumes:
       - ./:/workspace
       - contract-env:/out
-      # Persist nargo's git-dependency cache (aztec-packages v4.3.0 is a ~12k-file
-      # clone) so re-bootstraps don't re-fetch deps every time. NARGO_HOME defaults
-      # to /root/.nargo (HOME=/root in the image).
-      - nargo-cache:/root/.nargo
+      # Persist nargo's git-dependency cache so re-bootstraps don't re-clone
+      # aztec-nr. nargo keeps it at $HOME/nargo/github.com/... (no dot --
+      # /root/.nargo only ever held the host installer's bin dir, so the old
+      # mount cached nothing).
+      - nargo-cache:/root/nargo
     entrypoint: ["bash", "./scripts/bootstrap-local-network.sh"]
     restart: "no"
 

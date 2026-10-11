@@ -33,14 +33,16 @@ docker compose --profile aztec up
 
 Open **http://localhost:3000**
 
-Startup sequence (~4 min total):
+Startup sequence (first run ~4 min on 4 cores; re-runs with unchanged
+contracts skip the compile step entirely):
 
 | Step | Time | What happens |
 |------|------|-------------|
-| Anvil (L1) | ~5 s | Local Ethereum chain on port 8545 (mines every 1s by default) |
+| Anvil (L1) | ~5 s | Local Ethereum chain on port 8545 (automine; the node's AutomineSequencer drives L1 time) |
 | Aztec node | ~30 s | Deploys L1 contracts, starts PXE + sequencer on port 8080 |
-| Bootstrap | ~3 min | Compiles 7 Noir contracts, deploys them, wires them together |
-| Frontend | ~10 s | Next.js starts on port 3000 with contract addresses in env |
+| Bootstrap: compile | ~2 min cold | Compiles 9 Noir contracts in parallel (one nargo job per core, `BOOTSTRAP_COMPILE_JOBS`); skipped when sources are unchanged |
+| Bootstrap: deploy | ~1 min | One SDK process (`scripts/local-deploy.ts`) deploys, wires and seeds the 11 contracts (~26 serial transactions) |
+| Frontend | ~60 s | Production `next build`, then serves on port 3000 with contract addresses in env |
 
 ### Simulation mode (no Aztec needed)
 
@@ -71,7 +73,7 @@ Good for UI work and demos.
 ┌───────────────────▼──────────────────────────────────────┐
 │              Aztec Node  (port 8080)                      │
 │  - PXE (Private eXecution Environment)                    │
-│  - Sequencer (block production every ~36 s)               │
+│  - AutomineSequencer (a block per pending tx, no slot wait)│
 │  - P2P + Archive                                          │
 └───────────────────┬──────────────────────────────────────┘
                     │ L1 rollup
@@ -580,16 +582,13 @@ docker compose --profile aztec up frontend
 | `NEXT_PUBLIC_PROTOCOL_TOKEN_ADDRESS` | — | Set by bootstrap |
 | `NEXT_PUBLIC_PROTOCOL_REWARDS_ADDRESS` | — | Set by bootstrap |
 | `NEXT_PUBLIC_ADMIN_ADDRESS` | — | Set by bootstrap |
-| `ANVIL_BLOCK_TIME` | `1` | L1 block time in seconds for local Anvil |
-| `GOVERNANCE_VOTING_WINDOW_BLOCKS` | `300` | Voting window in L1 blocks (set by bootstrap) |
+| `GOVERNANCE_VOTING_WINDOW_BLOCKS` | `12` (compose) | Voting window in L2 blocks (set by bootstrap) |
+| `BOOTSTRAP_COMPILE_JOBS` | number of cores | Parallel nargo compiles during bootstrap (~0.45 GB each) |
 
-Governance timing in local mode is controlled by:
-
-`governance_minutes ~= GOVERNANCE_VOTING_WINDOW_BLOCKS * ANVIL_BLOCK_TIME / 60`
-
-Recommended defaults:
-- `ANVIL_BLOCK_TIME=1`
-- `GOVERNANCE_VOTING_WINDOW_BLOCKS=300` (about 5 minutes)
+The local network produces an L2 block per pending transaction (the v6
+`AutomineSequencer` warps L1 time instead of waiting for slots), so the voting
+window advances with activity, not wall-clock time: `scripts/seed-fsft.sh`
+pushes the chain past a deadline by sending filler transactions.
 
 ---
 
@@ -624,7 +623,7 @@ artifact function names don't have `__aztec_nr_internals__` prefix:
 # Inside bootstrap container:
 docker run --rm --entrypoint bash \
   -v ./contracts:/workspace/contracts \
-  aztecprotocol/aztec:4.3.0 \
+  azteclabs/aztec:6.0.0-rc.3 \
   -c "cat /workspace/contracts/housing_fund/target/housing_fund.json | \
       python3 -c \"import json,sys; a=json.load(sys.stdin); \
       print([f['name'] for f in a['functions'][:10]])\""
@@ -650,7 +649,7 @@ docker compose --profile aztec up
 The package wasn't installed:
 
 ```bash
-cd frontend && npm install @aztec/wallets@4.3.0
+cd frontend && npm install @aztec-labs/wallets@6.0.0-rc.3
 # Then rebuild:
 docker compose --profile aztec build frontend
 ```
@@ -768,13 +767,13 @@ fair-squares-noir/
 
 | Component | Technology | Version |
 |-----------|-----------|---------|
-| Smart contracts | Noir / Aztec.nr | `aztec-packages@v4.3.0` |
-| ZK runtime | Aztec Network (devnet) | `aztecprotocol/aztec:4.3.0` |
+| Smart contracts | Noir / Aztec.nr | `aztec-labs-eng/aztec-nr@v6.0.0-rc.3` |
+| ZK runtime | Aztec Network (devnet) | `azteclabs/aztec:6.0.0-rc.3` |
 | L1 chain | Anvil (Foundry) | bundled in Aztec image |
 | Frontend | Next.js 15, React 19 | — |
 | Styling | Tailwind CSS 4 | — |
 | Language | TypeScript | — |
-| Wallet (browser) | `@aztec/wallets/embedded` (WASM) | `4.3.0` |
+| Wallet (browser) | `@aztec-labs/wallets/embedded` (WASM) | `6.0.0-rc.3` |
 | Identity | zkPassport SDK (dev mode) | `@zkpassport/sdk` |
 
 ---

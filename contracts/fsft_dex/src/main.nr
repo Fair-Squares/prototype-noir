@@ -45,7 +45,7 @@ pub contract FSFTDex {
             functions::{external, initializer, only_self, view},
             storage::storage,
         },
-        messages::message_delivery::MessageDelivery,
+        messages::delivery::MessageDelivery,
         note::{
             constants::MAX_NOTES_PER_PAGE,
             HintedNote,
@@ -278,7 +278,7 @@ pub contract FSFTDex {
         // per-(note, action) progress) before relying on the note being single-use.
         let note = OrderOwnerNote::new(caller, secret_owner_key, supplied_seq);
         self.storage.order_owner_notes.at(caller).insert(note).deliver(
-            MessageDelivery.ONCHAIN_CONSTRAINED,
+            MessageDelivery::onchain_constrained(),
         );
 
         let owner_tag = poseidon2_hash([secret_owner_key, supplied_seq as Field]);

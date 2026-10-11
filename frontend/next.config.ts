@@ -1,12 +1,14 @@
 import type { NextConfig } from "next";
 import path from "path";
 
-// ALL @aztec/* packages must be excluded from the server bundle.
-// They use NAPI binaries, worker_threads, and WASM that crash the Next.js
-// server worker process. The server uses plain-fetch JSON-RPC instead.
-// With AZTEC_LIVE=false, these are never called; with AZTEC_LIVE=true the
-// API route try/catch handles any runtime failure gracefully.
-const AZTEC_SERVER_EXTERNALS_PREFIX = "@aztec/";
+// ALL Aztec packages must be excluded from the server bundle. Aztec v6 publishes
+// them under two npm scopes: @aztec-labs/* (aztec.js, wallets, accounts, ...)
+// and @aztec-foundation/* (bb.js, bb-avm-sim, ...). They use NAPI binaries,
+// worker_threads, and WASM that crash the Next.js server worker process. The
+// server uses plain-fetch JSON-RPC instead. With AZTEC_LIVE=false, these are
+// never called; with AZTEC_LIVE=true the API route try/catch handles any
+// runtime failure gracefully.
+const AZTEC_SERVER_EXTERNALS_PREFIXES = ["@aztec-labs/", "@aztec-foundation/"];
 // zkPassport SDK uses WebSockets + node:crypto — server only
 const ZKPASSPORT_EXTERNALS_PREFIX = "@zkpassport/";
 
@@ -31,7 +33,7 @@ const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
 
   webpack: (config, { isServer }) => {
-    // ── WebAssembly support (required for @aztec/bb.js in browser) ─────────
+    // ── WebAssembly support (required for @aztec-foundation/bb.js in browser) ─────────
     config.experiments = { ...config.experiments, asyncWebAssembly: true };
 
     // ── Node.js polyfills for browser bundles ──────────────────────────────
@@ -45,7 +47,7 @@ const nextConfig: NextConfig = {
       };
     }
 
-    // ── @aztec/wallets/embedded: browser (WASM) build in client bundles ────
+    // ── @aztec-labs/wallets/embedded: browser (WASM) build in client bundles ────
     // The package exports two builds:
     //   "browser" → BrowserEmbeddedWallet (WASM — safe in Next.js client)
     //   "node"    → EmbeddedWallet        (NAPI — DO NOT use server-side)
@@ -53,11 +55,11 @@ const nextConfig: NextConfig = {
     if (!isServer) {
       const browserEntry = path.resolve(
         __dirname,
-        "node_modules/@aztec/wallets/dest/embedded/entrypoints/browser.js"
+        "node_modules/@aztec-labs/wallets/dest/embedded/entrypoints/browser.js"
       );
       config.resolve.alias = {
         ...config.resolve.alias,
-        "@aztec/wallets/embedded": browserEntry,
+        "@aztec-labs/wallets/embedded": browserEntry,
       };
     }
 
@@ -76,7 +78,7 @@ const nextConfig: NextConfig = {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (ctx: any, callback: any) => {
           if (
-            ctx.request?.startsWith(AZTEC_SERVER_EXTERNALS_PREFIX) ||
+            AZTEC_SERVER_EXTERNALS_PREFIXES.some((p) => ctx.request?.startsWith(p)) ||
             ctx.request?.startsWith(ZKPASSPORT_EXTERNALS_PREFIX)
           ) {
             return callback(null, `commonjs ${ctx.request}`);

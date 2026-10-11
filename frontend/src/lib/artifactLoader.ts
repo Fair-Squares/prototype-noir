@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { loadContractArtifact } from "@aztec/aztec.js/abi";
+import type { loadContractArtifact } from "@aztec-labs/aztec.js/abi";
 
 // The deserialized artifact type, derived without a runtime import of aztec.js
 // (this binding is type-only and erased at build).
@@ -58,7 +58,7 @@ export async function loadArtifact(filename: string): Promise<ContractArtifact> 
   const cached = artifactCache.get(filename);
   if (cached !== undefined) return cached;
 
-  const { loadContractArtifact: deserialize } = await import("@aztec/aztec.js/abi");
+  const { loadContractArtifact: deserialize } = await import("@aztec-labs/aztec.js/abi");
   const json = await loadGeneratedArtifactJson(filename);
   const artifact = deserialize(json as Parameters<typeof deserialize>[0]);
   artifactCache.set(filename, artifact);

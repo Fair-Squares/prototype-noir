@@ -5,3 +5,18 @@ MODIFIED: aztec/uint-note/balance-set/compressed-string deps repointed from
 AztecProtocol/aztec-packages (noir-projects/aztec-nr/*) to AztecProtocol/aztec-nr
 (v4.3.0, identical source) so cross-contract calls unify with the host project
 (housing_fund etc.) which use aztec-nr.
+
+MIGRATED TO AZTEC v6 (6.0.0-rc.3) in place, mirroring upstream
+AztecProtocol/aztec-standards PR #41 ("chore!: bump Aztec to 6.0.0-rc.1")
+without taking its ARC-403 authorization-hook rewrite of the token (which adds an
+`auth_contract` constructor argument and would change the deploy surface):
+  - all Nargo.toml deps -> aztec-labs-eng/aztec-nr v6.0.0-rc.3 (bare crate dirs);
+    escrow's `serde` -> aztec-packages v6.0.0-rc.6 noir-projects/fnd/... path.
+  - `messages::message_delivery::MessageDelivery` -> `messages::delivery::MessageDelivery`,
+    `MessageDelivery.ONCHAIN_*` -> `MessageDelivery::onchain_*()` constructors.
+  - `context.push_nullifier(..)` -> `push_nullifier_unsafe(..)`.
+  - nft_contract/src/types/nft_note.nr replaced by the upstream v6 file (partial
+    note domain separators moved to `aztec::note::partial_note`, note hash via
+    `compute_note_hash`, `npk_m_hash` getters).
+Constructors (`constructor_with_minter(name, symbol, decimals, minter)`) are
+unchanged from the vendored 4.3.0 shape.

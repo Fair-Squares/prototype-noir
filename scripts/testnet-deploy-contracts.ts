@@ -39,14 +39,15 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { createAztecNodeClient } from "@aztec/aztec.js/node";
-import { AztecAddress } from "@aztec/aztec.js/addresses";
-import { Contract, ContractDeployer, getContractInstanceFromInstantiationParams } from "@aztec/aztec.js/contracts";
-import { loadContractArtifact } from "@aztec/aztec.js/abi";
-import { SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee";
-import { Fr } from "@aztec/foundation/curves/bn254";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
-import { SponsoredFPCContract } from "@aztec/noir-contracts.js/SponsoredFPC";
+import { createAztecNodeClient } from "@aztec-labs/aztec.js/node";
+import { AztecAddress } from "@aztec-labs/aztec.js/addresses";
+import { Contract, getContractInstanceFromInstantiationParams } from "@aztec-labs/aztec.js/contracts";
+import { ContractDeployer } from "@aztec-labs/aztec.js/deployment";
+import { loadContractArtifact } from "@aztec-labs/aztec.js/abi";
+import { SponsoredFeePaymentMethod } from "@aztec-labs/aztec.js/fee";
+import { Fq, Fr } from "@aztec-labs/foundation/curves/bn254";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
+import { SponsoredFPCContract } from "@aztec-labs/noir-contracts.js/SponsoredFPC";
 
 const DEFAULT_TESTNET_PXE = "https://rpc.testnet.aztec-labs.com";
 const ROOT = path.resolve(__dirname, "..");
@@ -71,11 +72,18 @@ function loadAccount() {
       `Account file ${p} not found. Run scripts/testnet-deploy-account.ts first.`,
     );
   }
-  return JSON.parse(fs.readFileSync(p, "utf8")) as {
+  const parsed = JSON.parse(fs.readFileSync(p, "utf8")) as {
     secret: string;
     salt: string;
+    signingKey?: string;
     address: string;
   };
+  if (!parsed.signingKey) {
+    throw new Error(
+      `${p} has no signingKey (pre-Aztec-5 format). Delete it and re-run scripts/testnet-deploy-account.ts.`,
+    );
+  }
+  return parsed as typeof parsed & { signingKey: string };
 }
 
 function loadArtifact(crate: string, name: string) {
@@ -139,6 +147,7 @@ async function main() {
   const accountManager = await wallet.createSchnorrAccount(
     Fr.fromString(persisted.secret),
     Fr.fromString(persisted.salt),
+    Fq.fromString(persisted.signingKey),
   );
   const deployer = accountManager.address;
   log(`deployer = ${deployer.toString()}`);
@@ -177,13 +186,11 @@ async function main() {
   ): Promise<AztecAddress> {
     log(`deploying ${label}...`);
     const ctorDeployer = new ContractDeployer(artifacts[artKey], wallet, constructorName);
-    const sent = await ctorDeployer
+    // send() waits for mining by default and returns the deployed contract.
+    const { contract } = await ctorDeployer
       .deploy(args)
-      .send({ from: deployer, fee: { paymentMethod } } as never);
-    const receipt = await (sent as {
-      wait: () => Promise<{ contract: { address: AztecAddress } }>;
-    }).wait();
-    const addr = receipt.contract.address;
+      .send({ from: deployer, fee: { paymentMethod } });
+    const addr = contract.address;
     log(`  ${label} -> ${addr.toString()}`);
     return addr;
   }

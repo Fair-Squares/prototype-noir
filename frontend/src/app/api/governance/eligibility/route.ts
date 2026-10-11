@@ -34,13 +34,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
-    const actorAddress = AztecAddress.fromString(actor.address);
-    const userAddress = AztecAddress.fromString(address);
+    const actorAddress = AztecAddress.fromStringUnsafe(actor.address);
+    const userAddress = AztecAddress.fromStringUnsafe(address);
 
     const [kycJson, hfJson, ftJson] = await Promise.all([
       loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json"),
@@ -50,17 +50,17 @@ export async function GET(request: NextRequest) {
 
     const [kycContract, hfContract, ftContract] = await Promise.all([
       Contract.at(
-        AztecAddress.fromString(kycAddr),
+        AztecAddress.fromStringUnsafe(kycAddr),
         loadContractArtifact(kycJson as Parameters<typeof loadContractArtifact>[0]),
         actor.wallet
       ),
       Contract.at(
-        AztecAddress.fromString(housingFundAddr),
+        AztecAddress.fromStringUnsafe(housingFundAddr),
         loadContractArtifact(hfJson as Parameters<typeof loadContractArtifact>[0]),
         actor.wallet
       ),
       Contract.at(
-        AztecAddress.fromString(fundTokenAddr),
+        AztecAddress.fromStringUnsafe(fundTokenAddr),
         loadContractArtifact(ftJson as Parameters<typeof loadContractArtifact>[0]),
         actor.wallet
       ),
@@ -147,9 +147,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
     }
 
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     // AIP-20 migration: FSFT no longer exposes attest_private_holder(). Voting
@@ -157,10 +157,10 @@ export async function POST(request: NextRequest) {
     // (balance_of_public > 0); there is no attestation tx to send.
     const FtArtifactJson = await loadGeneratedArtifactJson("token_contract-Token.json");
     const ftArtifact = loadContractArtifact(FtArtifactJson as Parameters<typeof loadContractArtifact>[0]);
-    const ftContract = await Contract.at(AztecAddress.fromString(fundTokenAddr), ftArtifact, actor.wallet);
+    const ftContract = await Contract.at(AztecAddress.fromStringUnsafe(fundTokenAddr), ftArtifact, actor.wallet);
 
-    const actorAddress = AztecAddress.fromString(actor.address);
-    const userAddress = AztecAddress.fromString(address);
+    const actorAddress = AztecAddress.fromStringUnsafe(actor.address);
+    const userAddress = AztecAddress.fromStringUnsafe(address);
     const balance = Number(
       simResult(await ftContract.methods.balance_of_public(userAddress).simulate({ from: actorAddress }))
     );

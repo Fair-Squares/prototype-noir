@@ -26,7 +26,22 @@ ACCOUNT_INDEX="${ACCOUNT_INDEX:-0}"
 
 log() { printf '\n[record-rent] %s\n' "$1" >&2; }
 die() { printf '\n[record-rent] FATAL: %s\n' "$1" >&2; exit 1; }
-jget() { python3 -c "import sys,json; d=json.load(sys.stdin); print(eval('d'+sys.argv[1]))" "$1"; }
+# JSON field extractor (node is always present: on the host and in the Aztec
+# release image, which is a minimal ubuntu:noble WITHOUT python3). Accepts the
+# python-style bracket path used below, e.g. "['proposals'][-1]['id']".
+jget() {
+  node -e '
+    const path = process.argv[1];
+    let d = JSON.parse(require("fs").readFileSync(0, "utf8"));
+    for (const m of path.matchAll(/\[([^\]]+)\]/g)) {
+      let k = m[1].trim();
+      if (/^-?\d+$/.test(k)) { let i = parseInt(k, 10); if (i < 0) i = d.length + i; d = d[i]; }
+      else { d = d[k.replace(/^[\x27"]|[\x27"]$/g, "")]; }
+      if (d === undefined) { console.error("jget: missing " + path); process.exit(1); }
+    }
+    console.log(typeof d === "object" ? JSON.stringify(d) : String(d));
+  ' "$1"
+}
 
 # Resolve the admin/keeper address for the chosen account index.
 ACCOUNTS_JSON=$(curl -sS "${FRONTEND_URL}/api/accounts") || die "GET /api/accounts failed"
@@ -45,5 +60,5 @@ printf '%s\n' "$BODY" >&2
 
 # Report the resulting on-chain rent total + NAV.
 STATS=$(curl -sS "${FRONTEND_URL}/api/fund/stats") || die "GET /api/fund/stats failed"
-printf '%s' "$STATS" | python3 -c "import sys,json; d=json.load(sys.stdin); print('[record-rent] total rent income =', d.get('totalRentIncome'), '| NAV =', d.get('navEur'))" >&2
+printf '%s' "$STATS" | node -e 'const d = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log("[record-rent] total rent income =", d.totalRentIncome, "| NAV =", d.navEur);' >&2
 log "Done."

@@ -34,9 +34,9 @@ export async function POST(request: NextRequest) {
     }
 
     const { getTestAccount } = await import("@/lib/serverWallet");
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     const actor = await getTestAccount(accountIndex);
@@ -44,12 +44,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
     }
 
-    const actorAddress = AztecAddress.fromString(actor.address);
-    const userAddress = AztecAddress.fromString(address);
+    const actorAddress = AztecAddress.fromStringUnsafe(actor.address);
+    const userAddress = AztecAddress.fromStringUnsafe(address);
 
     const RewardsJson = await loadGeneratedArtifactJson("protocol_rewards-ProtocolRewards.json");
     const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
-    const rewardsContract = await Contract.at(AztecAddress.fromString(rewardsAddr), rewardsArtifact, actor.wallet);
+    const rewardsContract = await Contract.at(AztecAddress.fromStringUnsafe(rewardsAddr), rewardsArtifact, actor.wallet);
 
     // V2: fetch caller's RewardClaimNote hint from PXE. claim_reward_private
     // consumes the note via SingleUseClaim and privately mints the
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     const claimedAmount = Number(hintedRewardNote.note.amount);
 
     const receipt = await rewardsContract.methods
-      .claim_reward_private(hintedRewardNote, AztecAddress.fromString(protocolTokenAddr))
+      .claim_reward_private(hintedRewardNote, AztecAddress.fromStringUnsafe(protocolTokenAddr))
       .send({ from: actorAddress });
     // A mined claim can still revert in the public tail (pool ledger,
     // duplicate nullifier) — mirror the thrown-path mapping below.

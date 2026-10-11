@@ -30,9 +30,9 @@ export async function POST(request: NextRequest) {
   // ── Live mode: claim_rent_private (pays EUR from the fund) ─────────────────
   try {
     const { getTestAccount } = await import("@/lib/serverWallet");
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     const housingFundAddr = process.env.NEXT_PUBLIC_HOUSING_FUND_ADDRESS ?? "";
@@ -51,8 +51,8 @@ export async function POST(request: NextRequest) {
 
     const HfArtifactJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
     const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
-    const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, actor.wallet);
-    const actorAddress = AztecAddress.fromString(actor.address);
+    const hfContract = await Contract.at(AztecAddress.fromStringUnsafe(housingFundAddr), hfArtifact, actor.wallet);
+    const actorAddress = AztecAddress.fromStringUnsafe(actor.address);
 
     const epoch = Number(rentEpochId);
     const status = simResult<{
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
     // not just the first note's share. Each call nullifies its own (note, epoch),
     // so already-withdrawn notes revert with a duplicate nullifier and notes with
     // no share revert "share is zero" — both are skipped; any other error surfaces.
-    const eur = AztecAddress.fromString(eurTokenAddr);
+    const eur = AztecAddress.fromStringUnsafe(eurTokenAddr);
     const smallPool = BigInt(status.small_pool);
     const smallTotal = BigInt(status.small_total);
     const fifoCap = BigInt(status.fifo_cap);

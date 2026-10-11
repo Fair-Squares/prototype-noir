@@ -1,12 +1,12 @@
 /**
  * serverWallet.ts — Server-side Aztec wallet singleton.
  *
- * Uses the Node.js flavor of @aztec/wallets/embedded (in-process PXE),
+ * Uses the Node.js flavor of @aztec-labs/wallets/embedded (in-process PXE),
  * which is resolved via package.json "exports" conditions when imported
  * in a Next.js API route (server environment).
  *
  * The browser flavor (web worker) is NEVER imported here — this file
- * is server-only. Next.config marks all @aztec/* as webpack externals so
+ * is server-only. Next.config marks all @aztec-labs/* as webpack externals so
  * they're never bundled into browser chunks.
  *
  * Initialization:
@@ -38,10 +38,10 @@
  *   import { getTestAccount } from '@/lib/serverWallet';
  *   const { wallet, address } = await getTestAccount(0); // test0 = admin
  *   const contract = await HousingFundContract.at(addr, wallet);
- *   await contract.methods.deposit(amount).send({ from: AztecAddress.fromString(address) });
+ *   await contract.methods.deposit(amount).send({ from: AztecAddress.fromStringUnsafe(address) });
  */
 
-import type { Wallet } from "@aztec/aztec.js/wallet";
+import type { Wallet } from "@aztec-labs/aztec.js/wallet";
 import { resolveServerPxeUrl } from "@/lib/pxeUrl";
 
 const AZTEC_NODE_URL = resolveServerPxeUrl();
@@ -83,10 +83,21 @@ interface SchnorrAccountManager {
 }
 
 interface WalletWithSchnorrAccounts extends Wallet {
+  // Aztec >= 5: the signing key is the account root (no longer derived from
+  // the privacy secret), so it is a required argument.
   createSchnorrAccount: (
     secret: unknown,
     salt: unknown,
-    signingKey?: unknown,
+    signingKey: unknown,
+    alias?: string
+  ) => Promise<SchnorrAccountManager>;
+  // v6: the local-network test accounts are INITIALIZERLESS Schnorr accounts
+  // (funded at genesis, never deployed). Only this constructor derives their
+  // funded addresses; createSchnorrAccount yields a different, unfunded one.
+  createSchnorrInitializerlessAccount: (
+    secret: unknown,
+    salt: unknown,
+    signingKey: unknown,
     alias?: string
   ) => Promise<SchnorrAccountManager>;
 }
@@ -99,8 +110,8 @@ let initPromise: Promise<WalletSingleton> | null = null;
 
 async function initWallet(): Promise<WalletSingleton> {
   // Dynamic imports — server only, webpack externals prevent bundling
-  const { EmbeddedWallet } = await import("@aztec/wallets/embedded");
-  const { getInitialTestAccountsData } = await import("@aztec/accounts/testing");
+  const { EmbeddedWallet } = await import("@aztec-labs/wallets/embedded");
+  const { getInitialTestAccountsData } = await import("@aztec-labs/accounts/testing");
   const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
   // 1. Create in-process PXE → Aztec node
@@ -126,8 +137,22 @@ async function initWallet(): Promise<WalletSingleton> {
   (baseWallet as unknown as { setMinFeePadding: (v: number) => void }).setMinFeePadding(feePadding);
   console.log(`[serverWallet] minFeePadding set to ${feePadding}`);
 
-  // 2. Register local-network test accounts in the wallet/PXE.
-  // AccountManager.register() was removed; use createSchnorrAccount instead.
+  // Tx wait cadence. On Aztec v6 `.send({ from })` resolves as soon as the tx is
+  // PROPOSED (in a sequenced L2 block, before the L1 checkpoint), and the PXE
+  // anchors reads on the proposed tip, so a route's follow-up read already sees
+  // the new state. The wallet polls the receipt every `interval` seconds and
+  // skips the first poll by that same interval; the SDK default is 1 s, which
+  // leaves up to ~2 s of pure idle time per tx on a local network whose
+  // AutomineSequencer proposes within a few hundred ms. Use the 0.25 s cadence
+  // the upstream in-process TestWallet uses. BaseWallet keeps the field
+  // protected (only TestWallet exposes a setter), hence the cast.
+  const waitInterval = Number(process.env.WALLET_WAIT_INTERVAL_SECONDS ?? "0.25");
+  (baseWallet as unknown as { defaultWaitInterval?: number }).defaultWaitInterval = waitInterval;
+  console.log(`[serverWallet] tx wait poll interval set to ${waitInterval}s (resolves at PROPOSED)`);
+
+  // 2. Register local-network test accounts in the wallet/PXE. They are
+  // initializerless Schnorr accounts on v6 (see the interface note above);
+  // the bootstrap's local-deploy.ts and the e2e harness derive them the same way.
   console.log("[serverWallet] Loading deterministic test account data...");
   const testAccounts = await getInitialTestAccountsData();
   console.log(`[serverWallet] Got ${testAccounts.length} test accounts.`);
@@ -135,7 +160,7 @@ async function initWallet(): Promise<WalletSingleton> {
   const accounts: AccountEntry[] = [];
   const walletWithAccounts = baseWallet as WalletWithSchnorrAccounts;
   for (const [i, account] of testAccounts.entries()) {
-    const created = await walletWithAccounts.createSchnorrAccount(
+    const created = await walletWithAccounts.createSchnorrInitializerlessAccount(
       account.secret,
       account.salt,
       account.signingKey
@@ -148,9 +173,9 @@ async function initWallet(): Promise<WalletSingleton> {
   // 3. Register deployed app contracts in PXE so utility/public calls can run
   // without "Unknown contract ... add it to PXE".
   try {
-    const { createAztecNodeClient } = await import("@aztec/aztec.js/node");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { createAztecNodeClient } = await import("@aztec-labs/aztec.js/node");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const node = createAztecNodeClient(AZTEC_NODE_URL);
 
     const registerIfPresent = async (
@@ -160,7 +185,7 @@ async function initWallet(): Promise<WalletSingleton> {
     ) => {
       if (!envAddress) return;
       try {
-        const address = AztecAddress.fromString(envAddress);
+        const address = AztecAddress.fromStringUnsafe(envAddress);
         const instance = await node.getContract(address);
         if (!instance) {
           console.warn(`[serverWallet] ${label} not found on node: ${envAddress}`);
@@ -249,15 +274,17 @@ async function initWallet(): Promise<WalletSingleton> {
   };
 
   try {
-    const { SponsoredFeePaymentMethod } = await import("@aztec/aztec.js/fee");
-    const { getContractInstanceFromInstantiationParams } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { Fr } = await import("@aztec/aztec.js/fields");
-    const { AccountFeePaymentMethodOptions } = await import("@aztec/entrypoints/account");
-    const { NO_FROM } = await import("@aztec/aztec.js/account");
+    const { SponsoredFeePaymentMethod } = await import("@aztec-labs/aztec.js/fee");
+    const { getContractInstanceFromInstantiationParams } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { Fr } = await import("@aztec-labs/aztec.js/fields");
+    const { Fq } = await import("@aztec-labs/foundation/curves/bn254");
+    const { AccountFeePaymentMethodOptions } = await import("@aztec-labs/entrypoints/account");
+    const { NO_FROM } = await import("@aztec-labs/aztec.js/account");
 
-    // @aztec/noir-contracts.js isn't a frontend dependency, so we vendor just the
-    // SponsoredFPC artifact (v4.3.0). The canonical instance derives from it at
+    // @aztec-labs/noir-contracts.js isn't a frontend dependency, so we vendor just the
+    // SponsoredFPC artifact (copied from @aztec-labs/noir-contracts.js 6.0.0-rc.3;
+    // refresh it on every toolchain bump). The canonical instance derives from it at
     // salt=0 — the same deterministic address the local-network deploys.
     const sponsoredFpcJson = (await import("./sponsoredFpcArtifact.json")).default;
     const sponsoredArtifact = loadContractArtifact(
@@ -318,7 +345,8 @@ async function initWallet(): Promise<WalletSingleton> {
       }
       const secret = Fr.random();
       const salt = Fr.random();
-      const manager = await walletWithSchnorr.createSchnorrAccount(secret, salt);
+      const signingKey = Fq.random();
+      const manager = await walletWithSchnorr.createSchnorrAccount(secret, salt, signingKey);
       const address = manager.address.toString();
       // Mark generated BEFORE any send so the deploy + every later tx is sponsored.
       generatedAddresses.add(address.toLowerCase());

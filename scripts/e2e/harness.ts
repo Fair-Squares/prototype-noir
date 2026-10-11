@@ -8,7 +8,7 @@
  * covers the equivalent shape (claim_contract / crowdfunding) only via a TS
  * aztec.js e2e. See docs/PHASE2_COVENANT_RECONCILIATION_HARDENING.md (W3a).
  *
- * The connection recipe mirrors the already-proven scripts/seed-v2-deposit.ts:
+ * The connection recipe mirrors scripts/local-deploy.ts (the bootstrap deployer):
  * an in-process EmbeddedWallet over a node client, the three canonical Schnorr
  * test accounts, and node.getContract + registerContract before any
  * simulate/send (EmbeddedWallet's PXE doesn't know CLI-deployed contracts).
@@ -20,12 +20,12 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { AztecAddress } from "@aztec/aztec.js/addresses";
-import { createAztecNodeClient, type AztecNode } from "@aztec/aztec.js/node";
-import { loadContractArtifact } from "@aztec/aztec.js/abi";
-import { Contract } from "@aztec/aztec.js/contracts";
-import { getInitialTestAccountsData } from "@aztec/accounts/testing";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
+import { AztecAddress } from "@aztec-labs/aztec.js/addresses";
+import { createAztecNodeClient, type AztecNode } from "@aztec-labs/aztec.js/node";
+import { loadContractArtifact } from "@aztec-labs/aztec.js/abi";
+import { Contract } from "@aztec-labs/aztec.js/contracts";
+import { getInitialTestAccountsData } from "@aztec-labs/accounts/testing";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
 
 export const NODE_URL =
   process.env.AZTEC_NODE_URL ?? process.env.PXE_URL ?? "http://localhost:8080";
@@ -79,14 +79,20 @@ export async function connect(): Promise<Harness> {
   // Match bootstrap / serverWallet WALLET_MIN_FEE_PADDING -- local fee spikes
   // otherwise trip maxFeesPerGas >= gasFees and revert sends.
   (wallet as unknown as { setMinFeePadding?: (n: number) => void }).setMinFeePadding?.(30);
+  // Match serverWallet: poll receipts every 0.25 s instead of the SDK's 1 s
+  // (v6 resolves sends at PROPOSED; the local AutomineSequencer proposes within
+  // a few hundred ms, so the default cadence is mostly idle time per tx).
+  (wallet as unknown as { defaultWaitInterval?: number }).defaultWaitInterval = 0.25;
 
   const data = await getInitialTestAccountsData();
   const addresses: AztecAddress[] = [];
   for (const a of data) {
     // CRITICAL: pass signingKey (3rd arg) so the derived address matches the
     // bootstrap-seeded test account (KYC'd, funded). Omitting it derives a
-    // DIFFERENT address with no credential/EUR (seed-v2-deposit.ts:75-79).
-    const acct = await wallet.createSchnorrAccount(a.secret, a.salt, a.signingKey);
+    // DIFFERENT address with no credential/EUR.
+    // v6 test accounts are initializerless (genesis-funded, never deployed);
+    // createSchnorrAccount would derive an unfunded address.
+    const acct = await wallet.createSchnorrInitializerlessAccount(a.secret, a.salt, a.signingKey);
     addresses.push(acct.address);
   }
   // NOTE on cross-PXE note discovery: a fresh ephemeral PXE rediscovers the KYC
@@ -106,7 +112,7 @@ export async function loadContract(
   address: string,
   artifactName: string,
 ): Promise<Contract> {
-  const addr = AztecAddress.fromString(address);
+  const addr = AztecAddress.fromStringUnsafe(address);
   const instance = await h.node.getContract(addr);
   if (!instance) throw new Error(`${artifactName} ${address} not deployed on node ${NODE_URL}`);
   const artifact = loadContractArtifact(loadRawArtifact(artifactName));
@@ -116,7 +122,7 @@ export async function loadContract(
 
 /** Tolerant unwrap of a 4.3.0 simulate() result: returns `result` when the
  *  call resolves to a `{ result, offchainEffects, offchainMessages }` wrapper
- *  (aztecSim.ts), else the value directly (seed-v2-deposit.ts). */
+ *  (aztecSim.ts), else the value directly. */
 export function simValue<T = unknown>(sim: unknown): T {
   if (sim && typeof sim === "object" && "result" in (sim as Record<string, unknown>)) {
     return (sim as { result: T }).result;
@@ -145,7 +151,7 @@ export function txReverted(receipt: unknown): { reverted: boolean; error: string
 }
 
 // A ContractFunctionInteraction -- loosely typed (tsx strips types; the real
-// shape is from @aztec/aztec.js). Just needs `.send({ from })`.
+// shape is from @aztec-labs/aztec.js). Just needs `.send({ from })`.
 type Interaction = { send: (opts: { from: AztecAddress }) => Promise<unknown> };
 
 /** Send a tx that MUST succeed: throws on a pre-mining throw OR a post-mining
@@ -184,7 +190,7 @@ export async function sendExpectFail(
 // These wrap the recurring "read a hint / mint a note in-process / run the
 // admin setup / assert allocation math" steps that the 6 flows share. They are
 // loosely typed on purpose (tsx strips types; the real Contract/Interaction
-// shapes come from @aztec/aztec.js) and each asserts its own preconditions
+// shapes come from @aztec-labs/aztec.js) and each asserts its own preconditions
 // rather than masking a missing note with a fallback (CLAUDE.md error rules).
 //
 // Note on artifact naming (loadContract 2nd arg), so callers stay consistent:
@@ -444,7 +450,7 @@ export async function openRentEpoch(
     );
   }
   await sendOk(
-    hf.methods.set_eur_token(AztecAddress.fromString(args.eurAddr)),
+    hf.methods.set_eur_token(AztecAddress.fromStringUnsafe(args.eurAddr)),
     admin,
     "set_eur_token",
   );

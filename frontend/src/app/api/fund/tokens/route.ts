@@ -76,41 +76,41 @@ export async function GET(request: NextRequest) {
       (async () => {
         if (!address || !eurTokenAddr) return 0;
         const { getTestAccount } = await import("@/lib/serverWallet");
-        const { Contract } = await import("@aztec/aztec.js/contracts");
-        const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-        const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+        const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+        const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+        const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
         const admin = await getTestAccount(0);
         const w = admin.wallet;
         // EUR is an AIP-20 token (vendored standards): balance_of_public.
         const EurJson = await loadGeneratedArtifactJson("token_contract-Token.json");
         const eurC = await Contract.at(
-          AztecAddress.fromString(eurTokenAddr),
+          AztecAddress.fromStringUnsafe(eurTokenAddr),
           loadContractArtifact(EurJson as Parameters<typeof loadContractArtifact>[0]),
           w
         );
         return Number(
-          simResult(await eurC.methods.balance_of_public(AztecAddress.fromString(address)).simulate({
-            from: AztecAddress.fromString(admin.address),
+          simResult(await eurC.methods.balance_of_public(AztecAddress.fromStringUnsafe(address)).simulate({
+            from: AztecAddress.fromStringUnsafe(admin.address),
           }))
         );
       })(),
       (async () => {
         if (!address || !fundTokenAddr) return 0;
         const { getTestAccount } = await import("@/lib/serverWallet");
-        const { Contract } = await import("@aztec/aztec.js/contracts");
-        const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-        const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+        const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+        const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+        const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
         const admin = await getTestAccount(0);
         const w = admin.wallet;
         const FtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
         const ftC = await Contract.at(
-          AztecAddress.fromString(fundTokenAddr),
+          AztecAddress.fromStringUnsafe(fundTokenAddr),
           loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]),
           w
         );
         return Number(
-          simResult(await ftC.methods.balance_of_public(AztecAddress.fromString(address)).simulate({
-            from: AztecAddress.fromString(admin.address),
+          simResult(await ftC.methods.balance_of_public(AztecAddress.fromStringUnsafe(address)).simulate({
+            from: AztecAddress.fromStringUnsafe(admin.address),
           }))
         );
       })(),
@@ -188,9 +188,9 @@ export async function POST(request: NextRequest) {
     }
 
     const { getTestAccount } = await import("@/lib/serverWallet");
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     // The faucet credits the CALLER, so the selected account must match `address`.
@@ -198,15 +198,15 @@ export async function POST(request: NextRequest) {
     if (address.toLowerCase() !== actor.address.toLowerCase()) {
       return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
     }
-    const actorAddress = AztecAddress.fromString(actor.address);
+    const actorAddress = AztecAddress.fromStringUnsafe(actor.address);
 
     const DripperJson = await loadGeneratedArtifactJson("dripper-Dripper.json");
     const dripperArtifact = loadContractArtifact(DripperJson as Parameters<typeof loadContractArtifact>[0]);
-    const dripper = await Contract.at(AztecAddress.fromString(dripperAddr), dripperArtifact, actor.wallet);
+    const dripper = await Contract.at(AztecAddress.fromStringUnsafe(dripperAddr), dripperArtifact, actor.wallet);
 
     // drip_to_public(token_address: AztecAddress, amount: u64)
     const receipt = await dripper.methods
-      .drip_to_public(AztecAddress.fromString(eurTokenAddr), BigInt(Number(amount)))
+      .drip_to_public(AztecAddress.fromStringUnsafe(eurTokenAddr), BigInt(Number(amount)))
       .send({ from: actorAddress });
     // A mined drip can still revert (e.g. faucet cap) — inspect the receipt.
     const outcome = getAztecTxOutcome(receipt);

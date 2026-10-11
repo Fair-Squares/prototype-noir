@@ -4,7 +4,13 @@ This file is the canonical agent guide for this repo. [AGENTS.md](./AGENTS.md) i
 
 ## Critical: Use the host `aztec` CLI, not `nargo` directly
 
-This is an Aztec smart contract project. The host CLI is installed at
+This is an Aztec smart contract project on **Aztec v6** (`6.0.0-rc.3`: aztec-nr
+from `aztec-labs-eng/aztec-nr`, npm packages under the `@aztec-labs/*` scope,
+node image `azteclabs/aztec`). The single version pin is **`.aztec-version`**
+(read by `scripts/ci/install-aztec.sh`, the docker test path and CI); keep it in
+step with the `tag = "v…"` in every `contracts/**/Nargo.toml`, the
+`x-aztec-image` in `docker-compose.yml` and the `@aztec-labs/*` pins in
+`frontend/package.json` + `scripts/package.json`. The host CLI is installed at
 `$HOME/.aztec/current/bin` (added to PATH via `.bashrc`). Always use the
 `aztec` wrapper instead of calling `nargo` directly:
 
@@ -17,14 +23,34 @@ This is an Aztec smart contract project. The host CLI is installed at
 - **Other nargo commands** like `aztec-nargo fmt` and `aztec-nargo doc`
   are fine to use directly.
 
-Install / reinstall:
+Install / reinstall (needs Node >= 24.12):
 
 ```bash
-VERSION=4.3.0 bash -i <(curl -sL https://install.aztec.network/4.3.0)
+./scripts/ci/install-aztec.sh            # installs the version in .aztec-version
+export PATH="$HOME/.aztec/current/bin:$PATH"
 ```
 
-Confirms with `aztec --version` -> `4.3.0`, `aztec-nargo --version` ->
-`1.0.0-beta.21`, `aztec-wallet --version` -> `4.3.0`.
+Confirms with `aztec --version` -> `6.0.0-rc.3`, `aztec-nargo --version` ->
+`1.0.0-rc.3`. Do NOT use the bare `bash -i <(curl -sL https://install.aztec.network/<v>)`
+one-liner in CI: the frozen per-version installer bundles foundry through the
+moving foundryup bootstrap, which now emits symlinked binaries and aborts the
+whole install with "expected bundled binary 'forge' missing" (that is what broke
+CI for months). `install-aztec.sh` runs the same upstream installer with the
+foundry step made best-effort -- compile + TXE never need forge/anvil.
+
+### Noir 1.0 type-complexity cap (why storage is packed into structs)
+
+The v6 `#[aztec]` macro builds one generic self type over the whole `Storage`
+struct and Noir 1.0 caps that type at `MAX_TYPE_COMPLEXITY = 100k` nodes in
+every PRIVATE function ("Type is too complex"). Each `PublicMutable` field costs
+~2 `PrivateContext` expansions and each `Map` ~4, so a contract gets roughly
+**75 units** of storage. HousingFund / Governance / ProtocolRewards therefore
+keep related scalars in `#[derive(Packable, Eq)]` structs (`FundLinks`,
+`FundTotals`, `EpochSnapshot`, `Proposal`, `Listing`, `Epoch`, ...) stored as ONE
+`PublicMutable` / one `Map` value each, read-modify-written as a unit. When you
+add storage, extend an existing group rather than adding a new top-level field
+(each new `Map` costs 4 units; HousingFund sits at ~54). The external ABI is
+unaffected by grouping.
 
 ### Iteration timings (host CLI, warm cache)
 
@@ -44,6 +70,70 @@ where the host CLI cannot be installed (e.g. CI without internet
 access during the install step). Run with `FS_AZTEC_TEST_DOCKER=1
 ./scripts/aztec-test.sh`. The named `aztec-nargo-cache` docker volume
 still persists git deps across runs for that path.
+
+### Local stack timing on v6 (docker compose, `--profile aztec`)
+
+- The v6 local network runs the deterministic **`AutomineSequencer`** (the
+  pre-v6 `AnvilTestWatcher` is gone). It forces anvil into automine itself,
+  polls the mempool every 50 ms, builds a single-block checkpoint as soon as a
+  tx is pending, warps L1 time to the next slot with cheat codes, publishes to
+  L1 in the same step and settles epochs synthetically. There is no wall-clock
+  slot wait, so `docker-compose.yml` only needs a bare `anvil` (no
+  `--block-time`) plus `P2P_MIN_TX_POOL_AGE_MS=0` (the automine build only picks
+  txs older than the p2p min pool age). `SEQ_TX_POLLING_INTERVAL_MS` and
+  `SEQ_ATTESTATION_PROPAGATION_TIME` no longer exist / do nothing on v6.
+- **Tx statuses** are now `pending -> proposed -> checkpointed -> proven ->
+  finalized`. `EmbeddedWallet.send({ from })` resolves at **PROPOSED** (in a
+  sequenced L2 block, before the L1 checkpoint) and the PXE anchors reads on the
+  proposed tip, so a route's follow-up read sees the new state. The receipt
+  `status` field in API responses therefore reads `"proposed"`, not `"mined"`.
+- The wallet polls for the receipt every `interval` seconds (SDK default 1 s,
+  first poll skipped by one interval). `serverWallet.ts` and the e2e harness set
+  it to **0.25 s** (`WALLET_WAIT_INTERVAL_SECONDS` overrides it) -- the same
+  cadence upstream uses for in-process nodes.
+- **Deploy stage = one SDK process.** `scripts/local-deploy.ts` (run by the
+  bootstrap on the image's Node with the image's own `@aztec-labs/*` packages
+  symlinked in, so no tsx and no npm install) deploys the 11 instances in
+  minter order, wires the links, registers + credentials KYC for test0/1/2,
+  drips EUR and records test0's 500 000 EUR private seed deposit: ~60 s,
+  versus ~26 separate `aztec-wallet` processes before. Every tx is awaited to
+  `checkpointed` (`BOOTSTRAP_WAIT_FOR_STATUS`) because the steps are strictly
+  serial, mirroring upstream's own local-network setup. `npm run deploy` in
+  `scripts/` runs it standalone against a host network.
+- **Local-network test accounts are INITIALIZERLESS on v6.** test0/1/2 are
+  genesis-funded, never-deployed Schnorr accounts; only
+  `createSchnorrInitializerlessAccount(secret, salt, signingKey)` derives their
+  funded addresses. `createSchnorrAccount` yields a different, unfunded address
+  and every send fails with "Not enough balance for fee payer". `serverWallet.ts`,
+  `local-deploy.ts` and `scripts/e2e/harness.ts` all use the initializerless
+  constructor; generated dev accounts and testnet accounts stay regular
+  (deployed, sponsored) Schnorr accounts.
+- **Validated live on v6:** the full bootstrap (compile skip, codegen, deploy,
+  env files, 78 s) and all six `scripts/e2e` private flows pass against a
+  6.0.0-rc.3 `aztec start --local-network` (anvil + node + PXE) on a plain
+  host, using the exact compose env. Only the docker packaging itself has not
+  been exercised. Note `AZTEC_EXIT_DELAY_SECONDS=0` is rejected by the v6 L1
+  deploy ("exitDelaySeconds is zero") and kills the node; it was removed from
+  the compose file.
+- **Compile stage.** nargo is single-threaded (~45 s and ~0.45 GB for
+  housing_fund, ~55 s for the vendored token; v6 `bb` transpile + VK generation
+  adds only ~1 s per contract, even cold), so the bootstrap runs the nine
+  contract compiles as a pool of background jobs, one per core
+  (`BOOTSTRAP_COMPILE_JOBS`). The first needed compile runs in the foreground
+  to populate nargo's git-dependency cache before concurrent jobs touch it.
+  Measured on 4 cores with every artifact removed: the whole compile stage
+  (all nine contracts) takes **121 s** in the pool versus **317 s** with
+  `BOOTSTRAP_COMPILE_JOBS=1`. Unchanged contracts are skipped
+  (`artifact_is_fresh`, which also requires `"transpiled": true`;
+  `FS_FORCE_COMPILE=1` rebuilds). The nargo dependency cache lives at
+  `$HOME/nargo/github.com/...` (no dot); the compose `nargo-cache` volume
+  mounts that path. `FS_BOOTSTRAP_ROOT=<checkout> AZTEC_BIN=aztec` lets the
+  compile functions run on a host with the toolchain installed.
+- There is **no push/subscription API** for tx completion in v6 aztec.js: the
+  only primitives are `send({ wait: NO_WAIT })` (returns the tx hash at once)
+  plus `waitForTx(node, txHash, opts)` / `node.getTxReceipt`. The API routes
+  await the send and answer when the tx is proposed; a non-blocking
+  "submit then poll a status route" flow would be built on those two calls.
 
 ## Error Handling
 
@@ -91,7 +181,7 @@ sub-EUR dust), so there is no precision to recover.
 
 ## Testnet smoke test
 
-To verify the pinned `@aztec/aztec.js` (v4.3.0) talks to the public Aztec testnet:
+To verify the pinned `@aztec-labs/aztec.js` (6.0.0-rc.3) talks to the public Aztec testnet:
 
 ```bash
 cd scripts
@@ -135,10 +225,11 @@ Use the wrapper:
 
 By default the script uses the host `aztec` CLI: each contract runs
 `aztec test`, which handles compile + TXE + oracle resolver
-internally. No docker required. The full suite is **81 tests** across the
-5 V2 contracts (kyc_verifier 7, housing_fund 29, governance 16,
+internally. No docker required. The full suite is **109 tests** across the
+5 V2 contracts (kyc_verifier 12, housing_fund 33, governance 35,
 protocol_rewards 18, fsft_dex 11) and runs in CI on every push/PR
-(`.github/workflows/tests.yml`).
+(`.github/workflows/tests.yml`). `AZTEC_HOME=/path/to/other/.aztec` selects a
+second toolchain install (e.g. to trial the next rc) without re-activating.
 
 The script compiles each contract **before** staging cross-contract
 dependency artifacts. This ordering matters: the `aztec compile` / `aztec
@@ -152,7 +243,7 @@ register their dep in `stage_cross_contract_deps` (the vendored AIP-20
 `contracts/vendor/aztec-standards/target`, not the member dir).
 
 Opt-in legacy docker path: `FS_AZTEC_TEST_DOCKER=1 ./scripts/aztec-test.sh`
-spawns TXE inside the pinned `aztecprotocol/aztec:4.3.0` image and runs
+spawns TXE inside the pinned `azteclabs/aztec:<.aztec-version>` image and runs
 `nargo test --oracle-resolver http://127.0.0.1:8080`. Slower (~65 s for
 the full suite) but useful for parity checks with CI. NOTE: the docker
 path's inline staging only covers `housing_fund`'s KYCVerifier; the new

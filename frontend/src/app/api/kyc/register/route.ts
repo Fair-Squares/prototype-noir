@@ -88,16 +88,16 @@ export async function POST(request: NextRequest) {
     const adminWallet = admin.wallet;
     void accountIndex; // accountIndex is the user's index, but admin signs the tx
 
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
     const KycArtifactJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
     const kycArtifact = loadContractArtifact(KycArtifactJson as Parameters<typeof loadContractArtifact>[0]);
-    const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, adminWallet);
+    const kycContract = await Contract.at(AztecAddress.fromStringUnsafe(kycAddr), kycArtifact, adminWallet);
 
-    const adminAddress = AztecAddress.fromString(admin.address);
-    const userAddr = AztecAddress.fromString(userAddress);
+    const adminAddress = AztecAddress.fromStringUnsafe(admin.address);
+    const userAddr = AztecAddress.fromStringUnsafe(userAddress);
 
     // 1. Public registration (legacy path, used by downstream V1 callers).
     const receipt = await kycContract.methods

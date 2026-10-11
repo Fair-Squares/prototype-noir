@@ -19,7 +19,7 @@ pub contract ProtocolRewards {
             functions::{external, initializer, only_self, view},
             storage::storage,
         },
-        messages::message_delivery::MessageDelivery,
+        messages::delivery::MessageDelivery,
         note::{
             constants::MAX_NOTES_PER_PAGE,
             HintedNote,
@@ -29,7 +29,7 @@ pub contract ProtocolRewards {
         protocol::{
             address::AztecAddress,
             hash::poseidon2_hash,
-            traits::{Deserialize, Serialize, ToField},
+            traits::{Deserialize, Packable, Serialize, ToField},
         },
         state_vars::{Map, Owned, PrivateSet, PublicMutable, SingleUseClaim, StateVariable},
         utils::array,
@@ -62,39 +62,68 @@ pub contract ProtocolRewards {
         pub claim_min: u64,
     }
 
+    // -- Packed storage groups ------------------------------------------------
+    // STORAGE GROUPING (aztec-nr v6 / Noir 1.0): the `#[aztec]` macro builds one
+    // generic self type over the whole Storage struct, and the Noir compiler
+    // caps that type's size (MAX_TYPE_COMPLEXITY = 100k nodes) in every PRIVATE
+    // function. Each `PublicMutable` field costs ~2 PrivateContext expansions
+    // and each `Map` ~4, which put the old 27-field layout over the cap. Related
+    // scalars are therefore packed into one struct per slot group; each group is
+    // read-modify-written as a unit. The external ABI is unchanged.
+    #[derive(Packable, Eq)]
+    pub struct Links {
+        pub admin: AztecAddress,
+        pub protocol_token: AztecAddress,
+        pub fsft_token: AztecAddress,
+        pub housing_fund: AztecAddress,
+        pub governance: AztecAddress,
+        pub kyc_verifier: AztecAddress,
+    }
+
+    #[derive(Packable, Eq)]
+    pub struct Totals {
+        pub total_distribution_pool: u64,
+        pub total_distributed: u64,
+        pub total_claimed: u64,
+        pub claim_min: u64,
+        pub total_epochs: u32,
+        pub current_epoch: u32,
+    }
+
+    #[derive(Packable, Eq)]
+    pub struct Epoch {
+        pub open: bool,
+        pub emission: u64,
+        pub deposit_total_weight: u64,
+        pub fsft_total_weight: u64,
+        pub vote_total_weight: u64,
+        pub allocated: u64,
+    }
+
+    // Per (user, epoch) weights, keyed poseidon2([user, epoch]).
+    #[derive(Packable, Eq)]
+    pub struct UserEpoch {
+        pub deposit_weight: u64,
+        pub fsft_weight: u64,
+        pub vote_weight: u64,
+        pub allocated: bool,
+    }
+
+    // Public-path per-user reward ledger (PRIVACY NOTE M13 applies).
+    #[derive(Packable, Eq)]
+    pub struct UserLedger {
+        pub claimable: u64,
+        pub total_claimed: u64,
+        pub last_claimed_epoch: u32,
+    }
+
     #[storage]
     struct Storage<Context> {
-        admin: PublicMutable<AztecAddress, Context>,
-
-        protocol_token: PublicMutable<AztecAddress, Context>,
-        fsft_token: PublicMutable<AztecAddress, Context>,
-        housing_fund: PublicMutable<AztecAddress, Context>,
-        governance: PublicMutable<AztecAddress, Context>,
-        kyc_verifier: PublicMutable<AztecAddress, Context>,
-
-        total_distribution_pool: PublicMutable<u64, Context>,
-        total_distributed: PublicMutable<u64, Context>,
-        total_claimed: PublicMutable<u64, Context>,
-
-        claim_min: PublicMutable<u64, Context>,
-        total_epochs: PublicMutable<u32, Context>,
-        current_epoch: PublicMutable<u32, Context>,
-
-        epoch_open: Map<Field, PublicMutable<bool, Context>, Context>,
-        epoch_emission: Map<Field, PublicMutable<u64, Context>, Context>,
-        epoch_deposit_total_weight: Map<Field, PublicMutable<u64, Context>, Context>,
-        epoch_fsft_total_weight: Map<Field, PublicMutable<u64, Context>, Context>,
-        epoch_vote_total_weight: Map<Field, PublicMutable<u64, Context>, Context>,
-        epoch_allocated: Map<Field, PublicMutable<u64, Context>, Context>,
-
-        user_epoch_deposit_weight: Map<Field, PublicMutable<u64, Context>, Context>,
-        user_epoch_fsft_weight: Map<Field, PublicMutable<u64, Context>, Context>,
-        user_epoch_vote_weight: Map<Field, PublicMutable<u64, Context>, Context>,
-        user_epoch_allocated: Map<Field, PublicMutable<bool, Context>, Context>,
-
-        user_claimable: Map<AztecAddress, PublicMutable<u64, Context>, Context>,
-        user_total_claimed: Map<AztecAddress, PublicMutable<u64, Context>, Context>,
-        user_last_claimed_epoch: Map<AztecAddress, PublicMutable<u32, Context>, Context>,
+        links: PublicMutable<Links, Context>,
+        totals: PublicMutable<Totals, Context>,
+        epochs: Map<Field, PublicMutable<Epoch, Context>, Context>,
+        user_epochs: Map<Field, PublicMutable<UserEpoch, Context>, Context>,
+        users: Map<AztecAddress, PublicMutable<UserLedger, Context>, Context>,
 
         // V2: per-recipient private reward records
         reward_notes: Owned<PrivateSet<RewardClaimNote, Context>, Context>,
@@ -169,22 +198,26 @@ pub contract ProtocolRewards {
         assert(!kyc_verifier.is_zero(), "invalid kyc verifier");
         assert(claim_min > 0, "invalid claim min");
 
-        self.storage.admin.write(admin);
-        self.storage.fsft_token.write(fsft_token);
-        self.storage.housing_fund.write(housing_fund);
-        self.storage.governance.write(governance);
-        self.storage.kyc_verifier.write(kyc_verifier);
         // protocol_token is the AIP-20 Token minted on reward claims. Its
         // immutable minter must equal THIS contract, so it can only be deployed
         // after this contract's address is known -> wired via set_protocol_token.
+        self.storage.links.write(Links {
+            admin,
+            protocol_token: AztecAddress::zero(),
+            fsft_token,
+            housing_fund,
+            governance,
+            kyc_verifier,
+        });
 
-        self.storage.total_distribution_pool.write(8_000_000);
-        self.storage.total_distributed.write(0);
-        self.storage.total_claimed.write(0);
-
-        self.storage.claim_min.write(claim_min);
-        self.storage.total_epochs.write(120);
-        self.storage.current_epoch.write(0);
+        self.storage.totals.write(Totals {
+            total_distribution_pool: 8_000_000,
+            total_distributed: 0,
+            total_claimed: 0,
+            claim_min,
+            total_epochs: 120,
+            current_epoch: 0,
+        });
     }
 
     /// One-shot admin wiring of the protocol token (deployed after this contract
@@ -192,10 +225,12 @@ pub contract ProtocolRewards {
     /// deploy cycle imposed by the AIP-20 immutable minter.
     #[external("public")]
     fn set_protocol_token(protocol_token: AztecAddress) {
-        assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
-        assert(self.storage.protocol_token.read().is_zero(), "protocol token already set");
+        let mut links = self.storage.links.read();
+        assert_eq(self.msg_sender(), links.admin, "not admin");
+        assert(links.protocol_token.is_zero(), "protocol token already set");
         assert(!protocol_token.is_zero(), "invalid protocol token");
-        self.storage.protocol_token.write(protocol_token);
+        links.protocol_token = protocol_token;
+        self.storage.links.write(links);
     }
 
     /// Opens/checkpoints an epoch and records total weighting denominators.
@@ -207,33 +242,35 @@ pub contract ProtocolRewards {
         fsft_total_weight: u64,
         vote_total_weight: u64,
     ) {
-        assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
-        assert(epoch < self.storage.total_epochs.read(), "invalid epoch");
+        assert_eq(self.msg_sender(), self.storage.links.read().admin, "not admin");
+        let mut totals = self.storage.totals.read();
+        assert(epoch < totals.total_epochs, "invalid epoch");
         assert(emission > 0, "emission must be positive");
         // Once-only: re-checkpointing an open epoch would double-count
         // total_distributed (permanently shrinking the 8M pool) and rewrite the
         // emission/denominators under already-recorded per-user weights.
-        assert(
-            !self.storage.epoch_open.at(epoch as Field).read(),
-            "epoch already checkpointed",
-        );
+        let eid = epoch as Field;
+        let mut ep = self.storage.epochs.at(eid).read();
+        assert(!ep.open, "epoch already checkpointed");
 
-        let target = epoch_emission_target(self.storage.total_distribution_pool.read(), epoch);
+        let target = epoch_emission_target(totals.total_distribution_pool, epoch);
         assert(emission <= target, "emission exceeds epoch target");
 
-        let distributed = self.storage.total_distributed.read();
-        let pool = self.storage.total_distribution_pool.read();
-        assert(distributed + emission <= pool, "distribution pool exceeded");
+        assert(
+            totals.total_distributed + emission <= totals.total_distribution_pool,
+            "distribution pool exceeded",
+        );
 
-        let eid = epoch as Field;
-        self.storage.epoch_open.at(eid).write(true);
-        self.storage.epoch_emission.at(eid).write(emission);
-        self.storage.epoch_deposit_total_weight.at(eid).write(deposit_total_weight);
-        self.storage.epoch_fsft_total_weight.at(eid).write(fsft_total_weight);
-        self.storage.epoch_vote_total_weight.at(eid).write(vote_total_weight);
+        ep.open = true;
+        ep.emission = emission;
+        ep.deposit_total_weight = deposit_total_weight;
+        ep.fsft_total_weight = fsft_total_weight;
+        ep.vote_total_weight = vote_total_weight;
+        self.storage.epochs.at(eid).write(ep);
 
-        self.storage.total_distributed.write(distributed + emission);
-        self.storage.current_epoch.write(epoch);
+        totals.total_distributed += emission;
+        totals.current_epoch = epoch;
+        self.storage.totals.write(totals);
     }
 
     /// Records per-user epoch weights and accrues claimable rewards.
@@ -263,23 +300,26 @@ pub contract ProtocolRewards {
         fsft_weight: u64,
         vote_weight: u64,
     ) {
-        assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
+        let links = self.storage.links.read();
+        assert_eq(self.msg_sender(), links.admin, "not admin");
         assert(!user.is_zero(), "invalid user");
 
         let eid = epoch as Field;
-        assert(self.storage.epoch_open.at(eid).read(), "epoch not open");
+        let mut ep = self.storage.epochs.at(eid).read();
+        assert(ep.open, "epoch not open");
 
         let key = poseidon2_hash([user.to_field(), eid]);
-        assert(!self.storage.user_epoch_allocated.at(key).read(), "already allocated");
+        let mut ue = self.storage.user_epochs.at(key).read();
+        assert(!ue.allocated, "already allocated");
 
-        self.storage.user_epoch_deposit_weight.at(key).write(deposit_weight);
-        self.storage.user_epoch_fsft_weight.at(key).write(fsft_weight);
-        self.storage.user_epoch_vote_weight.at(key).write(vote_weight);
+        ue.deposit_weight = deposit_weight;
+        ue.fsft_weight = fsft_weight;
+        ue.vote_weight = vote_weight;
 
-        let emission = self.storage.epoch_emission.at(eid).read();
-        let deposit_total = self.storage.epoch_deposit_total_weight.at(eid).read();
-        let fsft_total = self.storage.epoch_fsft_total_weight.at(eid).read();
-        let vote_total = self.storage.epoch_vote_total_weight.at(eid).read();
+        let emission = ep.emission;
+        let deposit_total = ep.deposit_total_weight;
+        let fsft_total = ep.fsft_total_weight;
+        let vote_total = ep.vote_total_weight;
 
         let deposit_pool = (emission * 40) / 100;
         let fsft_pool = (emission * 40) / 100;
@@ -288,7 +328,7 @@ pub contract ProtocolRewards {
         // FSFT reward-pool eligibility: holds public FSFT. The vendored AIP-20
         // Token exposes no on-chain private-holder attestation, so a purely
         // private FSFT holder must unshield to earn this sub-pool.
-        let fsft = Token::at(self.storage.fsft_token.read());
+        let fsft = Token::at(links.fsft_token);
         let public_balance: u128 = self.view(fsft.balance_of_public(user));
         let fsft_eligible = public_balance > 0;
 
@@ -317,14 +357,16 @@ pub contract ProtocolRewards {
         let reward = deposit_share + fsft_share + governance_share;
 
         if reward > 0 {
-            let current = self.storage.user_claimable.at(user).read();
-            self.storage.user_claimable.at(user).write(current + reward);
+            let mut ledger = self.storage.users.at(user).read();
+            ledger.claimable += reward;
+            self.storage.users.at(user).write(ledger);
 
-            let allocated = self.storage.epoch_allocated.at(eid).read();
-            self.storage.epoch_allocated.at(eid).write(allocated + reward);
+            ep.allocated += reward;
+            self.storage.epochs.at(eid).write(ep);
         }
 
-        self.storage.user_epoch_allocated.at(key).write(true);
+        ue.allocated = true;
+        self.storage.user_epochs.at(key).write(ue);
     }
 
     // -- V2: private reward allocation -----------------------------------
@@ -362,25 +404,28 @@ pub contract ProtocolRewards {
 
         let note = RewardClaimNote::new(recipient, amount, epoch);
         self.storage.reward_notes.at(recipient).insert(note).deliver(
-            MessageDelivery.ONCHAIN_CONSTRAINED,
+            MessageDelivery::onchain_constrained(),
         );
     }
 
     #[external("public")]
     #[only_self]
     fn _assert_admin_and_epoch_open(epoch: u32, caller: AztecAddress, amount: u64) {
-        assert_eq(caller, self.storage.admin.read(), "not admin");
+        assert_eq(caller, self.storage.links.read().admin, "not admin");
         let eid = epoch as Field;
-        assert(self.storage.epoch_open.at(eid).read(), "epoch not open");
+        assert(self.storage.epochs.at(eid).read().open, "epoch not open");
 
         // Fixed-supply guard: a private allocation consumes the distribution pool
         // exactly like checkpoint_epoch's public emission, so it must fit under the
         // 8M ceiling and advance total_distributed. claim_reward_private then mints
         // against this, keeping total_claimed <= total_distributed <= pool.
-        let distributed = self.storage.total_distributed.read();
-        let pool = self.storage.total_distribution_pool.read();
-        assert(distributed + amount <= pool, "distribution pool exceeded");
-        self.storage.total_distributed.write(distributed + amount);
+        let mut totals = self.storage.totals.read();
+        assert(
+            totals.total_distributed + amount <= totals.total_distribution_pool,
+            "distribution pool exceeded",
+        );
+        totals.total_distributed += amount;
+        self.storage.totals.write(totals);
     }
 
     // -- V2: private claim of a RewardClaimNote --------------------------------
@@ -446,17 +491,15 @@ pub contract ProtocolRewards {
     #[only_self]
     fn _record_private_claim(amount: u64, supplied_protocol_token: AztecAddress) {
         assert(
-            supplied_protocol_token == self.storage.protocol_token.read(),
+            supplied_protocol_token == self.storage.links.read().protocol_token,
             "protocol token mismatch",
         );
-        let total = self.storage.total_claimed.read();
-        self.storage.total_claimed.write(total + amount);
+        let mut totals = self.storage.totals.read();
+        totals.total_claimed += amount;
         // Solvency invariant: claims can never exceed what was distributed into
         // the pool (allocations bump total_distributed; checkpoints bump it too).
-        assert(
-            self.storage.total_claimed.read() <= self.storage.total_distributed.read(),
-            "claimed exceeds distributed",
-        );
+        assert(totals.total_claimed <= totals.total_distributed, "claimed exceeds distributed");
+        self.storage.totals.write(totals);
     }
 
     /// Claims all currently accrued rewards for caller.
@@ -471,25 +514,26 @@ pub contract ProtocolRewards {
     #[external("public")]
     fn claim() {
         let caller = self.msg_sender();
-        let kyc = KYCVerifier::at(self.storage.kyc_verifier.read());
+        let links = self.storage.links.read();
+        let kyc = KYCVerifier::at(links.kyc_verifier);
         let is_investor = self.view(kyc.is_investor(caller));
         assert(is_investor, "investor role required");
 
-        let claimable = self.storage.user_claimable.at(caller).read();
-        let claim_min = self.storage.claim_min.read();
-        assert(claimable >= claim_min, "claimable below minimum");
+        let mut ledger = self.storage.users.at(caller).read();
+        let claimable = ledger.claimable;
+        let mut totals = self.storage.totals.read();
+        assert(claimable >= totals.claim_min, "claimable below minimum");
 
-        let protocol_token = Token::at(self.storage.protocol_token.read());
+        let protocol_token = Token::at(links.protocol_token);
         self.call(protocol_token.mint_to_public(caller, claimable as u128));
 
-        self.storage.user_claimable.at(caller).write(0);
+        ledger.claimable = 0;
+        ledger.total_claimed += claimable;
+        ledger.last_claimed_epoch = totals.current_epoch;
+        self.storage.users.at(caller).write(ledger);
 
-        let user_claimed = self.storage.user_total_claimed.at(caller).read();
-        self.storage.user_total_claimed.at(caller).write(user_claimed + claimable);
-        self.storage.user_last_claimed_epoch.at(caller).write(self.storage.current_epoch.read());
-
-        let total_claimed = self.storage.total_claimed.read();
-        self.storage.total_claimed.write(total_claimed + claimable);
+        totals.total_claimed += claimable;
+        self.storage.totals.write(totals);
     }
 
     // -- View functions ----------------------------------------------------
@@ -502,56 +546,58 @@ pub contract ProtocolRewards {
     #[external("public")]
     #[view]
     fn get_claimable(user: AztecAddress) -> pub u64 {
-        self.storage.user_claimable.at(user).read()
+        self.storage.users.at(user).read().claimable
     }
 
     #[external("public")]
     #[view]
     fn get_user_stats(user: AztecAddress) -> pub UserStats {
+        let ledger = self.storage.users.at(user).read();
         UserStats {
-            claimable: self.storage.user_claimable.at(user).read(),
-            total_claimed: self.storage.user_total_claimed.at(user).read(),
-            last_claimed_epoch: self.storage.user_last_claimed_epoch.at(user).read(),
+            claimable: ledger.claimable,
+            total_claimed: ledger.total_claimed,
+            last_claimed_epoch: ledger.last_claimed_epoch,
         }
     }
 
     #[external("public")]
     #[view]
     fn get_epoch_stats(epoch: u32) -> pub EpochStats {
-        let eid = epoch as Field;
+        let ep = self.storage.epochs.at(epoch as Field).read();
         EpochStats {
-            open: self.storage.epoch_open.at(eid).read(),
-            emission: self.storage.epoch_emission.at(eid).read(),
-            deposit_total_weight: self.storage.epoch_deposit_total_weight.at(eid).read(),
-            fsft_total_weight: self.storage.epoch_fsft_total_weight.at(eid).read(),
-            vote_total_weight: self.storage.epoch_vote_total_weight.at(eid).read(),
-            allocated: self.storage.epoch_allocated.at(eid).read(),
+            open: ep.open,
+            emission: ep.emission,
+            deposit_total_weight: ep.deposit_total_weight,
+            fsft_total_weight: ep.fsft_total_weight,
+            vote_total_weight: ep.vote_total_weight,
+            allocated: ep.allocated,
         }
     }
 
     #[external("public")]
     #[view]
     fn get_epoch_target(epoch: u32) -> pub u64 {
-        epoch_emission_target(self.storage.total_distribution_pool.read(), epoch)
+        epoch_emission_target(self.storage.totals.read().total_distribution_pool, epoch)
     }
 
     #[external("public")]
     #[view]
     fn get_rewards_config() -> pub RewardsConfig {
+        let totals = self.storage.totals.read();
         RewardsConfig {
-            total_distribution_pool: self.storage.total_distribution_pool.read(),
-            total_distributed: self.storage.total_distributed.read(),
-            total_claimed: self.storage.total_claimed.read(),
-            current_epoch: self.storage.current_epoch.read(),
-            total_epochs: self.storage.total_epochs.read(),
-            claim_min: self.storage.claim_min.read(),
+            total_distribution_pool: totals.total_distribution_pool,
+            total_distributed: totals.total_distributed,
+            total_claimed: totals.total_claimed,
+            current_epoch: totals.current_epoch,
+            total_epochs: totals.total_epochs,
+            claim_min: totals.claim_min,
         }
     }
 
     #[external("public")]
     #[view]
     fn has_fsft_rewards_eligibility(user: AztecAddress) -> pub bool {
-        let fsft = Token::at(self.storage.fsft_token.read());
+        let fsft = Token::at(self.storage.links.read().fsft_token);
         let public_balance: u128 = self.view(fsft.balance_of_public(user));
         public_balance > 0
     }

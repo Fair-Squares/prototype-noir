@@ -15,7 +15,7 @@
  * What this verifies (today):
  *   1. Network env is set to "testnet".
  *   2. PXE URL is reachable; chain_id / version come back.
- *   3. The pinned aztec.js (v4.3.0) and the testnet node agree.
+ *   3. The pinned aztec.js (6.0.0-rc.3) and the testnet node agree.
  *
  * What this does NOT do yet (Stage 6.5 follow-up):
  *   - Deploy any Fair Squares contract.
@@ -30,7 +30,7 @@
  *     first; addresses + secret are persisted to scripts/.testnet/.
  */
 
-import { createAztecNodeClient } from "@aztec/aztec.js/node";
+import { createAztecNodeClient } from "@aztec-labs/aztec.js/node";
 
 const DEFAULT_TESTNET_PXE = "https://rpc.testnet.aztec-labs.com";
 const DEFAULT_LOCAL_PXE = "http://localhost:8080";
@@ -76,7 +76,7 @@ async function main() {
     const blockNumber = await node.getBlockNumber();
     log(`block    = ${blockNumber}`);
 
-    log("✅ Testnet PXE reachable and aztec.js v4.3.0 compatible.");
+    log("✅ Testnet PXE reachable and aztec.js 6.0.0-rc.3 compatible.");
     log("");
     log("Stage 6.5 pipeline:");
     log(" 1. AZTEC_NETWORK=testnet npx tsx scripts/testnet-deploy-account.ts");

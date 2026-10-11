@@ -85,9 +85,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "NEXT_PUBLIC_HOUSING_FUND_ADDRESS not set" }, { status: 500 });
     }
 
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     const [reader, GovArtifactJson, HfArtifactJson] = await Promise.all([
@@ -96,14 +96,14 @@ export async function GET(request: NextRequest) {
       loadGeneratedArtifactJson("housing_fund-HousingFund.json"),
     ]);
     const wallet = reader.wallet;
-    const from = AztecAddress.fromString(reader.address);
+    const from = AztecAddress.fromStringUnsafe(reader.address);
 
     const govArtifact = loadContractArtifact(GovArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
 
     const [govContract, hfContract] = await Promise.all([
-      Contract.at(AztecAddress.fromString(govAddr), govArtifact, wallet),
-      Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, wallet),
+      Contract.at(AztecAddress.fromStringUnsafe(govAddr), govArtifact, wallet),
+      Contract.at(AztecAddress.fromStringUnsafe(housingFundAddr), hfArtifact, wallet),
     ]);
 
     const [count, currentBlock, quorum] = await Promise.all([
@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
       getBlockNumber(),
       govContract.methods.get_min_quorum_votes().simulate({ from }).then((r) => Number(simResult(r))),
     ]);
-    const requestedAddress = address ? AztecAddress.fromString(address) : null;
+    const requestedAddress = address ? AztecAddress.fromStringUnsafe(address) : null;
 
     // Live private deposits are invisible to the public-record claimable path
     // below (get_my_deposit_record_count is 0 for deposit_private holders), so
@@ -371,9 +371,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const { getTestAccount } = await import("@/lib/serverWallet");
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     const govAddr = process.env.NEXT_PUBLIC_GOVERNANCE_ADDRESS ?? "";
@@ -391,7 +391,7 @@ export async function POST(request: NextRequest) {
     const govArtifact = loadContractArtifact(GovArtifactJson as Parameters<typeof loadContractArtifact>[0]);
     const hfArtifact = loadContractArtifact(HfArtifactJson as Parameters<typeof loadContractArtifact>[0]);
 
-    const govContract = await Contract.at(AztecAddress.fromString(govAddr), govArtifact, actor.wallet);
+    const govContract = await Contract.at(AztecAddress.fromStringUnsafe(govAddr), govArtifact, actor.wallet);
 
     if (action === "create") {
       if (!title || !amount) {
@@ -403,8 +403,8 @@ export async function POST(request: NextRequest) {
       }
       const KycArtifactJson = await loadGeneratedArtifactJson("kyc_verifier-KYCVerifier.json");
       const kycArtifact = loadContractArtifact(KycArtifactJson as Parameters<typeof loadContractArtifact>[0]);
-      const kycContract = await Contract.at(AztecAddress.fromString(kycAddr), kycArtifact, actor.wallet);
-      const actorAddress = AztecAddress.fromString(actor.address);
+      const kycContract = await Contract.at(AztecAddress.fromStringUnsafe(kycAddr), kycArtifact, actor.wallet);
+      const actorAddress = AztecAddress.fromStringUnsafe(actor.address);
       const isInvestor = simResult(await kycContract.methods.is_investor(actorAddress).simulate({ from: actorAddress }));
       if (!Boolean(isInvestor)) {
         return NextResponse.json({ error: "Investor role required to create proposals" }, { status: 403 });
@@ -443,7 +443,7 @@ export async function POST(request: NextRequest) {
       if (listingId === undefined || !title) {
         return NextResponse.json({ error: "listingId and title required" }, { status: 400 });
       }
-      const actorAddress = AztecAddress.fromString(actor.address);
+      const actorAddress = AztecAddress.fromStringUnsafe(actor.address);
       const descHashBytes = Buffer.from(title.slice(0, 31), "utf-8");
       const descHash = BigInt("0x" + descHashBytes.toString("hex").padStart(64, "0"));
       const receipt = await govContract.methods
@@ -468,7 +468,7 @@ export async function POST(request: NextRequest) {
     if (action === "finalize") {
       const receipt = await govContract.methods
         .finalize_proposal(Number(proposalId))
-        .send({ from: AztecAddress.fromString(actor.address) });
+        .send({ from: AztecAddress.fromStringUnsafe(actor.address) });
       const outcome = getAztecTxOutcome(receipt);
       if (outcome.reverted) {
         const mapped = humanizeContractError(outcome.error ?? "");
@@ -494,9 +494,9 @@ export async function POST(request: NextRequest) {
       // the same admin actor for a single coherent operator step.) Demo-only: the
       // server holds every key — see the serverWallet M16 note.
       const admin = await getTestAccount(0);
-      const adminAddress = AztecAddress.fromString(admin.address);
-      const govAsAdmin = await Contract.at(AztecAddress.fromString(govAddr), govArtifact, admin.wallet);
-      const hfAsAdmin = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, admin.wallet);
+      const adminAddress = AztecAddress.fromStringUnsafe(admin.address);
+      const govAsAdmin = await Contract.at(AztecAddress.fromStringUnsafe(govAddr), govArtifact, admin.wallet);
+      const hfAsAdmin = await Contract.at(AztecAddress.fromStringUnsafe(housingFundAddr), hfArtifact, admin.wallet);
 
       const executeReceipt = await govAsAdmin.methods
         .execute_proposal(Number(proposalId))
@@ -579,7 +579,7 @@ export async function POST(request: NextRequest) {
           Number(lockYears),
           BigInt(targetGroup)
         )
-        .send({ from: AztecAddress.fromString(actor.address) });
+        .send({ from: AztecAddress.fromStringUnsafe(actor.address) });
       const outcome = getAztecTxOutcome(receipt);
       if (outcome.reverted) {
         const mapped = humanizeContractError(outcome.error ?? "");

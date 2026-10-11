@@ -28,9 +28,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const { getTestAccount } = await import("@/lib/serverWallet");
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     const housingFundAddr = process.env.NEXT_PUBLIC_HOUSING_FUND_ADDRESS ?? "";
@@ -38,10 +38,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "NEXT_PUBLIC_HOUSING_FUND_ADDRESS not set" }, { status: 500 });
     }
     const reader = await getTestAccount(0);
-    const from = AztecAddress.fromString(reader.address);
+    const from = AztecAddress.fromStringUnsafe(reader.address);
     const HfJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
     const hfArtifact = loadContractArtifact(HfJson as Parameters<typeof loadContractArtifact>[0]);
-    const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, reader.wallet);
+    const hfContract = await Contract.at(AztecAddress.fromStringUnsafe(housingFundAddr), hfArtifact, reader.wallet);
 
     const [covenantRaw, acqRaw] = await Promise.all([
       hfContract.methods.get_property_covenant(propertyId).simulate({ from }),
@@ -114,22 +114,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "NEXT_PUBLIC_HOUSING_FUND_ADDRESS not set" }, { status: 500 });
     }
 
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     const HfJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
     const hfArtifact = loadContractArtifact(HfJson as Parameters<typeof loadContractArtifact>[0]);
     const hfContract = await Contract.at(
-      AztecAddress.fromString(housingFundAddr),
+      AztecAddress.fromStringUnsafe(housingFundAddr),
       hfArtifact,
       account.wallet
     );
 
     const receipt = await hfContract.methods
       .record_rent(pid, BigInt(amt))
-      .send({ from: AztecAddress.fromString(account.address) });
+      .send({ from: AztecAddress.fromStringUnsafe(account.address) });
 
     // record_rent can revert post-mining (pause, authorization, the W1c
     // covenant ceiling) — inspect the receipt, never report a reverted
@@ -142,13 +142,13 @@ export async function POST(request: NextRequest) {
         const [syncedRaw, ceilingRaw] = simResult<[boolean, bigint, bigint]>(
           await hfContract.methods
             .get_property_covenant(pid)
-            .simulate({ from: AztecAddress.fromString(account.address) })
+            .simulate({ from: AztecAddress.fromStringUnsafe(account.address) })
         );
         const acq = Number(
           simResult(
             await hfContract.methods
               .get_acquisition_value(pid)
-              .simulate({ from: AztecAddress.fromString(account.address) })
+              .simulate({ from: AztecAddress.fromStringUnsafe(account.address) })
           )
         );
         const cap = Boolean(syncedRaw) && acq > 0 ? monthlyRentCap(acq, Number(ceilingRaw)) : null;

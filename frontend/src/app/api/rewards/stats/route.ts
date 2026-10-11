@@ -101,14 +101,14 @@ export async function GET(request: NextRequest) {
     }
 
     const { getTestAccount } = await import("@/lib/serverWallet");
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     const actor = await getTestAccount(accountIndex);
-    const actorAddress = AztecAddress.fromString(actor.address);
-    const userAddress = AztecAddress.fromString(address);
+    const actorAddress = AztecAddress.fromStringUnsafe(actor.address);
+    const userAddress = AztecAddress.fromStringUnsafe(address);
     if (actor.address.toLowerCase() !== address.toLowerCase()) {
       return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
     }
@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
     const rewardsReadsP = (async () => {
       const RewardsJson = await loadGeneratedArtifactJson("protocol_rewards-ProtocolRewards.json");
       const rewardsArtifact = loadContractArtifact(RewardsJson as Parameters<typeof loadContractArtifact>[0]);
-      const rewardsContract = await Contract.at(AztecAddress.fromString(rewardsAddr), rewardsArtifact, actor.wallet);
+      const rewardsContract = await Contract.at(AztecAddress.fromStringUnsafe(rewardsAddr), rewardsArtifact, actor.wallet);
       return Promise.all([
         rewardsContract.methods.get_rewards_config().simulate({ from: actorAddress }),
         rewardsContract.methods.get_user_stats(userAddress).simulate({ from: actorAddress }),
@@ -141,7 +141,7 @@ export async function GET(request: NextRequest) {
       const FtJson = await loadGeneratedArtifactJson("token_contract-Token.json");
       const ftArtifact = loadContractArtifact(FtJson as Parameters<typeof loadContractArtifact>[0]);
       const tokenContract = await Contract.at(
-        AztecAddress.fromString(protocolTokenAddr),
+        AztecAddress.fromStringUnsafe(protocolTokenAddr),
         ftArtifact,
         actor.wallet
       );

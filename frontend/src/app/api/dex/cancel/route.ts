@@ -27,8 +27,8 @@ export async function POST(request: NextRequest) {
     if (!dexAddr) return NextResponse.json({ error: "NEXT_PUBLIC_FSFT_DEX_ADDRESS not set" }, { status: 500 });
 
     const { getTestAccount } = await import("@/lib/serverWallet");
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadArtifact } = await import("@/lib/artifactLoader");
     const { findOwnedOrderNote } = await import("@/lib/dexNotes");
 
@@ -36,9 +36,9 @@ export async function POST(request: NextRequest) {
     if (address.toLowerCase() !== actor.address.toLowerCase()) {
       return NextResponse.json({ error: "address must match selected account" }, { status: 400 });
     }
-    const from = AztecAddress.fromString(actor.address);
+    const from = AztecAddress.fromStringUnsafe(actor.address);
     const dex = await Contract.at(
-      AztecAddress.fromString(dexAddr),
+      AztecAddress.fromStringUnsafe(dexAddr),
       await loadArtifact("fsft_dex-FSFTDex.json"),
       actor.wallet
     );

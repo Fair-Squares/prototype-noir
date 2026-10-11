@@ -49,9 +49,9 @@ export async function POST(request: NextRequest) {
   // ── Live mode: set_ror_bps (+ optional set_acquisition_value) ──────────────
   try {
     const { getTestAccount } = await import("@/lib/serverWallet");
-    const { Contract } = await import("@aztec/aztec.js/contracts");
-    const { loadContractArtifact } = await import("@aztec/aztec.js/abi");
-    const { AztecAddress } = await import("@aztec/aztec.js/addresses");
+    const { Contract } = await import("@aztec-labs/aztec.js/contracts");
+    const { loadContractArtifact } = await import("@aztec-labs/aztec.js/abi");
+    const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses");
     const { loadGeneratedArtifactJson } = await import("@/lib/artifactLoader");
 
     const housingFundAddr = process.env.NEXT_PUBLIC_HOUSING_FUND_ADDRESS ?? "";
@@ -65,8 +65,8 @@ export async function POST(request: NextRequest) {
 
     const HfJson = await loadGeneratedArtifactJson("housing_fund-HousingFund.json");
     const hfArtifact = loadContractArtifact(HfJson as Parameters<typeof loadContractArtifact>[0]);
-    const hfContract = await Contract.at(AztecAddress.fromString(housingFundAddr), hfArtifact, account.wallet);
-    const from = AztecAddress.fromString(account.address);
+    const hfContract = await Contract.at(AztecAddress.fromStringUnsafe(housingFundAddr), hfArtifact, account.wallet);
+    const from = AztecAddress.fromStringUnsafe(account.address);
 
     const rorReceipt = await hfContract.methods.set_ror_bps(BigInt(bps)).send({ from });
     // Both calls are admin-gated public functions that can revert post-mining —

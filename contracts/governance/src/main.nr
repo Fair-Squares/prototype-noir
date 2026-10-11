@@ -25,7 +25,7 @@ pub contract Governance {
         protocol::{
             address::AztecAddress,
             hash::{compute_siloed_nullifier, poseidon2_hash},
-            traits::{Deserialize, Serialize, ToField},
+            traits::{Deserialize, Packable, Serialize, ToField},
         },
         state_vars::{Map, Owned, PublicMutable, SingleUseClaim},
     };
@@ -93,75 +93,101 @@ pub contract Governance {
         pub quality_score: u32,
     }
 
-    #[storage]
-    struct Storage<Context> {
-        // Linked contract addresses
-        housing_fund: PublicMutable<AztecAddress, Context>,
-        kyc_verifier: PublicMutable<AztecAddress, Context>,
-        fund_token: PublicMutable<AztecAddress, Context>,
-        voting_window_blocks: PublicMutable<u32, Context>,
-        min_quorum_votes: PublicMutable<u32, Context>,
-
-        // Proposal counter
-        proposal_count: PublicMutable<u32, Context>,
-
-        // Per-proposal storage (indexed by proposal_id as Field)
-        p_desc_hash: Map<Field, PublicMutable<Field, Context>, Context>,
-        p_amount: Map<Field, PublicMutable<u64, Context>, Context>,
-        p_yes_votes: Map<Field, PublicMutable<u32, Context>, Context>,
-        p_no_votes: Map<Field, PublicMutable<u32, Context>, Context>,
-        p_status: Map<Field, PublicMutable<u8, Context>, Context>,
-        p_proposer: Map<Field, PublicMutable<AztecAddress, Context>, Context>,
-        p_created_block: Map<Field, PublicMutable<u32, Context>, Context>,
-        p_deadline_block: Map<Field, PublicMutable<u32, Context>, Context>,
-
-        // V2: nullifier per (proposal_id, voter) for secret-ballot private voting.
-        vote_claims: Map<Field, Owned<SingleUseClaim<Context>, Context>, Context>,
-
+    // -- Packed storage groups ------------------------------------------------
+    // STORAGE GROUPING (aztec-nr v6 / Noir 1.0): the `#[aztec]` macro builds one
+    // generic self type over the whole Storage struct, and the Noir compiler
+    // caps that type's size (MAX_TYPE_COMPLEXITY = 100k nodes) in every PRIVATE
+    // function. Each `PublicMutable` field costs ~2 PrivateContext expansions
+    // and each `Map` ~4, which put the old 34-field layout over the cap. Related
+    // scalars are therefore packed into one struct per slot group (one per
+    // proposal / listing / covenant); each group is read-modify-written as a
+    // unit. The external ABI is unchanged.
+    #[derive(Packable, Eq)]
+    pub struct Links {
+        pub housing_fund: AztecAddress,
+        pub kyc_verifier: AztecAddress,
+        pub fund_token: AztecAddress,
         // Admin (the deployer) -- gates execute_proposal so only an authorized
-        // caller can flip a PASSED proposal to EXECUTED. Appended at the END of
-        // the struct so existing storage slots are not shifted.
-        admin: PublicMutable<AztecAddress, Context>,
+        // caller can flip a PASSED proposal to EXECUTED.
+        pub admin: AztecAddress,
+    }
 
-        // W1: per-proposal affordability covenant. Appended at the END so existing
-        // storage slots are not shifted. An unwritten slot reads zero / false, so a
-        // proposal with no covenant reports is_set == false.
-        p_rent_ceiling_bps: Map<Field, PublicMutable<u32, Context>, Context>,
-        p_lock_years: Map<Field, PublicMutable<u32, Context>, Context>,
-        p_target_group: Map<Field, PublicMutable<Field, Context>, Context>,
-        p_covenant_set: Map<Field, PublicMutable<bool, Context>, Context>,
-
-        // J1/J2: property listings -- the pre-proposal onboarding + council
-        // stage (journey steps 2 and 3a). Appended at the END so existing
-        // slots keep their positions. Keyed by listing_id as Field.
-        listing_count: PublicMutable<u32, Context>,
-        min_council_approvals: PublicMutable<u32, Context>,
-        l_proposer: Map<Field, PublicMutable<AztecAddress, Context>, Context>,
-        l_ask_eur: Map<Field, PublicMutable<u64, Context>, Context>,
-        // Appraiser-attested MONTHLY market rent (EUR). Part of the dossier;
-        // J3 anchors the affordability-covenant baseline check to it.
-        l_market_rent_ref_eur: Map<Field, PublicMutable<u64, Context>, Context>,
-        // Poseidon2 hash of the off-chain document bundle (appraiser report +
-        // technical assessment). The chain stores commitment, not content.
-        l_dossier_hash: Map<Field, PublicMutable<Field, Context>, Context>,
-        l_status: Map<Field, PublicMutable<u8, Context>, Context>,
-        // Council review accumulators: floor-average score = score_sum / approvals.
-        l_score_sum: Map<Field, PublicMutable<u64, Context>, Context>,
-        l_approvals: Map<Field, PublicMutable<u32, Context>, Context>,
-        // Double-approve guard: poseidon2([listing_id, councillor]) -> approved?
-        l_council_approved: Map<Field, PublicMutable<bool, Context>, Context>,
-        // Proposal -> listing back-reference, stored as listing_id + 1 so an
-        // unwritten slot (0) means "no listing" (legacy direct proposals).
-        p_listing_id_plus_one: Map<Field, PublicMutable<u32, Context>, Context>,
-
+    #[derive(Packable, Eq)]
+    pub struct Params {
+        pub voting_window_blocks: u32,
+        pub min_quorum_votes: u32,
+        // Proposal counter
+        pub proposal_count: u32,
+        // J1/J2: listing counter + council approval threshold.
+        pub listing_count: u32,
+        pub min_council_approvals: u32,
         // J4: funding queue of PASSED listing-backed proposals, appended by
         // finalize_proposal and drained by HousingFund.match_next (the call
         // direction is fund -> governance because housing_fund imports this
         // crate, never the reverse). head advances past settled entries the
         // same way the H2b withdraw cursor does.
-        fq_head: PublicMutable<u32, Context>,
-        fq_tail: PublicMutable<u32, Context>,
+        pub fq_head: u32,
+        pub fq_tail: u32,
+    }
+
+    // Per-proposal storage (indexed by proposal_id as Field).
+    #[derive(Packable, Eq)]
+    pub struct Proposal {
+        pub desc_hash: Field,
+        pub amount: u64,
+        pub yes_votes: u32,
+        pub no_votes: u32,
+        pub status: u8,
+        pub proposer: AztecAddress,
+        pub created_block: u32,
+        pub deadline_block: u32,
+        // Proposal -> listing back-reference, stored as listing_id + 1 so an
+        // unwritten slot (0) means "no listing" (legacy direct proposals).
+        pub listing_id_plus_one: u32,
+    }
+
+    // W1: per-proposal affordability covenant. An unwritten slot reads zero /
+    // false, so a proposal with no covenant reports is_set == false.
+    #[derive(Packable, Eq)]
+    pub struct Covenant {
+        pub rent_ceiling_bps: u32,
+        pub lock_years: u32,
+        pub target_group: Field,
+        pub is_set: bool,
+    }
+
+    // J1/J2: property listings -- the pre-proposal onboarding + council stage
+    // (journey steps 2 and 3a). Keyed by listing_id as Field.
+    #[derive(Packable, Eq)]
+    pub struct Listing {
+        pub proposer: AztecAddress,
+        pub ask_eur: u64,
+        // Appraiser-attested MONTHLY market rent (EUR). Part of the dossier;
+        // J3 anchors the affordability-covenant baseline check to it.
+        pub market_rent_ref_eur: u64,
+        // Poseidon2 hash of the off-chain document bundle (appraiser report +
+        // technical assessment). The chain stores commitment, not content.
+        pub dossier_hash: Field,
+        pub status: u8,
+        // Council review accumulators: floor-average score = score_sum / approvals.
+        pub score_sum: u64,
+        pub approvals: u32,
+    }
+
+    #[storage]
+    struct Storage<Context> {
+        links: PublicMutable<Links, Context>,
+        params: PublicMutable<Params, Context>,
+        proposals: Map<Field, PublicMutable<Proposal, Context>, Context>,
+        covenants: Map<Field, PublicMutable<Covenant, Context>, Context>,
+        listings: Map<Field, PublicMutable<Listing, Context>, Context>,
+        // Double-approve guard: poseidon2([listing_id, councillor]) -> approved?
+        l_council_approved: Map<Field, PublicMutable<bool, Context>, Context>,
+        // J4 funding queue entries (index -> proposal_id).
         fq_pids: Map<Field, PublicMutable<u32, Context>, Context>,
+
+        // V2: nullifier per (proposal_id, voter) for secret-ballot private voting.
+        vote_claims: Map<Field, Owned<SingleUseClaim<Context>, Context>, Context>,
     }
 
     #[initializer]
@@ -178,27 +204,35 @@ pub contract Governance {
         assert(!fund_token.is_zero(), "invalid fund_token");
         assert(voting_window_blocks > 0, "invalid voting window");
         assert(min_quorum_votes > 0, "invalid quorum");
-        self.storage.housing_fund.write(housing_fund);
-        self.storage.kyc_verifier.write(kyc_verifier);
-        self.storage.fund_token.write(fund_token);
-        self.storage.voting_window_blocks.write(voting_window_blocks);
-        self.storage.min_quorum_votes.write(min_quorum_votes);
-        self.storage.proposal_count.write(0);
         // The deployer is the admin authorized to execute passed proposals.
-        self.storage.admin.write(self.msg_sender());
+        self.storage.links.write(Links {
+            housing_fund,
+            kyc_verifier,
+            fund_token,
+            admin: self.msg_sender(),
+        });
         // J2: one council approval suffices by default (demo posture); raise
         // via set_min_council_approvals. Initialized here (not a constructor
         // arg) so the deploy/bootstrap surface doesn't change.
-        self.storage.listing_count.write(0);
-        self.storage.min_council_approvals.write(1);
+        self.storage.params.write(Params {
+            voting_window_blocks,
+            min_quorum_votes,
+            proposal_count: 0,
+            listing_count: 0,
+            min_council_approvals: 1,
+            fq_head: 0,
+            fq_tail: 0,
+        });
     }
 
     /// J2: admin raises/lowers the council approval threshold (>= 1).
     #[external("public")]
     fn set_min_council_approvals(min_approvals: u32) {
-        assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
+        assert_eq(self.msg_sender(), self.storage.links.read().admin, "not admin");
         assert(min_approvals > 0, "invalid approval threshold");
-        self.storage.min_council_approvals.write(min_approvals);
+        let mut params = self.storage.params.read();
+        params.min_council_approvals = min_approvals;
+        self.storage.params.write(params);
     }
 
     // -- Create a new proposal --------------------------------------------
@@ -223,25 +257,30 @@ pub contract Governance {
     fn create_proposal(description_hash: Field, amount: u64) -> pub u32 {
         let caller = self.msg_sender();
         assert(!caller.is_zero(), "invalid caller");
-        let kyc_contract = KYCVerifier::at(self.storage.kyc_verifier.read());
+        let kyc_contract = KYCVerifier::at(self.storage.links.read().kyc_verifier);
         let is_investor = self.view(kyc_contract.is_investor(caller));
         assert(is_investor, "investor role required");
 
-        let proposal_id = self.storage.proposal_count.read();
+        let mut params = self.storage.params.read();
+        let proposal_id = params.proposal_count;
         let pid = proposal_id as Field;
         let created_block = self.context.block_number();
-        let deadline_block = created_block + self.storage.voting_window_blocks.read();
+        let deadline_block = created_block + params.voting_window_blocks;
 
-        self.storage.p_desc_hash.at(pid).write(description_hash);
-        self.storage.p_amount.at(pid).write(amount);
-        self.storage.p_yes_votes.at(pid).write(0);
-        self.storage.p_no_votes.at(pid).write(0);
-        self.storage.p_status.at(pid).write(STATUS_ACTIVE);
-        self.storage.p_proposer.at(pid).write(caller);
-        self.storage.p_created_block.at(pid).write(created_block);
-        self.storage.p_deadline_block.at(pid).write(deadline_block);
+        self.storage.proposals.at(pid).write(Proposal {
+            desc_hash: description_hash,
+            amount,
+            yes_votes: 0,
+            no_votes: 0,
+            status: STATUS_ACTIVE,
+            proposer: caller,
+            created_block,
+            deadline_block,
+            listing_id_plus_one: 0,
+        });
 
-        self.storage.proposal_count.write(proposal_id + 1);
+        params.proposal_count = proposal_id + 1;
+        self.storage.params.write(params);
         proposal_id
     }
 
@@ -264,7 +303,7 @@ pub contract Governance {
         dossier_hash: Field,
     ) -> pub u32 {
         let caller = self.msg_sender();
-        let kyc_contract = KYCVerifier::at(self.storage.kyc_verifier.read());
+        let kyc_contract = KYCVerifier::at(self.storage.links.read().kyc_verifier);
         assert(
             self.view(kyc_contract.is_property_owner(caller)),
             "property owner role required",
@@ -273,14 +312,20 @@ pub contract Governance {
         assert(market_rent_ref_eur > 0, "market rent reference required");
         assert(dossier_hash != 0, "dossier hash required");
 
-        let listing_id = self.storage.listing_count.read();
+        let mut params = self.storage.params.read();
+        let listing_id = params.listing_count;
         let lid = listing_id as Field;
-        self.storage.l_proposer.at(lid).write(caller);
-        self.storage.l_ask_eur.at(lid).write(ask_eur);
-        self.storage.l_market_rent_ref_eur.at(lid).write(market_rent_ref_eur);
-        self.storage.l_dossier_hash.at(lid).write(dossier_hash);
-        self.storage.l_status.at(lid).write(LISTING_SUBMITTED);
-        self.storage.listing_count.write(listing_id + 1);
+        self.storage.listings.at(lid).write(Listing {
+            proposer: caller,
+            ask_eur,
+            market_rent_ref_eur,
+            dossier_hash,
+            status: LISTING_SUBMITTED,
+            score_sum: 0,
+            approvals: 0,
+        });
+        params.listing_count = listing_id + 1;
+        self.storage.params.write(params);
         listing_id
     }
 
@@ -291,17 +336,15 @@ pub contract Governance {
     #[external("public")]
     fn council_approve(listing_id: u32, quality_score: u32) {
         let caller = self.msg_sender();
-        let kyc_contract = KYCVerifier::at(self.storage.kyc_verifier.read());
+        let kyc_contract = KYCVerifier::at(self.storage.links.read().kyc_verifier);
         assert(self.view(kyc_contract.is_council(caller)), "council role required");
-        assert(listing_id < self.storage.listing_count.read(), "unknown listing");
+        let params = self.storage.params.read();
+        assert(listing_id < params.listing_count, "unknown listing");
         assert(quality_score <= MAX_QUALITY_SCORE, "score above 100");
 
         let lid = listing_id as Field;
-        assert_eq(
-            self.storage.l_status.at(lid).read(),
-            LISTING_SUBMITTED,
-            "listing not under review",
-        );
+        let mut listing = self.storage.listings.at(lid).read();
+        assert_eq(listing.status, LISTING_SUBMITTED, "listing not under review");
 
         // One approval per (listing, councillor).
         let guard_key = poseidon2_hash([lid, caller.to_field()]);
@@ -311,15 +354,13 @@ pub contract Governance {
         );
         self.storage.l_council_approved.at(guard_key).write(true);
 
-        let approvals = self.storage.l_approvals.at(lid).read() + 1;
-        self.storage.l_approvals.at(lid).write(approvals);
-        self.storage.l_score_sum.at(lid).write(
-            self.storage.l_score_sum.at(lid).read() + quality_score as u64,
-        );
+        listing.approvals += 1;
+        listing.score_sum += quality_score as u64;
 
-        if approvals >= self.storage.min_council_approvals.read() {
-            self.storage.l_status.at(lid).write(LISTING_COUNCIL_APPROVED);
+        if listing.approvals >= params.min_council_approvals {
+            listing.status = LISTING_COUNCIL_APPROVED;
         }
+        self.storage.listings.at(lid).write(listing);
     }
 
     /// J2: a single council rejection is final (fail-closed; the owner can
@@ -327,17 +368,15 @@ pub contract Governance {
     #[external("public")]
     fn council_reject(listing_id: u32) {
         let caller = self.msg_sender();
-        let kyc_contract = KYCVerifier::at(self.storage.kyc_verifier.read());
+        let kyc_contract = KYCVerifier::at(self.storage.links.read().kyc_verifier);
         assert(self.view(kyc_contract.is_council(caller)), "council role required");
-        assert(listing_id < self.storage.listing_count.read(), "unknown listing");
+        assert(listing_id < self.storage.params.read().listing_count, "unknown listing");
 
         let lid = listing_id as Field;
-        assert_eq(
-            self.storage.l_status.at(lid).read(),
-            LISTING_SUBMITTED,
-            "listing not under review",
-        );
-        self.storage.l_status.at(lid).write(LISTING_REJECTED);
+        let mut listing = self.storage.listings.at(lid).read();
+        assert_eq(listing.status, LISTING_SUBMITTED, "listing not under review");
+        listing.status = LISTING_REJECTED;
+        self.storage.listings.at(lid).write(listing);
     }
 
     /// J1: open the investor vote on a council-approved listing. The capital
@@ -350,35 +389,37 @@ pub contract Governance {
     ) -> pub u32 {
         let caller = self.msg_sender();
         assert(!caller.is_zero(), "invalid caller");
-        let kyc_contract = KYCVerifier::at(self.storage.kyc_verifier.read());
+        let kyc_contract = KYCVerifier::at(self.storage.links.read().kyc_verifier);
         assert(self.view(kyc_contract.is_investor(caller)), "investor role required");
-        assert(listing_id < self.storage.listing_count.read(), "unknown listing");
+        let mut params = self.storage.params.read();
+        assert(listing_id < params.listing_count, "unknown listing");
 
         let lid = listing_id as Field;
-        assert_eq(
-            self.storage.l_status.at(lid).read(),
-            LISTING_COUNCIL_APPROVED,
-            "listing not council-approved",
-        );
+        let mut listing = self.storage.listings.at(lid).read();
+        assert_eq(listing.status, LISTING_COUNCIL_APPROVED, "listing not council-approved");
 
-        let amount = self.storage.l_ask_eur.at(lid).read();
-        let proposal_id = self.storage.proposal_count.read();
+        let amount = listing.ask_eur;
+        let proposal_id = params.proposal_count;
         let pid = proposal_id as Field;
         let created_block = self.context.block_number();
-        let deadline_block = created_block + self.storage.voting_window_blocks.read();
+        let deadline_block = created_block + params.voting_window_blocks;
 
-        self.storage.p_desc_hash.at(pid).write(description_hash);
-        self.storage.p_amount.at(pid).write(amount);
-        self.storage.p_yes_votes.at(pid).write(0);
-        self.storage.p_no_votes.at(pid).write(0);
-        self.storage.p_status.at(pid).write(STATUS_ACTIVE);
-        self.storage.p_proposer.at(pid).write(caller);
-        self.storage.p_created_block.at(pid).write(created_block);
-        self.storage.p_deadline_block.at(pid).write(deadline_block);
-        self.storage.p_listing_id_plus_one.at(pid).write(listing_id + 1);
+        self.storage.proposals.at(pid).write(Proposal {
+            desc_hash: description_hash,
+            amount,
+            yes_votes: 0,
+            no_votes: 0,
+            status: STATUS_ACTIVE,
+            proposer: caller,
+            created_block,
+            deadline_block,
+            listing_id_plus_one: listing_id + 1,
+        });
 
-        self.storage.proposal_count.write(proposal_id + 1);
-        self.storage.l_status.at(lid).write(LISTING_PROPOSED);
+        params.proposal_count = proposal_id + 1;
+        self.storage.params.write(params);
+        listing.status = LISTING_PROPOSED;
+        self.storage.listings.at(lid).write(listing);
         proposal_id
     }
 
@@ -466,36 +507,30 @@ pub contract Governance {
         deposit_note_contract: AztecAddress,
         credential_commitment: Field,
     ) {
-        let kyc_addr = self.storage.kyc_verifier.read();
+        let links = self.storage.links.read();
+        let kyc_addr = links.kyc_verifier;
         assert(kyc_note_contract == kyc_addr, "kyc note from wrong contract");
-        let housing_fund_addr = self.storage.housing_fund.read();
-        assert(deposit_note_contract == housing_fund_addr, "deposit note from wrong contract");
+        assert(deposit_note_contract == links.housing_fund, "deposit note from wrong contract");
         let kyc = KYCVerifier::at(kyc_addr);
         let revoked = self.view(kyc.is_credential_revoked(credential_commitment));
         assert(!revoked, "credential revoked");
 
         let pid = proposal_id as Field;
-        assert(
-            self.storage.p_status.at(pid).read() == STATUS_ACTIVE,
-            "proposal is not active",
-        );
+        let mut proposal = self.storage.proposals.at(pid).read();
+        assert(proposal.status == STATUS_ACTIVE, "proposal is not active");
         // A proposal stays ACTIVE until someone manually finalizes it, so the
         // STATUS_ACTIVE gate alone would let a voter wait for the observable
         // yes/no split and then cast a decisive vote after the window closed.
         // Reject any tally past the deadline (finalize requires block >= deadline,
         // so the voting window is exactly [created, deadline)).
-        assert(
-            self.context.block_number() < self.storage.p_deadline_block.at(pid).read(),
-            "voting window closed",
-        );
+        assert(self.context.block_number() < proposal.deadline_block, "voting window closed");
 
         if vote_yes {
-            let current = self.storage.p_yes_votes.at(pid).read();
-            self.storage.p_yes_votes.at(pid).write(current + 1);
+            proposal.yes_votes += 1;
         } else {
-            let current = self.storage.p_no_votes.at(pid).read();
-            self.storage.p_no_votes.at(pid).write(current + 1);
+            proposal.no_votes += 1;
         }
+        self.storage.proposals.at(pid).write(proposal);
     }
 
     // -- Finalize a proposal ----------------------------------------------
@@ -503,38 +538,37 @@ pub contract Governance {
     #[external("public")]
     fn finalize_proposal(proposal_id: u32) {
         let pid = proposal_id as Field;
-        assert(
-            self.storage.p_status.at(pid).read() == STATUS_ACTIVE,
-            "proposal is not active",
-        );
+        let mut proposal = self.storage.proposals.at(pid).read();
+        assert(proposal.status == STATUS_ACTIVE, "proposal is not active");
 
         let current_block = self.context.block_number();
-        let deadline_block = self.storage.p_deadline_block.at(pid).read();
-        assert(current_block >= deadline_block, "voting window still open");
+        assert(current_block >= proposal.deadline_block, "voting window still open");
 
-        let yes_votes = self.storage.p_yes_votes.at(pid).read();
-        let no_votes = self.storage.p_no_votes.at(pid).read();
-        let quorum = self.storage.min_quorum_votes.read();
+        let yes_votes = proposal.yes_votes;
+        let no_votes = proposal.no_votes;
+        let mut params = self.storage.params.read();
 
-        assert(yes_votes + no_votes >= quorum, "quorum not reached");
+        assert(yes_votes + no_votes >= params.min_quorum_votes, "quorum not reached");
 
         // Strict-majority rule: a proposal PASSES only with strictly more YES
         // than NO votes. A tie (yes == no) falls into the `else` branch and
         // resolves to FAILED -- the proposer must clear, not merely meet, the
         // opposition. (L33)
         if yes_votes > no_votes {
-            self.storage.p_status.at(pid).write(STATUS_PASSED);
+            proposal.status = STATUS_PASSED;
             // J4: listing-backed proposals queue for priority matching instead
             // of ad-hoc admin execution. Legacy direct proposals keep the
             // admin execute_proposal path.
-            if self.storage.p_listing_id_plus_one.at(pid).read() > 0 {
-                let tail = self.storage.fq_tail.read();
+            if proposal.listing_id_plus_one > 0 {
+                let tail = params.fq_tail;
                 self.storage.fq_pids.at(tail as Field).write(proposal_id);
-                self.storage.fq_tail.write(tail + 1);
+                params.fq_tail = tail + 1;
+                self.storage.params.write(params);
             }
         } else {
-            self.storage.p_status.at(pid).write(STATUS_FAILED);
+            proposal.status = STATUS_FAILED;
         }
+        self.storage.proposals.at(pid).write(proposal);
     }
 
     // -- J4: funding-queue primitives for HousingFund.match_next --------------
@@ -546,19 +580,19 @@ pub contract Governance {
     #[external("public")]
     #[view]
     fn get_funding_queue_head_public() -> pub u32 {
-        self.storage.fq_head.read()
+        self.storage.params.read().fq_head
     }
 
     #[external("public")]
     #[view]
     fn get_funding_queue_tail_public() -> pub u32 {
-        self.storage.fq_tail.read()
+        self.storage.params.read().fq_tail
     }
 
     #[external("public")]
     #[view]
     fn get_funding_queue_entry_public(index: u32) -> pub u32 {
-        assert(index < self.storage.fq_tail.read(), "queue index out of range");
+        assert(index < self.storage.params.read().fq_tail, "queue index out of range");
         self.storage.fq_pids.at(index as Field).read()
     }
 
@@ -573,22 +607,21 @@ pub contract Governance {
     #[view]
     fn get_proposal_priority_public(proposal_id: u32) -> pub u64 {
         let pid = proposal_id as Field;
-        let listing_plus_one = self.storage.p_listing_id_plus_one.at(pid).read();
+        let proposal = self.storage.proposals.at(pid).read();
+        let listing_plus_one = proposal.listing_id_plus_one;
         assert(listing_plus_one > 0, "proposal has no listing");
         let lid = (listing_plus_one - 1) as Field;
+        let listing = self.storage.listings.at(lid).read();
 
-        let approvals = self.storage.l_approvals.at(lid).read();
-        let score = if approvals > 0 {
-            (self.storage.l_score_sum.at(lid).read() / approvals as u64)
-        } else {
-            0
-        };
+        let approvals = listing.approvals;
+        let score = if approvals > 0 { (listing.score_sum / approvals as u64) } else { 0 };
 
         let mut discount: u64 = 0;
-        if self.storage.p_covenant_set.at(pid).read() {
-            let market_rent_ref = self.storage.l_market_rent_ref_eur.at(lid).read();
-            let ask = self.storage.p_amount.at(pid).read();
-            let ceiling_bps = self.storage.p_rent_ceiling_bps.at(pid).read();
+        let covenant = self.storage.covenants.at(pid).read();
+        if covenant.is_set {
+            let market_rent_ref = listing.market_rent_ref_eur;
+            let ask = proposal.amount;
+            let ceiling_bps = covenant.rent_ceiling_bps;
             let ceiling_monthly = ((ask * ceiling_bps as u64) / 10000) / 12;
             let baseline_cap =
                 (market_rent_ref * (10000 - AFFORDABILITY_BASELINE_BPS)) / 10000;
@@ -611,20 +644,19 @@ pub contract Governance {
     fn mark_matched(proposal_id: u32, new_head: u32) {
         assert_eq(
             self.msg_sender(),
-            self.storage.housing_fund.read(),
+            self.storage.links.read().housing_fund,
             "only the housing fund can match",
         );
         let pid = proposal_id as Field;
-        assert(
-            self.storage.p_status.at(pid).read() == STATUS_PASSED,
-            "proposal must be in PASSED state",
-        );
-        self.storage.p_status.at(pid).write(STATUS_EXECUTED);
+        let mut proposal = self.storage.proposals.at(pid).read();
+        assert(proposal.status == STATUS_PASSED, "proposal must be in PASSED state");
+        proposal.status = STATUS_EXECUTED;
+        self.storage.proposals.at(pid).write(proposal);
 
-        let head = self.storage.fq_head.read();
-        let tail = self.storage.fq_tail.read();
-        assert((new_head >= head) & (new_head <= tail), "invalid queue head");
-        self.storage.fq_head.write(new_head);
+        let mut params = self.storage.params.read();
+        assert((new_head >= params.fq_head) & (new_head <= params.fq_tail), "invalid queue head");
+        params.fq_head = new_head;
+        self.storage.params.write(params);
     }
 
     // -- Execute a passed proposal (marks as EXECUTED, triggers FSFT mint) ----
@@ -637,14 +669,15 @@ pub contract Governance {
         // execution is an authorized action: it triggers the downstream FSFT
         // mint / distribution, so an unauthenticated PASSED->EXECUTED flip must
         // be impossible.
-        assert_eq(self.msg_sender(), self.storage.admin.read(), "not admin");
+        assert_eq(self.msg_sender(), self.storage.links.read().admin, "not admin");
 
         let pid = proposal_id as Field;
 
-        let status = self.storage.p_status.at(pid).read();
-        assert(status == STATUS_PASSED, "proposal must be in PASSED state");
+        let mut proposal = self.storage.proposals.at(pid).read();
+        assert(proposal.status == STATUS_PASSED, "proposal must be in PASSED state");
 
-        self.storage.p_status.at(pid).write(STATUS_EXECUTED);
+        proposal.status = STATUS_EXECUTED;
+        self.storage.proposals.at(pid).write(proposal);
     }
 
     // -- W1: attach the affordability covenant (a votable proposal term) ------
@@ -665,14 +698,11 @@ pub contract Governance {
         target_group: Field,
     ) {
         let pid = proposal_id as Field;
-        assert_eq(
-            self.msg_sender(),
-            self.storage.p_proposer.at(pid).read(),
-            "only the proposer can attach a covenant",
-        );
-        assert(self.storage.p_status.at(pid).read() == STATUS_ACTIVE, "proposal is not active");
-        assert(!self.storage.p_covenant_set.at(pid).read(), "covenant already set");
-        let cast = self.storage.p_yes_votes.at(pid).read() + self.storage.p_no_votes.at(pid).read();
+        let proposal = self.storage.proposals.at(pid).read();
+        assert_eq(self.msg_sender(), proposal.proposer, "only the proposer can attach a covenant");
+        assert(proposal.status == STATUS_ACTIVE, "proposal is not active");
+        assert(!self.storage.covenants.at(pid).read().is_set, "covenant already set");
+        let cast = proposal.yes_votes + proposal.no_votes;
         assert(cast == 0, "covenant must be set before voting begins");
 
         // Sane bounds: a positive ceiling no greater than 100%/yr and a finite lock.
@@ -691,81 +721,81 @@ pub contract Governance {
         // (listing_plus_one == 0) and skip the check -- they are retired with
         // the direct path. Integer bps math per house rules; u64 products are
         // safe (ask <= ~1.8e15 EUR before ask * ceiling_bps could overflow).
-        let listing_plus_one = self.storage.p_listing_id_plus_one.at(pid).read();
+        let listing_plus_one = proposal.listing_id_plus_one;
         if listing_plus_one > 0 {
             let lid = (listing_plus_one - 1) as Field;
-            let market_rent_ref = self.storage.l_market_rent_ref_eur.at(lid).read();
-            let ask = self.storage.p_amount.at(pid).read();
+            let market_rent_ref = self.storage.listings.at(lid).read().market_rent_ref_eur;
+            let ask = proposal.amount;
             let ceiling_monthly = ((ask * rent_ceiling_bps as u64) / 10000) / 12;
             let baseline_cap = (market_rent_ref * (10000 - AFFORDABILITY_BASELINE_BPS)) / 10000;
             assert(ceiling_monthly <= baseline_cap, "covenant above affordability baseline");
         }
 
-        self.storage.p_rent_ceiling_bps.at(pid).write(rent_ceiling_bps);
-        self.storage.p_lock_years.at(pid).write(lock_years);
-        self.storage.p_target_group.at(pid).write(target_group);
-        self.storage.p_covenant_set.at(pid).write(true);
+        self.storage.covenants.at(pid).write(Covenant {
+            rent_ceiling_bps,
+            lock_years,
+            target_group,
+            is_set: true,
+        });
     }
 
     // -- View functions ---------------------------------------------------
 
     #[external("utility")]
     unconstrained fn get_proposal_count() -> pub u32 {
-        self.storage.proposal_count.read()
+        self.storage.params.read().proposal_count
     }
 
     #[external("utility")]
     unconstrained fn get_proposal(proposal_id: u32) -> pub ProposalView {
-        let pid = proposal_id as Field;
+        let p = self.storage.proposals.at(proposal_id as Field).read();
         ProposalView {
-            desc_hash: self.storage.p_desc_hash.at(pid).read(),
-            amount: self.storage.p_amount.at(pid).read(),
-            yes_votes: self.storage.p_yes_votes.at(pid).read(),
-            no_votes: self.storage.p_no_votes.at(pid).read(),
-            status: self.storage.p_status.at(pid).read(),
-            created_block: self.storage.p_created_block.at(pid).read(),
-            deadline_block: self.storage.p_deadline_block.at(pid).read(),
+            desc_hash: p.desc_hash,
+            amount: p.amount,
+            yes_votes: p.yes_votes,
+            no_votes: p.no_votes,
+            status: p.status,
+            created_block: p.created_block,
+            deadline_block: p.deadline_block,
         }
     }
 
     #[external("utility")]
     unconstrained fn get_proposal_status(proposal_id: u32) -> pub u8 {
-        let pid = proposal_id as Field;
-        self.storage.p_status.at(pid).read()
+        self.storage.proposals.at(proposal_id as Field).read().status
     }
 
     #[external("utility")]
     unconstrained fn get_proposal_covenant(proposal_id: u32) -> pub CovenantView {
-        let pid = proposal_id as Field;
+        let c = self.storage.covenants.at(proposal_id as Field).read();
         CovenantView {
-            rent_ceiling_bps: self.storage.p_rent_ceiling_bps.at(pid).read(),
-            lock_years: self.storage.p_lock_years.at(pid).read(),
-            target_group: self.storage.p_target_group.at(pid).read(),
-            is_set: self.storage.p_covenant_set.at(pid).read(),
+            rent_ceiling_bps: c.rent_ceiling_bps,
+            lock_years: c.lock_years,
+            target_group: c.target_group,
+            is_set: c.is_set,
         }
     }
 
     /// J1: number of listings ever submitted (ids are 0..count).
     #[external("utility")]
     unconstrained fn get_listing_count() -> pub u32 {
-        self.storage.listing_count.read()
+        self.storage.params.read().listing_count
     }
 
     /// J1/J2: full listing view. `quality_score` is the floor average of
     /// council scores so far (0 until the first approval).
     #[external("utility")]
     unconstrained fn get_listing(listing_id: u32) -> pub ListingView {
-        let lid = listing_id as Field;
-        let approvals = self.storage.l_approvals.at(lid).read();
-        let score_sum = self.storage.l_score_sum.at(lid).read();
+        let l = self.storage.listings.at(listing_id as Field).read();
+        let approvals = l.approvals;
         let quality_score =
-            if approvals > 0 { (score_sum / approvals as u64) as u32 } else { 0 };
+            if approvals > 0 { (l.score_sum / approvals as u64) as u32 } else { 0 };
         ListingView {
-            proposer: self.storage.l_proposer.at(lid).read(),
-            ask_eur: self.storage.l_ask_eur.at(lid).read(),
-            market_rent_ref_eur: self.storage.l_market_rent_ref_eur.at(lid).read(),
-            dossier_hash: self.storage.l_dossier_hash.at(lid).read(),
-            status: self.storage.l_status.at(lid).read(),
+            proposer: l.proposer,
+            ask_eur: l.ask_eur,
+            market_rent_ref_eur: l.market_rent_ref_eur,
+            dossier_hash: l.dossier_hash,
+            status: l.status,
             approvals,
             quality_score,
         }
@@ -775,21 +805,19 @@ pub contract Governance {
     /// was created via the legacy direct path and has no listing).
     #[external("utility")]
     unconstrained fn get_proposal_listing_id_plus_one(proposal_id: u32) -> pub u32 {
-        self.storage.p_listing_id_plus_one.at(proposal_id as Field).read()
+        self.storage.proposals.at(proposal_id as Field).read().listing_id_plus_one
     }
 
     #[external("public")]
     #[view]
     fn get_proposal_status_public(proposal_id: u32) -> pub u8 {
-        let pid = proposal_id as Field;
-        self.storage.p_status.at(pid).read()
+        self.storage.proposals.at(proposal_id as Field).read().status
     }
 
     #[external("public")]
     #[view]
     fn get_proposal_amount_public(proposal_id: u32) -> pub u64 {
-        let pid = proposal_id as Field;
-        self.storage.p_amount.at(pid).read()
+        self.storage.proposals.at(proposal_id as Field).read().amount
     }
 
     // W1b: public covenant accessors so HousingFund (and other contracts) can read
@@ -802,31 +830,28 @@ pub contract Governance {
     #[external("public")]
     #[view]
     fn get_proposal_covenant_set_public(proposal_id: u32) -> pub bool {
-        let pid = proposal_id as Field;
-        self.storage.p_covenant_set.at(pid).read()
+        self.storage.covenants.at(proposal_id as Field).read().is_set
     }
 
     #[external("public")]
     #[view]
     fn get_proposal_rent_ceiling_bps_public(proposal_id: u32) -> pub u32 {
-        let pid = proposal_id as Field;
-        self.storage.p_rent_ceiling_bps.at(pid).read()
+        self.storage.covenants.at(proposal_id as Field).read().rent_ceiling_bps
     }
 
     #[external("public")]
     #[view]
     fn get_proposal_lock_years_public(proposal_id: u32) -> pub u32 {
-        let pid = proposal_id as Field;
-        self.storage.p_lock_years.at(pid).read()
+        self.storage.covenants.at(proposal_id as Field).read().lock_years
     }
 
     #[external("utility")]
     unconstrained fn get_voting_window_blocks() -> pub u32 {
-        self.storage.voting_window_blocks.read()
+        self.storage.params.read().voting_window_blocks
     }
 
     #[external("utility")]
     unconstrained fn get_min_quorum_votes() -> pub u32 {
-        self.storage.min_quorum_votes.read()
+        self.storage.params.read().min_quorum_votes
     }
 }

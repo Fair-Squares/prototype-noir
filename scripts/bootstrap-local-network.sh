@@ -2,7 +2,10 @@
 # Fair Squares -- Bootstrap: compile, deploy, and wire all Noir contracts.
 #
 # Runs inside the aztec-bootstrap Docker container with the same Aztec image
-# that provides nargo, aztec, and aztec-wallet CLI tools.
+# that provides nargo, bb, the aztec CLI and the @aztec-labs/* SDK packages.
+# Compiles run as a parallel pool (section 2); deploy + wiring + demo seed are
+# ONE node process running scripts/local-deploy.ts against the image's own SDK
+# packages (section 3) -- no per-tx aztec-wallet process, no npm install.
 #
 # Outputs:
 #   /out/.env.contracts   -- env file consumed by the frontend container
@@ -10,7 +13,9 @@
 
 set -eu
 
-ROOT_DIR="/workspace"
+# /workspace inside the aztec-bootstrap container; FS_BOOTSTRAP_ROOT lets the
+# compile stage be exercised against a checkout on a host with the aztec CLI.
+ROOT_DIR="${FS_BOOTSTRAP_ROOT:-/workspace}"
 OUT_DIR="${OUT_DIR:-/out}"
 AZTEC_NODE_URL="${AZTEC_NODE_URL:-http://aztec:8080}"
 GOVERNANCE_VOTING_WINDOW_BLOCKS="${GOVERNANCE_VOTING_WINDOW_BLOCKS:-300}"
@@ -18,9 +23,14 @@ GOVERNANCE_MIN_QUORUM_VOTES="${GOVERNANCE_MIN_QUORUM_VOTES:-2}"
 DEX_PRICE_BAND_BPS="${DEX_PRICE_BAND_BPS:-200}"
 DEX_MAX_TTL_BLOCKS="${DEX_MAX_TTL_BLOCKS:-120}"
 PROTOCOL_REWARDS_CLAIM_MIN="${PROTOCOL_REWARDS_CLAIM_MIN:-1}"
-BOOTSTRAP_RETRY_ATTEMPTS="${BOOTSTRAP_RETRY_ATTEMPTS:-8}"
-BOOTSTRAP_RETRY_DELAY_SECONDS="${BOOTSTRAP_RETRY_DELAY_SECONDS:-6}"
+# Wallet tuning handed to scripts/local-deploy.ts (see its header): fee cap
+# headroom for the local network's volatile min fees, and the tx status every
+# deploy/send is awaited to before the next dependent one is sent. The ~26
+# bootstrap txs are strictly serial, so mirror the upstream local-network setup
+# and wait for the L1 checkpoint ("checkpointed"); with the AutomineSequencer
+# that is published in the same build, well under a second per tx.
 WALLET_MIN_FEE_PADDING="${WALLET_MIN_FEE_PADDING:-30}"
+BOOTSTRAP_WAIT_FOR_STATUS="${BOOTSTRAP_WAIT_FOR_STATUS:-checkpointed}"
 
 CONTRACTS="kyc_verifier defi_vault housing_fund governance fsft_dex protocol_rewards"
 # Phase 3: FSFT, EUR, and ProtocolToken are ALL instances of the vendored AIP-20
@@ -36,16 +46,34 @@ STANDARD_CONTRACTS="token_contract dripper nft_contract"
 
 # -- Binary paths (Aztec image doesn't put these in PATH) ---------------------
 # aztec CLI: the main node entrypoint
-AZTEC_BIN="node --no-warnings /usr/src/yarn-project/aztec/dest/bin/index.js"
-# aztec-wallet: separate package for deploying/sending txs
-AZTEC_WALLET_BIN="node --no-warnings /usr/src/yarn-project/cli-wallet/dest/bin/index.js"
+AZTEC_BIN="${AZTEC_BIN:-node --no-warnings /usr/src/yarn-project/aztec/dest/bin/index.js}"
+# The image's own @aztec-labs/* SDK packages (yarn workspace node_modules). The
+# deploy step resolves its imports from here so the SDK is exactly the node's
+# version; FS_DEPLOY_NODE_MODULES overrides it for host runs.
+IMAGE_NODE_MODULES="/usr/src/yarn-project/node_modules"
 # aztec-nargo: Aztec wrapper for Noir compile/test flows (preferred over raw nargo)
 AZTEC_NARGO_BIN="$(command -v aztec-nargo 2>/dev/null || true)"
-# nargo: Noir compiler (aztec fork)
-NARGO_BIN="/usr/src/noir/noir-repo/target/release/nargo"
-# bb: barretenberg binary — handles AVM transpilation + VK generation
-# Docker image has bb-avm, local installs may have bb — try both
-if [ -x "/usr/src/barretenberg/cpp/build/bin/bb-avm" ]; then
+# nargo: Noir compiler. The v6 image (azteclabs/aztec, built from
+# aztec-labs-eng/aztec-node) ships the pinned noir + bb binaries under
+# /usr/src/labs-aztec-toolchain/bin; the pre-v6 aztecprotocol/aztec images
+# kept them in the noir / barretenberg build dirs. Probe both layouts.
+TOOLCHAIN_BIN="/usr/src/labs-aztec-toolchain/bin"
+if [ -x "$TOOLCHAIN_BIN/nargo" ]; then
+  NARGO_BIN="$TOOLCHAIN_BIN/nargo"
+elif [ -x "/usr/src/noir/noir-repo/target/release/nargo" ]; then
+  NARGO_BIN="/usr/src/noir/noir-repo/target/release/nargo"
+else
+  # Outside the image (FS_BOOTSTRAP_ROOT host runs): whatever nargo is on PATH.
+  NARGO_BIN=$(command -v nargo 2>/dev/null || echo "")
+fi
+[ -n "$NARGO_BIN" ] || { echo "[bootstrap] FATAL: nargo binary not found" >&2; exit 1; }
+# bb: barretenberg binary — handles AVM transpilation + VK generation.
+# Docker images ship bb-avm (the AVM-enabled build); fall back to bb.
+if [ -x "$TOOLCHAIN_BIN/bb-avm" ]; then
+  BB_BIN="$TOOLCHAIN_BIN/bb-avm"
+elif [ -x "$TOOLCHAIN_BIN/bb" ]; then
+  BB_BIN="$TOOLCHAIN_BIN/bb"
+elif [ -x "/usr/src/barretenberg/cpp/build/bin/bb-avm" ]; then
   BB_BIN="/usr/src/barretenberg/cpp/build/bin/bb-avm"
 elif [ -x "/usr/src/barretenberg/cpp/build/bin/bb" ]; then
   BB_BIN="/usr/src/barretenberg/cpp/build/bin/bb"
@@ -54,15 +82,22 @@ else
 fi
 [ -z "$BB_BIN" ] && { log "FATAL: bb/bb-avm binary not found"; exit 1; }
 
-# Ensure nargo is on PATH so `aztec compile` (which shells out to bare `nargo`)
-# can find it. The 4.3.0 Docker image ships nargo in the Noir release dir but
-# does NOT add it to PATH, so the CLI's spawn('nargo', ...) fails with ENOENT.
+# `aztec compile` resolves nargo/bb from the NARGO / BB env vars first (v6) and
+# otherwise shells out to bare `nargo` / `bb` on PATH. The images do NOT put the
+# toolchain on PATH, so export both forms.
 if [ -x "$NARGO_BIN" ]; then
+  export NARGO="$NARGO_BIN"
   case ":$PATH:" in
     *":$(dirname "$NARGO_BIN"):"*) ;;
     *) export PATH="$(dirname "$NARGO_BIN"):$PATH" ;;
   esac
 fi
+export BB="$BB_BIN"
+
+# The Aztec stack version baked into this image, stamped into raw-nargo
+# artifacts (see compile_standards) so codegen output type-checks.
+AZTEC_VERSION="$($AZTEC_BIN --version 2>/dev/null | tail -1 | tr -d '[:space:]' || true)"
+[ -n "$AZTEC_VERSION" ] || AZTEC_VERSION="$(tr -d '[:space:]' < "${ROOT_DIR}/.aztec-version")"
 
 # -- Helpers -------------------------------------------------------------------
 
@@ -83,6 +118,9 @@ artifact_is_fresh() {
   [ -z "$newest_artifact" ] && return 1
   # Any source newer than the artifact -> stale.
   [ -n "$(find "$src_dir" \( -name '*.nr' -o -name 'Nargo.toml' \) -newer "$newest_artifact" 2>/dev/null | head -1)" ] && return 1
+  # A raw `nargo compile` leftover (no AVM bytecode / VKs) is not deployable;
+  # treat it as stale so the transpile step runs.
+  grep -q '"transpiled":[[:space:]]*true' "$newest_artifact" || return 1
   return 0
 }
 
@@ -92,80 +130,21 @@ require_value() {
   [ -n "$value" ] || die "Missing required value: ${label}"
 }
 
-is_retryable_wallet_error() {
-  printf '%s' "$1" | grep -qE \
-    'maxFeesPerGas\.feePerL2Gas|Timeout awaiting isMined|ECONNREFUSED|fetch failed|socket hang up|429|503|temporarily unavailable'
-}
-
-wallet_send_with_retries() {
-  local mode=$1
-  local label=$2
-  shift 2
-
-  local attempt=1
-  local output=""
-  local rc=0
-  while [ "$attempt" -le "$BOOTSTRAP_RETRY_ATTEMPTS" ]; do
-    log "${label} (attempt ${attempt}/${BOOTSTRAP_RETRY_ATTEMPTS})..."
-    set +e
-    output=$("$@" 2>&1)
-    rc=$?
-    set -e
-    printf '%s\n' "$output" >&2
-
-    if [ "$rc" -eq 0 ]; then
-      return 0
-    fi
-
-    if [ "$attempt" -lt "$BOOTSTRAP_RETRY_ATTEMPTS" ] && is_retryable_wallet_error "$output"; then
-      log "Retryable wallet error for ${label}; sleeping ${BOOTSTRAP_RETRY_DELAY_SECONDS}s"
-      sleep "$BOOTSTRAP_RETRY_DELAY_SECONDS"
-      attempt=$((attempt + 1))
-      continue
-    fi
-    break
-  done
-
-  if [ "$mode" = "required" ]; then
-    die "${label} failed after ${BOOTSTRAP_RETRY_ATTEMPTS} attempts"
-  fi
-  log "WARN: ${label} failed after ${BOOTSTRAP_RETRY_ATTEMPTS} attempts"
-  return 1
-}
-
-# Aztec's cli-wallet doesn't ship with 'inquirer' in the Docker image.
-# Create a minimal ESM shim so the module resolves without error.
-fix_inquirer() {
-  INQDIR="/usr/src/yarn-project/node_modules/inquirer"
-  if [ ! -d "$INQDIR" ]; then
-    log "Patching missing inquirer dependency..."
-    mkdir -p "$INQDIR"
-    printf '{"name":"inquirer","version":"9.2.0","type":"module","exports":{".":{"import":"./index.js"}}}\n' \
-      > "$INQDIR/package.json"
-    printf 'const p=async()=>({});export default {prompt:p};export const prompt=p;\n' \
-      > "$INQDIR/index.js"
-    log "inquirer shim installed"
-  fi
-}
-
-# In this Aztec image version, cli-wallet computes max fees from current min fees
-# using a fixed padding constant. During bootstrap that can be too low and cause
-# "maxFeesPerGas.feePerL2Gas ... must be >= gasFees.feePerL2Gas" failures.
-# Patch the runtime constant to provide enough headroom for local-network spikes.
-fix_wallet_fee_padding() {
-  fee_file="/usr/src/yarn-project/cli-wallet/dest/utils/constants.js"
-  if [ ! -f "$fee_file" ]; then
-    log "WARN: cli-wallet fee constants file not found at ${fee_file}"
-    return
-  fi
-
-  if ! grep -q 'export const MIN_FEE_PADDING' "$fee_file"; then
-    log "WARN: MIN_FEE_PADDING constant not found in cli-wallet constants"
-    return
-  fi
-
-  sed -i -E "s/export const MIN_FEE_PADDING = [0-9.]+;/export const MIN_FEE_PADDING = ${WALLET_MIN_FEE_PADDING};/" "$fee_file"
-  log "Set cli-wallet MIN_FEE_PADDING=${WALLET_MIN_FEE_PADDING}"
+# Post-process a compiled artifact in place: strip the __aztec_nr_internals__
+# prefix the #[aztec] macro adds to function names (public_dispatch + the SDK
+# look functions up by their EXTERNAL names) and stamp aztec_version when a raw
+# `nargo compile` omitted it. Uses node: the release image is a minimal
+# ubuntu:noble with nodejs only (no python3), and node is also on every host.
+fix_artifact() { # fix_artifact <json_file> <aztec_version>
+  node -e '
+    const fs = require("fs");
+    const [file, version] = process.argv.slice(1);
+    const d = JSON.parse(fs.readFileSync(file, "utf8"));
+    for (const fn of d.functions ?? []) fn.name = fn.name.replace(/^__aztec_nr_internals__/, "");
+    if (!d.aztec_version) d.aztec_version = version;
+    fs.writeFileSync(file, JSON.stringify(d));
+    console.log(`Patched functions + aztec_version in ${file}`);
+  ' "$1" "$2"
 }
 
 # -- 1. Wait for PXE ----------------------------------------------------------
@@ -185,86 +164,163 @@ wait_for_pxe() {
 }
 
 # -- 2. Compile contracts ------------------------------------------------------
+# nargo is single-threaded (~45 s and ~0.45 GB RSS for housing_fund on the v6
+# toolchain; the bb transpile + VK generation that follows adds ~1 s), so the
+# nine contract compiles run as a bounded pool of background jobs, one per core
+# by default (BOOTSTRAP_COMPILE_JOBS overrides). The FIRST compile that is
+# actually needed runs in the foreground: it populates nargo's git-dependency
+# cache (~/nargo/github.com/...), which concurrent first-time clones of the same
+# dependency would race on. Each job logs to its own file, replayed on failure,
+# so output never interleaves. Nothing downstream needs an artifact before
+# `finish_compiles` has waited for the whole pool.
+BOOTSTRAP_COMPILE_JOBS="${BOOTSTRAP_COMPILE_JOBS:-$(nproc 2>/dev/null || echo 2)}"
+COMPILE_LOG_DIR=/tmp/fs-bootstrap/compile
+JOB_PIDS=()
+JOB_NAMES=()
+JOB_STARTS=()
+_dep_cache_warm=0
+_standards_compiled=0
+
+run_compile_job() { # run_compile_job <name> <function> [args...]
+  local name=$1; shift
+  mkdir -p "$COMPILE_LOG_DIR"
+  if [ "$_dep_cache_warm" = 0 ]; then
+    local t0=$SECONDS
+    log "Compiling ${name} (foreground: warms the nargo dependency cache)..."
+    if ! ( "$@" ) > "$COMPILE_LOG_DIR/${name}.log" 2>&1; then
+      cat "$COMPILE_LOG_DIR/${name}.log" >&2
+      die "${name} failed to compile"
+    fi
+    _dep_cache_warm=1
+    log "Compiled ${name} in $((SECONDS - t0)) s"
+    return 0
+  fi
+  while [ "$(jobs -rp | wc -l)" -ge "$BOOTSTRAP_COMPILE_JOBS" ]; do sleep 0.5; done
+  log "Compiling ${name} (background, up to ${BOOTSTRAP_COMPILE_JOBS} jobs)..."
+  ( "$@" ) > "$COMPILE_LOG_DIR/${name}.log" 2>&1 &
+  JOB_PIDS+=("$!"); JOB_NAMES+=("$name"); JOB_STARTS+=("$SECONDS")
+}
+
+wait_compile_jobs() {
+  local failed=0 i
+  for i in "${!JOB_PIDS[@]}"; do
+    if wait "${JOB_PIDS[$i]}"; then
+      log "Compiled ${JOB_NAMES[$i]} ($((SECONDS - JOB_STARTS[i])) s after launch)"
+    else
+      log "${JOB_NAMES[$i]} FAILED -- its log:"
+      cat "$COMPILE_LOG_DIR/${JOB_NAMES[$i]}.log" >&2
+      failed=1
+    fi
+  done
+  JOB_PIDS=(); JOB_NAMES=(); JOB_STARTS=()
+  [ "$failed" = 0 ] || die "contract compilation failed (see the logs above)"
+}
+
+# One custom contract: compile + transpile + artifact fix-up. Runs in a subshell.
+_compile_custom() { # _compile_custom <contract>
+  local c=$1
+  local artifact_dir="${ROOT_DIR}/contracts/${c}/target"
+  cd "${ROOT_DIR}/contracts/${c}"
+
+  # Step 1: compile Noir to ACIR.
+  # Prefer `aztec compile` (nargo + bb aztec_process + aztec_version stamp in
+  # one go; it honours the NARGO / BB env exported above); fall back to raw
+  # nargo only if the wrapper is unavailable.
+  local needs_transpile=0
+  if $AZTEC_BIN help compile >/dev/null 2>&1; then
+    $AZTEC_BIN compile 2>&1 || die "Could not compile ${c} with aztec compile"
+  elif [ -n "$AZTEC_NARGO_BIN" ]; then
+    "$AZTEC_NARGO_BIN" compile --silence-warnings 2>&1 || die "Could not compile ${c} with aztec-nargo"
+    needs_transpile=1
+  else
+    $NARGO_BIN compile --silence-warnings 2>&1 || die "Could not compile ${c} with nargo fallback"
+    needs_transpile=1
+  fi
+
+  # Verify artifact was produced
+  if [ ! -d "$artifact_dir" ] || [ -z "$(ls "$artifact_dir"/*.json 2>/dev/null)" ]; then
+    die "No compilation artifact found for ${c} in ${artifact_dir}"
+  fi
+
+  # Step 2 (raw-nargo fallback only): AVM transpilation + VK generation,
+  # required for aztec-wallet deploy. `aztec compile` already did this, and on
+  # v6 a second `bb aztec_process -i <dir>` over its (aztec_version-stamped)
+  # output finds nothing to do, prints "No contract artifacts found" and exits
+  # 1 -- which this guard used to turn into a fatal bootstrap error.
+  # bb aztec_process needs an absolute path — relative paths don't resolve correctly
+  if [ "$needs_transpile" = "1" ]; then
+    log "Transpiling ${c} (AVM + VKs)..."
+    $BB_BIN aztec_process -i "${artifact_dir}" 2>&1 | grep -E "Transpil|complete|Error" || die "AVM transpilation failed for ${c}"
+  fi
+
+  # Step 3: Strip __aztec_nr_internals__ prefix from function names.
+  # The Aztec #[aztec] macro renames functions internally, but public_dispatch
+  # uses the EXTERNAL names (no prefix). The SDK also looks up functions by
+  # external name. This rename makes the artifact match what both expect.
+  local json_file
+  for json_file in "${artifact_dir}"/*.json; do
+    fix_artifact "${json_file}" "${AZTEC_VERSION}" 2>&1
+  done
+  log "Compiled and transpiled ${c} successfully"
+}
 
 compile_contracts() {
+  local c
   for c in $CONTRACTS; do
-    artifact_dir="${ROOT_DIR}/contracts/${c}/target"
-    cd "${ROOT_DIR}/contracts/${c}"
-
-    if artifact_is_fresh "${ROOT_DIR}/contracts/${c}/src" "${artifact_dir}"; then
+    if artifact_is_fresh "${ROOT_DIR}/contracts/${c}/src" "${ROOT_DIR}/contracts/${c}/target"; then
       log "Skipping ${c} (sources unchanged; artifact up to date)"
       continue
     fi
-
-    log "Compiling contract: ${c}"
-
-    # Step 1: compile Noir to ACIR.
-    # Prefer Aztec wrapper commands; fall back to raw nargo only if wrapper is unavailable.
-    if $AZTEC_BIN help compile >/dev/null 2>&1; then
-      $AZTEC_BIN compile 2>&1 || die "Could not compile ${c} with aztec compile"
-    elif [ -n "$AZTEC_NARGO_BIN" ]; then
-      "$AZTEC_NARGO_BIN" compile --silence-warnings 2>&1 || die "Could not compile ${c} with aztec-nargo"
-    else
-      $NARGO_BIN compile --silence-warnings 2>&1 || die "Could not compile ${c} with nargo fallback"
-    fi
-
-    # Verify artifact was produced
-    if [ ! -d "$artifact_dir" ] || [ -z "$(ls "$artifact_dir"/*.json 2>/dev/null)" ]; then
-      die "No compilation artifact found for ${c} in ${artifact_dir}"
-    fi
-
-    # Step 2: AVM transpilation + VK generation (required for aztec-wallet deploy)
-    # bb aztec_process needs an absolute path — relative paths don't resolve correctly
-    log "Transpiling ${c} (AVM + VKs)..."
-    $BB_BIN aztec_process -i "${artifact_dir}" 2>&1 | grep -E "Transpil|complete|Error" || die "AVM transpilation failed for ${c}"
-
-    # Step 3: Strip __aztec_nr_internals__ prefix from function names.
-    # The Aztec #[aztec] macro renames functions internally, but public_dispatch
-    # uses the EXTERNAL names (no prefix). The SDK also looks up functions by
-    # external name. This rename makes the artifact match what both expect.
-    for json_file in "${artifact_dir}"/*.json; do
-      python3 -c "
-import json, re, sys
-with open('${json_file}') as f: d = json.load(f)
-for fn in d.get('functions', []):
-    fn['name'] = re.sub(r'^__aztec_nr_internals__', '', fn['name'])
-with open('${json_file}', 'w') as f: json.dump(d, f)
-print('Renamed functions in ${json_file}')
-" 2>&1
-    done
-
-    log "Compiled and transpiled ${c} successfully"
+    # `aztec compile` has its own mtime-based skip that ignores --force, so a
+    # forced rebuild has to drop the old artifacts first.
+    [ "${FS_FORCE_COMPILE:-0}" = "1" ] && rm -rf "${ROOT_DIR}/contracts/${c}/target"
+    run_compile_job "$c" _compile_custom "$c"
   done
-  cd "${ROOT_DIR}"
 }
 
 # -- 2a. Compile vendored aztec-standards --------------------------------------
 # The standards are a separate Nargo workspace; compiling a member writes its
 # artifact to the workspace-level target dir (contracts/vendor/aztec-standards/
-# target/<name>-<Contract>.json). We compile the Phase-1 subset, then run the
-# same AVM-transpile + VK + prefix-strip steps the custom contracts get.
-compile_standards() {
-  std_target="${STANDARDS_DIR}/target"
+# target/<name>-<Contract>.json). We compile the Phase-1 subset (each member as
+# a pool job), then `finish_compiles` runs the same AVM-transpile + VK +
+# prefix-strip steps the custom contracts get over the shared target dir.
+_compile_standard() { # _compile_standard <member>  (runs in a subshell)
+  local c=$1
+  cd "${STANDARDS_DIR}/src/${c}"
+  # nargo ACIR compile (bb aztec_process in finish_compiles adds AVM transpile +
+  # VKs, so the raw-nargo caveat about missing transpilation does not apply).
+  if [ -n "$AZTEC_NARGO_BIN" ]; then
+    "$AZTEC_NARGO_BIN" compile --silence-warnings 2>&1 || die "Could not compile standard ${c}"
+  else
+    $NARGO_BIN compile --silence-warnings 2>&1 || die "Could not compile standard ${c} (nargo)"
+  fi
+  log "Compiled standard ${c}"
+}
 
-  # The vendored standards never change between runs; skip the whole ~44s
-  # compile+transpile when their sources are untouched.
+compile_standards() {
+  local std_target="${STANDARDS_DIR}/target"
+
+  # The vendored standards never change between runs; skip the whole compile +
+  # transpile when their sources are untouched.
   if artifact_is_fresh "${STANDARDS_DIR}/src" "${std_target}"; then
     log "Skipping vendored standards (sources unchanged; artifacts up to date)"
     return
   fi
+  [ "${FS_FORCE_COMPILE:-0}" = "1" ] && rm -rf "${std_target}"
 
+  local c
   for c in $STANDARD_CONTRACTS; do
-    log "Compiling standard contract: ${c}"
-    cd "${STANDARDS_DIR}/src/${c}"
-    # nargo ACIR compile (bb aztec_process below adds AVM transpile + VKs, so the
-    # raw-nargo caveat about missing transpilation does not apply here).
-    if [ -n "$AZTEC_NARGO_BIN" ]; then
-      "$AZTEC_NARGO_BIN" compile --silence-warnings 2>&1 || die "Could not compile standard ${c}"
-    else
-      $NARGO_BIN compile --silence-warnings 2>&1 || die "Could not compile standard ${c} (nargo)"
-    fi
+    run_compile_job "standards-${c}" _compile_standard "$c"
   done
+  _standards_compiled=1
+}
 
+# Waits for every compile job, then post-processes the standards workspace.
+finish_compiles() {
+  wait_compile_jobs
+  [ "$_standards_compiled" = 1 ] || return 0
+
+  local std_target="${STANDARDS_DIR}/target"
   if [ ! -d "$std_target" ] || [ -z "$(ls "$std_target"/*.json 2>/dev/null)" ]; then
     die "No standard artifacts found in ${std_target}"
   fi
@@ -272,21 +328,13 @@ compile_standards() {
   log "Transpiling standards (AVM + VKs)..."
   $BB_BIN aztec_process -i "${std_target}" 2>&1 | grep -E "Transpil|complete|Error" || die "AVM transpilation failed for standards"
 
+  # Raw 'nargo compile' omits the aztec_version field that 'aztec compile' adds.
+  # The generated TS artifact casts the JSON to NoirCompiledContract, which
+  # requires aztec_version — fix_artifact injects it (pinned toolchain) so
+  # codegen output type-checks (matches the custom contracts' value).
+  local json_file
   for json_file in "${std_target}"/*.json; do
-    python3 -c "
-import json, re
-with open('${json_file}') as f: d = json.load(f)
-for fn in d.get('functions', []):
-    fn['name'] = re.sub(r'^__aztec_nr_internals__', '', fn['name'])
-# Raw 'nargo compile' omits the aztec_version field that 'aztec compile' adds.
-# The generated TS artifact casts the JSON to NoirCompiledContract, which
-# requires aztec_version — inject it (pinned toolchain) so codegen output
-# type-checks (matches the custom contracts' value).
-if not d.get('aztec_version'):
-    d['aztec_version'] = '4.3.0'
-with open('${json_file}', 'w') as f: json.dump(d, f)
-print('Patched functions + aztec_version in ${json_file}')
-" 2>&1
+    fix_artifact "${json_file}" "${AZTEC_VERSION}" 2>&1
   done
   log "Compiled and transpiled standards successfully"
   cd "${ROOT_DIR}"
@@ -319,324 +367,72 @@ generate_typescript() {
   log "TypeScript artifacts generated in ${artifacts_dir}"
 }
 
-# -- 3. Deploy contracts -------------------------------------------------------
+# -- 3. Deploy + wire + seed (one SDK process) --------------------------------
+# scripts/local-deploy.ts does what ~26 separate `aztec-wallet` invocations
+# used to do (each of those booted its own node process + PXE): one
+# EmbeddedWallet deploys the 11 instances in minter order, wires the links,
+# registers + credentials KYC for test0/1/2, drips EUR, moves test0's 500 000
+# EUR into the fund and records it as a private DepositNote. ~60 s on a laptop.
+#
+# It runs on the image's Node (>= 22.6: TypeScript is type-stripped natively,
+# no tsx) from a staging dir whose node_modules points at the image's own SDK
+# packages, so no npm install happens in the container and the SDK can never
+# drift from the node it talks to.
 
 deploy_contracts() {
-  cd "${ROOT_DIR}"
-  TMPDIR=/tmp/fs-bootstrap
-  mkdir -p "$TMPDIR"
+  local script="${ROOT_DIR}/scripts/local-deploy.ts"
+  [ -f "$script" ] || die "missing ${script}"
+  local stage=/tmp/fs-bootstrap/deploy
+  rm -rf "$stage" && mkdir -p "$stage"
+  cp "$script" "$stage/local-deploy.ts"
+  printf '{ "type": "module" }\n' > "$stage/package.json"
 
-  log "Importing test accounts..."
-  $AZTEC_WALLET_BIN import-test-accounts 2>&1 | tee "$TMPDIR/import.log" >&2 || die "Could not import test accounts"
-  ADMIN_ADDR=$(grep -oP 'Address:\s+\K0x[0-9a-fA-F]+' "$TMPDIR/import.log" | sed -n '1p')
-  TEST1_ADDR=$(grep -oP 'Address:\s+\K0x[0-9a-fA-F]+' "$TMPDIR/import.log" | sed -n '2p')
-  TEST2_ADDR=$(grep -oP 'Address:\s+\K0x[0-9a-fA-F]+' "$TMPDIR/import.log" | sed -n '3p')
-  require_value "test0 account address" "$ADMIN_ADDR"
-  require_value "test1 account address" "$TEST1_ADDR"
-  require_value "test2 account address" "$TEST2_ADDR"
-  log "Accounts: test0=${ADMIN_ADDR} test1=${TEST1_ADDR} test2=${TEST2_ADDR}"
-
-  # Deploy a contract; echoes full wallet output to stderr (visible in docker logs)
-  # and returns the deployed address on stdout for capture via $().
-  _deploy() {
-    local label=$1 artifact=$2
-    shift 2
-    local attempt=1
-    local output=""
-    local rc=0
-    local address=""
-    while [ "$attempt" -le "$BOOTSTRAP_RETRY_ATTEMPTS" ]; do
-      log "Deploying ${label} (attempt ${attempt}/${BOOTSTRAP_RETRY_ATTEMPTS})..."
-      set +e
-      # DEPLOY_INIT lets callers override the initializer name (e.g. the AIP-20
-      # token uses constructor_with_minter instead of the default constructor).
-      output=$($AZTEC_WALLET_BIN deploy \
-        "${ROOT_DIR}/contracts/${artifact}" \
-        --init "${DEPLOY_INIT:-constructor}" \
-        --from accounts:test0 \
-        "$@" \
-        -a "${label}" 2>&1)
-      rc=$?
-      set -e
-      printf '%s\n' "$output" >&2
-      address=$(printf '%s\n' "$output" | grep -oP '(?i)contract\s+deployed\s+at\s+\K0x[0-9a-fA-F]+' | tail -1 || true)
-
-      if [ "$rc" -eq 0 ] && [ -n "$address" ]; then
-        printf '%s\n' "$address"
-        return 0
-      fi
-
-      if [ "$attempt" -lt "$BOOTSTRAP_RETRY_ATTEMPTS" ] && is_retryable_wallet_error "$output"; then
-        log "Retryable deploy error for ${label}; sleeping ${BOOTSTRAP_RETRY_DELAY_SECONDS}s"
-        sleep "$BOOTSTRAP_RETRY_DELAY_SECONDS"
-        attempt=$((attempt + 1))
-        continue
-      fi
-      break
-    done
-    return 1
-  }
-
-  KYC_ADDR=$(_deploy "kyc_verifier" \
-    "kyc_verifier/target/kyc_verifier-KYCVerifier.json" \
-    --args accounts:test0)
-  [ -z "$KYC_ADDR" ] && die "kyc_verifier deploy failed — no address in output"
-
-  VAULT_ADDR=$(_deploy "defi_vault" \
-    "defi_vault/target/defi_vault-DeFiVault.json" \
-    --args accounts:test0 300)
-  [ -z "$VAULT_ADDR" ] && die "defi_vault deploy failed — no address in output"
-
-  # HousingFund must precede FSFT: FSFT's immutable AIP-20 minter is the fund.
-  FUND_ADDR=$(_deploy "housing_fund" \
-    "housing_fund/target/housing_fund-HousingFund.json" \
-    --args accounts:test0)
-  [ -z "$FUND_ADDR" ] && die "housing_fund deploy failed — no address in output"
-
-  log "DEBUG: FUND_ADDR='${FUND_ADDR}' ADMIN_ADDR='${ADMIN_ADDR}'"
-
-  # -- Deploy FSFT as AIP-20 token (minter = housing fund) ----------------------
-  # constructor_with_minter(name: str<31>, symbol: str<31>, decimals: u8, minter).
-  # The fund is FSFT's permanent minter; claim_distribution mints via mint_to_*.
-  TOKEN_ADDR=$(DEPLOY_INIT=constructor_with_minter _deploy "fund_token" \
-    "vendor/aztec-standards/target/token_contract-Token.json" \
-    --args "Fair Squares FSFT" FSFT 0 "${FUND_ADDR}")
-  [ -z "$TOKEN_ADDR" ] && die "fsft (AIP-20) deploy failed — no address in output"
-
-  # Governance: all args are actual addresses/values (aliases not valid in --args)
-  GOV_ADDR=$(_deploy "governance" \
-    "governance/target/governance-Governance.json" \
-    --args "${FUND_ADDR}" "${KYC_ADDR}" "${TOKEN_ADDR}" "${GOVERNANCE_VOTING_WINDOW_BLOCKS}" "${GOVERNANCE_MIN_QUORUM_VOTES}")
-  [ -z "$GOV_ADDR" ] && die "governance deploy failed — no address in output"
-
-  # -- Deploy Dripper faucet (must precede EUR: EUR's minter is the Dripper) -----
-  DRIPPER_ADDR=$(_deploy "dripper" \
-    "vendor/aztec-standards/target/dripper-Dripper.json")
-  [ -z "$DRIPPER_ADDR" ] && die "dripper deploy failed — no address in output"
-
-  # -- Deploy EUR as AIP-20 token (minter = Dripper) ----------------------------
-  # constructor_with_minter(name: str<31>, symbol: str<31>, decimals: u8, minter).
-  # decimals=0 keeps whole-unit EUR semantics matching the existing frontend
-  # (raw balance == whole euros), so no display rework is needed in Phase 1.
-  EUR_ADDR=$(DEPLOY_INIT=constructor_with_minter _deploy "eur_token" \
-    "vendor/aztec-standards/target/token_contract-Token.json" \
-    --args EURs EUR 0 "${DRIPPER_ADDR}")
-  [ -z "$EUR_ADDR" ] && die "eur_token (AIP-20) deploy failed — no address in output"
-
-  # -- Deploy PropertyNFT (AIP-721 real-estate deed; minter = housing fund) -----
-  # The housing fund mints a deed (token_id = proposal_id + 1) when a proposal's
-  # distribution opens. constructor_with_minter(name: str<31>, symbol, minter).
-  PROPERTY_NFT_ADDR=$(DEPLOY_INIT=constructor_with_minter _deploy "property_nft" \
-    "vendor/aztec-standards/target/nft_contract-NFT.json" \
-    --args "Fair Squares Property" FSP-RE "${FUND_ADDR}")
-  [ -z "$PROPERTY_NFT_ADDR" ] && die "property_nft (AIP-721) deploy failed — no address in output"
-
-  DEX_ADDR=$(_deploy "fsft_dex" \
-    "fsft_dex/target/fsft_dex-FSFTDex.json" \
-    --args accounts:test0 "${KYC_ADDR}" "${FUND_ADDR}" "${TOKEN_ADDR}" "${EUR_ADDR}" "${DEX_PRICE_BAND_BPS}" "${DEX_MAX_TTL_BLOCKS}")
-  [ -z "$DEX_ADDR" ] && die "fsft_dex deploy failed — no address in output"
-
-  # ProtocolRewards must precede ProtocolToken: the token's immutable minter is
-  # this rewards contract. New constructor drops protocol_token (wired below via
-  # set_protocol_token): (admin, fsft_token, housing_fund, governance, kyc, claim_min).
-  REWARDS_ADDR=$(_deploy "protocol_rewards" \
-    "protocol_rewards/target/protocol_rewards-ProtocolRewards.json" \
-    --args accounts:test0 "${TOKEN_ADDR}" "${FUND_ADDR}" "${GOV_ADDR}" "${KYC_ADDR}" "${PROTOCOL_REWARDS_CLAIM_MIN}")
-  [ -z "$REWARDS_ADDR" ] && die "protocol_rewards deploy failed — no address in output"
-
-  # -- Deploy ProtocolToken as AIP-20 token (minter = protocol_rewards) ---------
-  PROTOCOL_TOKEN_ADDR=$(DEPLOY_INIT=constructor_with_minter _deploy "protocol_token" \
-    "vendor/aztec-standards/target/token_contract-Token.json" \
-    --args "Fair Squares Protocol" FSP 0 "${REWARDS_ADDR}")
-  [ -z "$PROTOCOL_TOKEN_ADDR" ] && die "protocol_token deploy failed — no address in output"
-
-  log "Deployed addresses:"
-  log "  KYCVerifier:  ${KYC_ADDR}"
-  log "  FSFT (AIP-20):${TOKEN_ADDR}"
-  log "  DeFiVault:    ${VAULT_ADDR}"
-  log "  HousingFund:  ${FUND_ADDR}"
-  log "  Governance:   ${GOV_ADDR}"
-  log "  FSFTDex:      ${DEX_ADDR}"
-  log "  EurToken:     ${EUR_ADDR}"
-  log "  ProtocolToken:${PROTOCOL_TOKEN_ADDR}"
-  log "  Rewards:      ${REWARDS_ADDR}"
-
-  export KYC_ADDR TOKEN_ADDR VAULT_ADDR FUND_ADDR GOV_ADDR DEX_ADDR ADMIN_ADDR EUR_ADDR DRIPPER_ADDR PROPERTY_NFT_ADDR PROTOCOL_TOKEN_ADDR REWARDS_ADDR TEST1_ADDR TEST2_ADDR
-}
-
-# -- 4. Wire contracts together ------------------------------------------------
-
-wire_contracts() {
-  # aztec-wallet send: no --artifact flag; wallet resolves ABI from deployed
-  # contract DB (populated during deploy via -a alias).
-  log "Wiring HousingFund.set_contracts(kyc, token, vault, gov)..."
-  wallet_send_with_retries required "HousingFund.set_contracts" \
-    $AZTEC_WALLET_BIN send set_contracts \
-    --from accounts:test0 \
-    --contract-address "${FUND_ADDR}" \
-    --args "${KYC_ADDR}" "${TOKEN_ADDR}" "${VAULT_ADDR}" "${GOV_ADDR}"
-
-  log "Wiring HousingFund.set_property_nft(property_nft)..."
-  wallet_send_with_retries required "HousingFund.set_property_nft" \
-    $AZTEC_WALLET_BIN send set_property_nft \
-    --from accounts:test0 \
-    --contract-address "${FUND_ADDR}" \
-    --args "${PROPERTY_NFT_ADDR}"
-
-  # Wire the EUR stablecoin the fund pays rent yield from (its own public
-  # balance). REQUIRED before any rent can be claimed -- without it
-  # HousingFund.eur_token stays zero and claim_rent_private / reinvest_rent_private
-  # revert "eur token mismatch" (surfaced by scripts/e2e/rent-claim.e2e.ts).
-  log "Wiring HousingFund.set_eur_token(eur_token)..."
-  wallet_send_with_retries required "HousingFund.set_eur_token" \
-    $AZTEC_WALLET_BIN send set_eur_token \
-    --from accounts:test0 \
-    --contract-address "${FUND_ADDR}" \
-    --args "${EUR_ADDR}"
-
-  log "Wiring DeFiVault.set_housing_fund(housing_fund)..."
-  wallet_send_with_retries required "DeFiVault.set_housing_fund" \
-    $AZTEC_WALLET_BIN send set_housing_fund \
-    --from accounts:test0 \
-    --contract-address "${VAULT_ADDR}" \
-    --args "${FUND_ADDR}"
-
-  # FSFT and ProtocolToken minters are now IMMUTABLE (set at their
-  # constructor_with_minter deploy to HousingFund / ProtocolRewards) -- no
-  # set_admin handoff exists on the vendored AIP-20 Token. We only wire the
-  # rewards->protocol_token link, which had to be deferred because the token's
-  # minter (this rewards contract) must exist before the token is deployed.
-  log "Wiring ProtocolRewards.set_protocol_token(protocol_token)..."
-  wallet_send_with_retries required "ProtocolRewards.set_protocol_token" \
-    $AZTEC_WALLET_BIN send set_protocol_token \
-    --from accounts:test0 \
-    --contract-address "${REWARDS_ADDR}" \
-    --args "${PROTOCOL_TOKEN_ADDR}"
-
-  # Seed KYC roles for local demo accounts so HousingFund.deposit passes its
-  # investor-role gate checks.
-  log "Registering KYC investor roles for test accounts..."
-  wallet_send_with_retries required "KYCVerifier.register_kyc(test0)" \
-    $AZTEC_WALLET_BIN send register_kyc \
-    --from accounts:test0 \
-    --contract-address "${KYC_ADDR}" \
-    --args "${ADMIN_ADDR}"
-
-  if [ -n "${TEST1_ADDR:-}" ]; then
-    wallet_send_with_retries required "KYCVerifier.register_kyc(test1)" \
-      $AZTEC_WALLET_BIN send register_kyc \
-      --from accounts:test0 \
-      --contract-address "${KYC_ADDR}" \
-      --args "${TEST1_ADDR}"
+  local modules="${FS_DEPLOY_NODE_MODULES:-}"
+  if [ -z "$modules" ]; then
+    if [ -d "$IMAGE_NODE_MODULES/@aztec-labs/aztec.js" ]; then
+      modules="$IMAGE_NODE_MODULES"
+    elif [ -d "${ROOT_DIR}/scripts/node_modules/@aztec-labs/aztec.js" ]; then
+      modules="${ROOT_DIR}/scripts/node_modules"
+    else
+      die "no @aztec-labs SDK packages found (neither ${IMAGE_NODE_MODULES} nor scripts/node_modules); set FS_DEPLOY_NODE_MODULES"
+    fi
   fi
+  ln -s "$modules" "$stage/node_modules"
+  log "Deploying, wiring and seeding via scripts/local-deploy.ts (SDK from ${modules})..."
 
-  if [ -n "${TEST2_ADDR:-}" ]; then
-    wallet_send_with_retries required "KYCVerifier.register_kyc(test2)" \
-      $AZTEC_WALLET_BIN send register_kyc \
-      --from accounts:test0 \
-      --contract-address "${KYC_ADDR}" \
-      --args "${TEST2_ADDR}"
-  fi
-
-  # -- V2: issue private KYC credential notes (delivered to each user's PXE) ----
-  # Verifier-only call. Nonce is deterministic per test account so revocation
-  # tooling can recompute commitments via KYCVerifier.compute_revocation_commitment.
-  log "Issuing private KYC credentials..."
-  wallet_send_with_retries required "KYCVerifier.issue_credential(test0)" \
-    $AZTEC_WALLET_BIN send issue_credential \
-    --from accounts:test0 \
-    --contract-address "${KYC_ADDR}" \
-    --args "${ADMIN_ADDR}" 1
-
-  if [ -n "${TEST1_ADDR:-}" ]; then
-    wallet_send_with_retries required "KYCVerifier.issue_credential(test1)" \
-      $AZTEC_WALLET_BIN send issue_credential \
-      --from accounts:test0 \
-      --contract-address "${KYC_ADDR}" \
-      --args "${TEST1_ADDR}" 2
-  fi
-
-  if [ -n "${TEST2_ADDR:-}" ]; then
-    wallet_send_with_retries required "KYCVerifier.issue_credential(test2)" \
-      $AZTEC_WALLET_BIN send issue_credential \
-      --from accounts:test0 \
-      --contract-address "${KYC_ADDR}" \
-      --args "${TEST2_ADDR}" 3
-  fi
-
-  # -- Mint EUR to all test accounts via the Dripper (AIP-20) -------------------
-  # drip_to_public(token_address, amount) mints `amount` to the CALLER's public
-  # balance, so we send from each account to fund that account. The Dripper is
-  # EUR's minter, so these are the only way to create EUR.
-  log "Dripping EUR to test accounts..."
-  log "  drip test0 -> ${ADMIN_ADDR} amount=600000"
-  # test0 gets 600 000 EUR (will deposit 500 000, keeps 100 000 for demo)
-  wallet_send_with_retries required "Dripper.drip_to_public(test0,600000)" \
-    $AZTEC_WALLET_BIN send drip_to_public \
-    --from accounts:test0 \
-    --contract-address "${DRIPPER_ADDR}" \
-    --args "${EUR_ADDR}" 600000
-
-  # test1 gets 50 000 EUR
-  if [ -n "${TEST1_ADDR:-}" ]; then
-    log "  drip test1 -> ${TEST1_ADDR} amount=50000"
-    wallet_send_with_retries required "Dripper.drip_to_public(test1,50000)" \
-      $AZTEC_WALLET_BIN send drip_to_public \
-      --from accounts:test1 \
-      --contract-address "${DRIPPER_ADDR}" \
-      --args "${EUR_ADDR}" 50000
-  fi
-
-  # test2 gets 50 000 EUR
-  if [ -n "${TEST2_ADDR:-}" ]; then
-    log "  drip test2 -> ${TEST2_ADDR} amount=50000"
-    wallet_send_with_retries required "Dripper.drip_to_public(test2,50000)" \
-      $AZTEC_WALLET_BIN send drip_to_public \
-      --from accounts:test2 \
-      --contract-address "${DRIPPER_ADDR}" \
-      --args "${EUR_ADDR}" 50000
-  fi
-
-  # -- Initial housing fund deposit from test0 (500 000 EUR) -------------------
-  # Transfer EUR to housing fund (test0 → housing_fund) via AIP-20.
-  # transfer_public_to_public(from, to, amount, _nonce); from == caller (test0)
-  # so it is self-authorized and _nonce = 0 (no authwit needed).
-  log "Transferring 500000 EUR from test0 to housing fund..."
-  wallet_send_with_retries required "EUR.transfer_public_to_public(test0->housing_fund)" \
-    $AZTEC_WALLET_BIN send transfer_public_to_public \
-    --from accounts:test0 \
-    --contract-address "${EUR_ADDR}" \
-    --args "${ADMIN_ADDR}" "${FUND_ADDR}" 500000 0
-
-  # Then record the deposit as a V2 private DepositNote in test0's PXE.
-  # aztec-wallet CLI cannot pass HintedNote<KycCredentialNote> args, so
-  # this step uses the TS SDK helper which fetches the KYC credential
-  # hint from PXE and threads it into HousingFund.deposit_private.
-  # NOTE: this is best-effort and NON-fatal. A fresh EmbeddedWallet PXE
-  # created here syncs from genesis and, when registering a contract whose
-  # on-chain anchor is an early block, can hit "Block hash not found when
-  # querying world state" because the local-network EpochTestSettler reorgs
-  # early blocks out of the node's pruned world state. The public EUR
-  # transfer above already credited the housing fund; the private DepositNote
-  # is a demo nicety, so a failure here must NOT block frontend startup.
-  # Override with FS_SEED_V2_REQUIRED=1 to make it fatal again.
-  log "Recording initial deposit (V2 private path)..."
-  if (
-    cd "${ROOT_DIR}/scripts" && \
+  local out="$stage/out.json"
+  (
+    cd "$stage" && \
+    FS_ROOT="${ROOT_DIR}" \
+    FS_DEPLOY_OUT="$out" \
     AZTEC_NODE_URL="${AZTEC_NODE_URL}" \
-    NEXT_PUBLIC_KYC_VERIFIER_ADDRESS="${KYC_ADDR}" \
-    NEXT_PUBLIC_HOUSING_FUND_ADDRESS="${FUND_ADDR}" \
-    SEED_AMOUNT=500000 \
-    npx tsx seed-v2-deposit.ts
-  ); then
-    log "Initial housing fund balance: 500 000 EUR (V2 private deposit by test0)"
-  elif [ "${FS_SEED_V2_REQUIRED:-0}" = "1" ]; then
-    die "V2 seed deposit failed (FS_SEED_V2_REQUIRED=1)"
-  else
-    log "WARN: V2 private seed deposit failed (non-fatal). The 500 000 EUR"
-    log "      public transfer to the housing fund still succeeded; only the"
-    log "      private DepositNote pre-seed was skipped. Continuing bootstrap."
-  fi
+    WALLET_MIN_FEE_PADDING="${WALLET_MIN_FEE_PADDING}" \
+    BOOTSTRAP_WAIT_FOR_STATUS="${BOOTSTRAP_WAIT_FOR_STATUS}" \
+    GOVERNANCE_VOTING_WINDOW_BLOCKS="${GOVERNANCE_VOTING_WINDOW_BLOCKS}" \
+    GOVERNANCE_MIN_QUORUM_VOTES="${GOVERNANCE_MIN_QUORUM_VOTES}" \
+    DEX_PRICE_BAND_BPS="${DEX_PRICE_BAND_BPS}" \
+    DEX_MAX_TTL_BLOCKS="${DEX_MAX_TTL_BLOCKS}" \
+    PROTOCOL_REWARDS_CLAIM_MIN="${PROTOCOL_REWARDS_CLAIM_MIN}" \
+    node --no-warnings ./local-deploy.ts
+  ) || die "local-deploy.ts failed (see its log above)"
+  [ -s "$out" ] || die "local-deploy.ts produced no ${out}"
+
+  # Export the addresses save_addresses() expects. Fails on any missing key.
+  eval "$(node -e '
+    const o = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    const need = (obj, k) => { if (!obj[k]) { console.error("local-deploy output lacks " + k); process.exit(1); } return obj[k]; };
+    const m = {
+      ADMIN_ADDR: need(o.accounts, "test0"), TEST1_ADDR: need(o.accounts, "test1"), TEST2_ADDR: need(o.accounts, "test2"),
+      KYC_ADDR: need(o.contracts, "kyc_verifier"), TOKEN_ADDR: need(o.contracts, "fund_token"),
+      VAULT_ADDR: need(o.contracts, "defi_vault"), FUND_ADDR: need(o.contracts, "housing_fund"),
+      GOV_ADDR: need(o.contracts, "governance"), DEX_ADDR: need(o.contracts, "fsft_dex"),
+      EUR_ADDR: need(o.contracts, "eur_token"), DRIPPER_ADDR: need(o.contracts, "dripper"),
+      PROPERTY_NFT_ADDR: need(o.contracts, "property_nft"), PROTOCOL_TOKEN_ADDR: need(o.contracts, "protocol_token"),
+      REWARDS_ADDR: need(o.contracts, "protocol_rewards"),
+    };
+    for (const [k, v] of Object.entries(m)) { if (!/^0x[0-9a-fA-F]+$/.test(v)) { console.error(k + " is not an address: " + v); process.exit(1); } console.log(`export ${k}=${v}`); }
+  ' "$out")" || die "could not read addresses from ${out}"
+  log "Accounts: test0=${ADMIN_ADDR} test1=${TEST1_ADDR} test2=${TEST2_ADDR}"
 }
 
 # -- 5. Extract addresses and write env files ----------------------------------
@@ -748,11 +544,9 @@ main() {
   wait_for_pxe
   compile_contracts
   compile_standards
+  finish_compiles
   generate_typescript
-  fix_inquirer
-  fix_wallet_fee_padding
   deploy_contracts
-  wire_contracts
   save_addresses
 
   log "============================================"
