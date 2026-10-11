@@ -102,8 +102,9 @@ still persists git deps across runs for that path.
   contract compiles as a pool of background jobs, one per core
   (`BOOTSTRAP_COMPILE_JOBS`). The first needed compile runs in the foreground
   to populate nargo's git-dependency cache before concurrent jobs touch it.
-  Measured on 4 cores, cold: custom contracts ~85 s, standards ~90 s, versus
-  ~45-55 s per contract serially. Unchanged contracts are skipped
+  Measured on 4 cores with every artifact removed: the whole compile stage
+  (all nine contracts) takes **121 s** in the pool versus **317 s** with
+  `BOOTSTRAP_COMPILE_JOBS=1`. Unchanged contracts are skipped
   (`artifact_is_fresh`, which also requires `"transpiled": true`;
   `FS_FORCE_COMPILE=1` rebuilds). The nargo dependency cache lives at
   `$HOME/nargo/github.com/...` (no dot); the compose `nargo-cache` volume
