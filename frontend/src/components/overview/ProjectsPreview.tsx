@@ -2,6 +2,7 @@
 
 import { DataTable, ModelledChip, StatusChip, type Column } from "@/components/ui";
 import { formatEUR, type PropertyDeed } from "@/lib/contracts";
+import { PAYOUT_LABELS } from "@/lib/proposalLifecycle";
 import { getProjectDossier } from "@/lib/projectDossier";
 
 /**
@@ -47,7 +48,7 @@ const columns: Column<PropertyDeed>[] = [
     align: "right",
     render: (p) =>
       p.distributionOpen ? (
-        <StatusChip status="open" label="Distributing" />
+        <StatusChip status="open" label={PAYOUT_LABELS.payingOut} />
       ) : (
         <StatusChip status="active" label="Held" />
       ),

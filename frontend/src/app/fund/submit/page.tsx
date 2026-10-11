@@ -24,7 +24,7 @@ import {
 import { hashDossier, type HashedDossier } from "@/lib/dossierHash";
 
 const STEPS = [
-  { label: "Property & ask", description: "Address, capital ask, attested market rent" },
+  { label: "Property & ask", description: "Address, capital ask, certified market rent" },
   { label: "Dossier", description: "Appraiser report + technical assessment" },
   { label: "Review & sign", description: "Submit for council review" },
 ];
@@ -109,7 +109,7 @@ export default function SubmitPropertyPage() {
     }
     const rentNum = Number(marketRent);
     if (!marketRent.trim() || !Number.isFinite(rentNum) || rentNum <= 0) {
-      next.rent = "Enter the appraiser-attested monthly market rent in EUR.";
+      next.rent = "Enter the appraiser-certified monthly market rent in EUR.";
     }
     setErrors(next);
     return !next.label && !next.ask && !next.rent;
@@ -230,7 +230,7 @@ export default function SubmitPropertyPage() {
               htmlFor="listing-rent"
               required
               error={errors.rent}
-              hint="The appraiser-attested market rent. The protocol caps covenant rent at least 20% below this baseline."
+              hint="The appraiser-certified market rent. The protocol caps covenant rent at least 20% below this baseline."
             >
               <input
                 id="listing-rent"
@@ -320,7 +320,7 @@ export default function SubmitPropertyPage() {
               <dd className="text-mono text-body text-text-1">{formatEUR(Number(ask))}</dd>
             </div>
             <div>
-              <dt className="text-label text-text-3">Market rent (attested)</dt>
+              <dt className="text-label text-text-3">Market rent (certified)</dt>
               <dd className="text-mono text-body text-text-1">€{Number(marketRent).toLocaleString("en-IE")}/mo</dd>
             </div>
             <div>
@@ -336,7 +336,7 @@ export default function SubmitPropertyPage() {
           <p className="mt-4 text-body-sm text-text-2">
             Signing submits the listing on-chain as {address.slice(0, 10)}… and opens it for
             housing council review. The maximum covenant rent for this ask must sit at least
-            20% below the attested market rent before an investor vote can adopt it.
+            20% below the certified market rent before an investor vote can adopt it.
           </p>
           {submitError && <Alert tone="danger" className="mt-3">{submitError}</Alert>}
           <ActionBar className="mt-5" align="between">

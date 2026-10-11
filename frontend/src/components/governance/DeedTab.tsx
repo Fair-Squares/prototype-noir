@@ -29,10 +29,10 @@ export function DeedTab({ deed }: DeedTabProps) {
   return (
     <div className="space-y-6">
       <KpiGrid cols={3}>
-        <KpiCard label="Deed NFT" value={`#${deed.tokenId}`} sub="AIP-721" />
+        <KpiCard label="Property deed" value={`#${deed.tokenId}`} sub="NFT held by the fund" />
         <KpiCard label="Valuation" value={formatEUR(deed.valuationEur)} />
         <KpiCard
-          label="Distribution"
+          label="Payout"
           value={
             <StatusChip
               status={deed.distributionOpen ? "open" : "pending"}

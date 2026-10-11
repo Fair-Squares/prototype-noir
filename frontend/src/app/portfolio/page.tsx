@@ -6,7 +6,6 @@ import {
   AdvancedDetails,
   Alert,
   Button,
-  EmptyState,
   KpiCard,
   KpiGrid,
   PageHeader,
@@ -24,7 +23,10 @@ import {
 import { DepositFlow } from "@/components/portfolio/DepositFlow";
 import { DexOrdersPanel } from "@/components/portfolio/DexOrdersPanel";
 import { PropertyExposure } from "@/components/portfolio/PropertyExposure";
+import { ActivityLog } from "@/components/portfolio/ActivityLog";
 import { useWallet } from "@/contexts/WalletContext";
+import { aggregateImpact } from "@/lib/projectDossier";
+import { logActivity } from "@/lib/sessionActivity";
 import {
   attestFsftForRewards,
   claimProposalDistribution,
@@ -33,6 +35,7 @@ import {
   fetchKYCProfile,
   fetchPortfolio,
   fetchWithdrawableDeposits,
+  formatEUR,
   formatFSFT,
   fetchProperties,
   fetchProposals,
@@ -116,6 +119,21 @@ export default function PortfolioPage() {
   const rewardsClaimable = rewards?.claimable ?? portfolio?.rewardsClaimable ?? 0;
   const canClaimRewards = rewards?.eligibility?.canClaimNow ?? false;
 
+  // D8: pro-rata impact attribution — real share fraction over the modelled
+  // dossier impact layer (PositionSummary renders it with a ModelledChip).
+  const impact = useMemo(() => {
+    if (!portfolio) return undefined;
+    const agg = aggregateImpact(proposals);
+    return {
+      sharePct:
+        portfolio.totalSupply > 0
+          ? (portfolio.balance / portfolio.totalSupply) * 100
+          : 0,
+      homesEnabled: agg.homesEnabled,
+      projectsFunded: agg.projectsFunded,
+    };
+  }, [portfolio, proposals]);
+
   const claimableProposals = useMemo(
     // Private depositors show €0 in PUBLIC records but hold a real claimable
     // share (computed in-circuit at claim time) — include them whenever a
@@ -144,6 +162,7 @@ export default function PortfolioPage() {
         tone: "success",
         text: `Claimed ${(result.claimed ?? 0).toLocaleString()} ${rewardsSymbol}.`,
       });
+      logActivity(address, "rewards-claim", `Claimed ${(result.claimed ?? 0).toLocaleString()} ${rewardsSymbol} rewards`);
       await loadAccountData(address);
     } catch (err: unknown) {
       setNotice({ tone: "danger", text: err instanceof Error ? err.message : 'Reward claim failed.' });
@@ -185,6 +204,7 @@ export default function PortfolioPage() {
         tone: "success",
         text: `Claimed ${formatFSFT(result.claimedAmount ?? 0)} from housing proposal #${proposalId}.`,
       });
+      logActivity(address, "payout-claim", `Claimed ${formatFSFT(result.claimedAmount ?? 0)} from housing proposal #${proposalId}`);
       await loadAccountData(address);
     } catch (err: unknown) {
       setNotice({ tone: "danger", text: err instanceof Error ? err.message : 'Distribution claim failed.' });
@@ -196,7 +216,10 @@ export default function PortfolioPage() {
   const handleWithdraw = async (amount: number) => {
     if (!address) return { success: false, error: "Connect your wallet first." };
     const result = await withdrawFunds(address, amount, accountIndex);
-    if (result.success) await loadAccountData(address);
+    if (result.success) {
+      logActivity(address, "withdraw", `Withdrew a ${formatEUR(amount)} deposit`);
+      await loadAccountData(address);
+    }
     return result;
   };
 
@@ -211,6 +234,7 @@ export default function PortfolioPage() {
         return;
       }
       setNotice({ tone: "success", text: result.message ?? "Rent withdrawn to your wallet." });
+      logActivity(address, "rent-withdraw", "Withdrew rental income to wallet");
       await loadAccountData(address);
     } catch (err: unknown) {
       setNotice({ tone: "danger", text: err instanceof Error ? err.message : 'Rent withdrawal failed.' });
@@ -230,6 +254,7 @@ export default function PortfolioPage() {
         return;
       }
       setNotice({ tone: "success", text: result.message ?? "Rent reinvested into the fund." });
+      logActivity(address, "rent-reinvest", "Reinvested rental income into the fund");
       await loadAccountData(address);
     } catch (err: unknown) {
       setNotice({ tone: "danger", text: err instanceof Error ? err.message : 'Reinvest failed.' });
@@ -337,11 +362,12 @@ export default function PortfolioPage() {
             </Section>
           </div>
 
-          {/* 2 · Total position */}
+          {/* 2 · Total position (§3 strip: own · pays · makes possible · exit) */}
           <PositionSummary
             portfolio={portfolio}
             rewardsClaimable={rewardsClaimable}
             rewardsSymbol={rewardsSymbol}
+            impact={impact}
           />
 
           {/* 2b · S3: deposit lives here now — Portfolio is the money hub. */}
@@ -350,7 +376,12 @@ export default function PortfolioPage() {
               title="Add to your position"
               description="Deposit cash into the fund to help finance affordable homes. Your deposit and position stay private to your account."
             >
-              <DepositFlow onDeposited={() => void loadAccountData(address)} />
+              <DepositFlow
+                onDeposited={() => {
+                  logActivity(address, "deposit", "Deposited into the fund");
+                  void loadAccountData(address);
+                }}
+              />
             </Section>
           </div>
 
@@ -384,25 +415,24 @@ export default function PortfolioPage() {
           {/* 3c · J6: DEX orders overview (self-contained; claim/cancel on /dex). */}
           <DexOrdersPanel address={address} accountIndex={accountIndex} />
 
-          {/* 5 · Withdraw + history */}
-          <Section
-            title="Withdraw capital"
-            description="Pick a deposit to take back — each withdrawal returns one whole deposit to your wallet."
-          >
-            <WithdrawPanel
-              fetchDeposits={() => fetchWithdrawableDeposits(address, accountIndex)}
-              onWithdraw={handleWithdraw}
-            />
-          </Section>
+          {/* 5 · Withdraw + activity */}
+          <div id="withdraw" className="scroll-mt-24">
+            <Section
+              title="Withdraw capital"
+              description="Pick a deposit to take back — each withdrawal returns one whole deposit to your wallet."
+            >
+              <WithdrawPanel
+                fetchDeposits={() => fetchWithdrawableDeposits(address, accountIndex)}
+                onWithdraw={handleWithdraw}
+              />
+            </Section>
+          </div>
 
           <Section
-            title="Transaction history"
-            description="A record of your deposits, withdrawals, claims, and trades."
+            title="Activity"
+            description="Actions you performed through this app in the current session."
           >
-            <EmptyState
-              title="No transaction history available yet"
-              description="The protocol does not yet expose a per-account event feed. Your live balances and claimable amounts above always reflect on-chain state."
-            />
+            <ActivityLog address={address} />
           </Section>
 
           {/* 6 · Demo tools — dev/test affordances, out of the everyday flow. */}

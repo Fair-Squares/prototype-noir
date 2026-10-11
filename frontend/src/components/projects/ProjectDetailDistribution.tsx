@@ -142,7 +142,7 @@ export function ProjectDetailDistribution({
                 Deed token
                 <InfoDot
                   label="What is the deed"
-                  content="An AIP-721 NFT minted to the fund when the acquisition completes. It is the on-chain record that the fund holds this property."
+                  content="A property deed (NFT) minted to the fund when the acquisition completes. It is the on-chain record that the fund holds this property."
                 />
               </dt>
               <dd className="text-body mt-0.5 text-mono text-text-1">#{deed.tokenId}</dd>

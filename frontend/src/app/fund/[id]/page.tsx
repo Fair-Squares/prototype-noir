@@ -15,6 +15,7 @@ import {
   votingWindowFor,
 } from "@/lib/proposalLifecycle";
 import {
+  AdvancedDetails,
   Alert,
   LoadingSkeleton,
   PageHeader,
@@ -36,11 +37,21 @@ import {
   type PropertyDeed,
 } from "@/lib/contracts";
 
-const TAB_VALUES = ["dossier", "overview", "distribution", "governance", "proofs"] as const;
+// §4.4: 5 tabs -> 3 (+ the on-chain record demoted below the tabs). Legacy
+// deep-link values map onto the merged tabs so old URLs keep working.
+const TAB_VALUES = ["dossier", "funding", "payouts"] as const;
 type TabValue = (typeof TAB_VALUES)[number];
 
-function isTabValue(value: string | null): value is TabValue {
-  return value !== null && (TAB_VALUES as readonly string[]).includes(value);
+const LEGACY_TAB_ALIASES: Record<string, TabValue> = {
+  overview: "funding",
+  governance: "funding",
+  distribution: "payouts",
+};
+
+function resolveTabParam(value: string | null): TabValue | null {
+  if (value === null) return null;
+  if ((TAB_VALUES as readonly string[]).includes(value)) return value as TabValue;
+  return LEGACY_TAB_ALIASES[value] ?? null;
 }
 
 /**
@@ -129,18 +140,16 @@ function ProjectDetail({ projectId }: { projectId: number }) {
   // proposal. When one is on file we lead with it — housing first, mechanics
   // second — and gate sensitive rows to verified investors.
   const dossier = useMemo(() => (proposal ? getProjectDossier(proposal) : null), [proposal]);
-  const defaultTab: TabValue = dossier ? "dossier" : "overview";
-  const requestedTab = isTabValue(tabParam) ? tabParam : null;
+  const defaultTab: TabValue = dossier ? "dossier" : "funding";
+  const requestedTab = resolveTabParam(tabParam);
   const activeTab: TabValue =
     requestedTab && (requestedTab !== "dossier" || dossier) ? requestedTab : defaultTab;
   const canViewSensitive = Boolean(address) && Boolean(eligibility?.investorRole);
 
   const tabs: TabItem[] = [
     ...(dossier ? [{ value: "dossier", label: "Dossier" }] : []),
-    { value: "overview", label: "Overview" },
-    { value: "distribution", label: "Distribution & capital" },
-    { value: "governance", label: "Governance" },
-    { value: "proofs", label: "Proofs & on-chain" },
+    { value: "funding", label: "Funding & votes" },
+    { value: "payouts", label: "Payouts" },
   ];
 
   if (!proposal) {
@@ -203,9 +212,9 @@ function ProjectDetail({ projectId }: { projectId: number }) {
 
       {deed ? (
         <Alert tone="success" title="Home acquired">
-          Deed NFT #{deed.tokenId} (AIP-721) is held by the fund
+          Property deed #{deed.tokenId} is held by the fund
           {deed.valuationEur > 0 ? <> · valued at {formatEUR(deed.valuationEur)}</> : null}. See
-          the Distribution &amp; capital tab for details.
+          the Payouts tab for details.
         </Alert>
       ) : null}
 
@@ -219,23 +228,28 @@ function ProjectDetail({ projectId }: { projectId: number }) {
             canViewSensitive={canViewSensitive}
           />
         ) : null}
-        {activeTab === "overview" ? (
-          <ProjectDetailOverview proposal={proposal} fundStats={fundStats} />
+        {activeTab === "funding" ? (
+          // Merged tab (§4.4): both components answer "how is this being
+          // funded and decided" — one destination instead of two.
+          <div className="space-y-6">
+            <ProjectDetailOverview proposal={proposal} fundStats={fundStats} />
+            <ProjectDetailGovernance
+              proposal={proposal}
+              eligibility={eligibility}
+              isConnected={Boolean(address)}
+            />
+          </div>
         ) : null}
-        {activeTab === "distribution" ? (
+        {activeTab === "payouts" ? (
           <ProjectDetailDistribution proposal={proposal} deed={deed} />
         ) : null}
-        {activeTab === "governance" ? (
-          <ProjectDetailGovernance
-            proposal={proposal}
-            eligibility={eligibility}
-            isConnected={Boolean(address)}
-          />
-        ) : null}
-        {activeTab === "proofs" ? (
-          <ProjectDetailProofs proposal={proposal} deed={deed} />
-        ) : null}
       </Tabs>
+
+      {/* The raw on-chain record (§4.4): kept verbatim, demoted to opt-in —
+          it is a sanctioned technical surface, not a primary tab. */}
+      <AdvancedDetails summary="On-chain record (technical)">
+        <ProjectDetailProofs proposal={proposal} deed={deed} />
+      </AdvancedDetails>
 
       <p className="text-caption">
         Voting and claiming happen in the full governance memo.{" "}

@@ -59,8 +59,11 @@ export function GovernanceMemoCard({
           )}
           <h3 className="text-heading mt-0.5 text-text-1">{displayName}</h3>
           {dossier ? (
+            // §4.6 stakes: what this vote decides in the world — homes,
+            // rent terms, lock (the amount is the headline figure below).
             <p className="text-caption mt-0.5 text-text-2">
-              {dossier.location} · {dossier.impact.homesEnabled} affordable homes
+              {dossier.location} · {dossier.impact.homesEnabled} affordable homes ·{" "}
+              rent {dossier.covenant.rentBand}, locked {dossier.covenant.lockYears} years
             </p>
           ) : null}
         </div>

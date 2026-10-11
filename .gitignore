@@ -47,3 +47,6 @@ proofs/recursive/*/Prover.toml
 scripts/pxe_data_*/
 scripts/wallet_data_*/
 .claude/scheduled_tasks.lock
+
+# node_modules as a symlink (worktree hooks) — dir-only patterns above miss it
+**/node_modules

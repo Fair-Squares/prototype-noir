@@ -590,9 +590,10 @@ open-state. Privacy is shown as assurance via `shell/TrustChip.tsx` (a compact
 worst-of-state summary expanding to the `ui/ProofRail` data).
 
 Navigation tiers live in `frontend/src/lib/nav.ts`: `PRIMARY_ITEMS` (everyday:
-Overview, Projects, Portfolio, Invest, Governance) vs `MORE_ACCOUNT_ITEMS`
-(Trade, Rewards, Verification) vs `MORE_REFERENCE_ITEMS` (Reference, Explain).
-**Trade is never central.** Keep Reference + Explain reachable but demoted.
+Home, Homes, Portfolio) vs `MORE_ACCOUNT_ITEMS` (Votes, Secondary market,
+Verification) vs `MORE_REFERENCE_ITEMS` (About Fair Squares — /learn).
+**The secondary market is never central.** Keep About/parameters reachable but
+demoted; /invest, /rewards, /explain and /reference redirect (next.config.ts).
 
 ### Primitives — import from `@/components/ui`
 
@@ -612,7 +613,26 @@ Reuse these; do **not** build per-page chrome or invent type sizes:
 - **Status** — `StatusChip` kinds, never color alone. Past-deadline-but-still-
   ACTIVE governance proposals must show "Voting ended" via
   `governanceStatus.displayStatus()`, not the raw on-chain status.
-- Font: Plus Jakarta Sans (400/500/600/700), self-hosted via `next/font`.
+- Fonts: DM Sans (body, variable) + Nexa (display), self-hosted via `next/font`
+  — see the brand section below. (An earlier revision said Plus Jakarta Sans;
+  the code moved on.)
+- **Lexicon (UX overhaul)** — user-facing labels come from `lib/lexicon.ts`
+  (tiered vocabulary per `docs/UX_FINAL_SIMPLIFICATION_PLAN.md` §1). Tier-3
+  protocol-internal terms (epoch, bps, shield, escrow, attest, AIP-*, contract
+  function names, block heights) are BANNED from primary UI and enforced by the
+  Vitest guard `lib/__tests__/lexicon.test.ts` (empty ratchet baseline — keep it
+  empty). Sanctioned Tier-3 surfaces: `components/about/ParametersPanel.tsx` (+
+  `shell/BlockTicker.tsx`) and `components/projects/ProjectDetailProofs.tsx`.
+- **Formatting** — `lib/format.ts` is the canonical formatting home
+  (formatEUR/formatEURDecimals/formatFSFT re-exported by `contracts.ts` for old
+  call sites, plus count/pct/bps/date/relative helpers). Never render bps —
+  convert with `formatPctFromBps` at the edge.
+- **Session activity** — `lib/sessionActivity.ts` records user actions for the
+  Portfolio "Activity" list (session-only; the protocol exposes no per-account
+  historical feed by design — keep the honest note).
+- **Keeper actions are role-gated** — "Record result" / "Deploy capital & open
+  payout" render only for `activeAccount.isAdmin` (UI gating, M16 caveat);
+  ordinary investors get status alerts instead.
 
 `SimplePage.tsx` was a legacy page wrapper; it has been **deleted** and `/explain`
 no longer uses it (`explain/page.tsx` imports only `next/link` + `@/components/ui`).
@@ -697,16 +717,19 @@ not replace) **The honesty rule** in *Project dossier & the demo layer* above.
 
 ```
 GOVERNANCE (a proposal):   Voting open → Voting ended → Approved → Rejected → Funded
-PROJECT / PAYOUT (post-Funded):              Funded → Distributing → Fully claimed
-Held = an on-chain deed with no distribution opened yet.
+PROJECT / PAYOUT (post-Funded):              Funded → Paying out → Fully paid
+Held = an on-chain deed with no payout opened yet.
 ```
 
 Source of truth: `lib/proposalLifecycle.ts` `displayStatus()` ALWAYS returns the
 canonical governance label (so no caller falls back to a divergent `StatusChip`
-default like "Executed"); `components/projects/ProjectStatusChip.tsx` adds the
-payout states. Never render a proposal/project status without going through these.
-A Vitest guard (`proposalLifecycle.test.ts` → "canonical governance vocabulary")
-fails if `displayStatus` ever emits a raw enum word — keep it green.
+default like "Executed"); the payout labels are the exported `PAYOUT_LABELS`
+("Paying out" / "Fully paid" — the earlier "Distributing" / "Fully claimed" are
+RETIRED), consumed by `components/projects/ProjectStatusChip.tsx` and the
+overview previews. Never render a proposal/project status without going through
+these. Vitest guards (`proposalLifecycle.test.ts` → "canonical governance
+vocabulary" + the payout-labels test) fail on raw enum words or retired payout
+words — keep them green. User-facing copy says "payout", never "distribution".
 
 Deadline units: live proposals carry **block** deadlines; sim proposals carry
 **unix-seconds** deadlines and are tagged `deadlineKind: "timestamp"` by the
@@ -829,13 +852,16 @@ Illustrations: hand-drawn housing line-art, ONE per view max, as a hero/section
   anchor (e.g. housing-fund.png on the Overview hero). Never wall-to-wall.
 ```
 
-> **Navigation (done).** Primary nav is the minimal **Home · Projects · Portfolio**
-> + a **More** disclosure (`lib/nav.ts`: Governance, Trade, Rewards, Verification,
-> Reference, How-it-works are `more-account`/`more-reference`). **Invest is
-> contextual** — reached from a project or the Home next-step CTA, not a top-level
-> tab. Mobile uses one pattern: a fixed compact **bottom nav** (`shell/BottomNav.tsx`,
-> Home/Projects/Portfolio/More) + the `MobileDrawer` for More — the old hamburger +
-> clipped tab strip are gone. **Home** (`app/page.tsx`) leads with a featured project
-> (`overview/FeaturedProject.tsx`, the Maashaven dossier) for disconnected visitors
-> and the investor's position/next-step when connected; ≤3 real headline KPIs, the
-> rest behind an "All fund metrics" disclosure.
+> **Navigation (done — updated by the UX overhaul).** Primary nav is the minimal
+> **Home · Homes · Portfolio** + a **More** disclosure (`lib/nav.ts`: **Votes**
+> (/governance), **Secondary market** (/dex), Verification are `more-account`;
+> **About Fair Squares** (/learn — mission, how-it-works, and the sanctioned
+> "Parameters & transparency" technical panel) is the one `more-reference` door).
+> `/invest`, `/rewards`, `/explain`, `/reference` redirect (next.config.ts);
+> deposit lives on `/portfolio#deposit`. Mobile uses one pattern: a fixed compact
+> **bottom nav** (`shell/BottomNav.tsx`) + the `MobileDrawer` for More. **Home**
+> (`app/page.tsx`) leads with the finance-plus-outcome one-liner (real on-chain
+> ROR when set) + the ImpactStrip for disconnected visitors, and the journey
+> stepper/position snapshot when connected; ≤3 real headline KPIs, the rest
+> behind the "Fund facts" disclosure (raw protocol parameters live on
+> /learn#parameters, not Home).

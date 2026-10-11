@@ -19,6 +19,7 @@ import {
 } from "@/components/ui";
 import { useWallet } from "@/contexts/WalletContext";
 import {
+  attestFsftForVoting,
   castVote,
   claimProposalDistribution,
   executeProposal,
@@ -122,6 +123,29 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
       });
   }, [address, accountIndex]);
 
+  // §4.6 inline gate: run the one-time private eligibility check from the
+  // ballot itself instead of sending the user back to the queue page.
+  const [isRunningCheck, setIsRunningCheck] = useState(false);
+  const handleRunCheck = async () => {
+    if (!address) return;
+    setIsRunningCheck(true);
+    try {
+      const result = await attestFsftForVoting(address, accountIndex);
+      if (result.success) {
+        const next = await fetchGovernanceEligibility(address, accountIndex);
+        setEligibility(next);
+      } else {
+        setError(result.error ?? "Private eligibility check failed.");
+      }
+    } catch (checkError: unknown) {
+      setError(
+        checkError instanceof Error ? checkError.message : "Private eligibility check failed."
+      );
+    } finally {
+      setIsRunningCheck(false);
+    }
+  };
+
   const handleVote = async (voteYes: boolean) => {
     if (!address) {
       setNotice({ tone: "danger", text: "Connect your wallet first." });
@@ -222,7 +246,7 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
 
   const tabs: TabItem[] = [
     { value: "overview", label: "Overview" },
-    { value: "distribution", label: "Distribution & allocation" },
+    { value: "distribution", label: "Payouts" },
     { value: "deed", label: "Deed" },
     { value: "votes", label: "Votes" },
   ];
@@ -293,7 +317,7 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
 
       {deed ? (
         <Alert tone="success" title="Home acquired">
-          Deed NFT #{deed.tokenId} (AIP-721) is held by the fund, valued at{" "}
+          Property deed #{deed.tokenId} is held by the fund, valued at{" "}
           {formatEUR(deed.valuationEur)}. See the Deed tab for details.
         </Alert>
       ) : null}
@@ -308,10 +332,17 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
             isVoting={isVoting}
             eligibilityReason={eligibility?.reason}
             onVote={handleVote}
+            onRunCheck={
+              eligibility?.investorRole && !eligibility?.hasFsftVotingAttestation
+                ? handleRunCheck
+                : undefined
+            }
+            isRunningCheck={isRunningCheck}
             onFinalize={handleFinalize}
             isFinalizing={isFinalizing}
             onExecute={handleExecute}
             isExecuting={isExecuting}
+            isAdmin={Boolean(activeAccount?.isAdmin)}
           />
         ) : null}
         {activeTab === "distribution" ? (

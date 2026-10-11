@@ -6,6 +6,7 @@ import { MarketingHero } from "@/components/marketing/MarketingHero";
 import { AffordabilityProblem } from "@/components/marketing/AffordabilityProblem";
 import { ImpactCalculator } from "@/components/marketing/ImpactCalculator";
 import { HowItWorksExplainer } from "@/components/about/HowItWorksExplainer";
+import { AdvancedDetails } from "@/components/ui";
 import { ParametersPanel } from "@/components/about/ParametersPanel";
 
 /**
@@ -80,7 +81,12 @@ export default function LearnPage() {
 
       <section id="parameters" className="scroll-mt-24">
         <h2 className="text-title mb-4 text-text-1">Parameters &amp; transparency</h2>
-        <ParametersPanel />
+        {/* The one sanctioned dense technical surface (the old /reference,
+            folded here). Protocol-internal vocabulary is allowed inside, but
+            it stays opt-in behind disclosure — not in the primary flow. */}
+        <AdvancedDetails summary="Protocol parameters, addresses and formulas (technical)">
+          <ParametersPanel />
+        </AdvancedDetails>
       </section>
     </div>
   );

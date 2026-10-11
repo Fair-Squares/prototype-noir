@@ -247,7 +247,7 @@ export default function HomesPage() {
         ) : homes.length === 0 ? (
           <EmptyState
             title="No homes yet"
-            description="The journey starts with an owner submitting a home — the capital ask, the attested market rent and the document dossier. The council reviews it, the community votes, and the fund buys it."
+            description="The journey starts with an owner submitting a home — the capital ask, the certified market rent and the document dossier. The council reviews it, the community votes, and the fund buys it."
             action={
               <Link href="/fund/submit" className="btn btn-secondary btn-sm">
                 Submit the first property
@@ -296,7 +296,7 @@ export default function HomesPage() {
         <AdvancedDetails summary="All on-chain fields">
           <p className="text-caption mb-3 text-text-2">
             Every home with its raw on-chain fields, including the voted affordability terms
-            (capped rent, discount vs the attested market reference, lock). Location and unit counts
+            (capped rent, discount vs the certified market reference, lock). Location and unit counts
             are not recorded on-chain, so they are not shown here.
           </p>
           <ProjectsTable rows={projectRows} />

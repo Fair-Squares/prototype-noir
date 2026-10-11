@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
@@ -9,6 +10,12 @@ export interface ButtonProps
   size?: ButtonSize;
   /** When true: disables the button, sets data-loading, shows a spinner. */
   loading?: boolean;
+  /**
+   * When set, renders a next/link with the identical .btn class contract —
+   * the one code path for both button-CTAs and link-CTAs (UX overhaul §5.2).
+   * Button-only props (loading/disabled/type/onClick) are ignored for links.
+   */
+  href?: string;
   children: ReactNode;
 }
 
@@ -37,15 +44,24 @@ export function Button({
   loading = false,
   disabled,
   type,
+  href,
   children,
   className,
   ...props
 }: ButtonProps) {
   const isDisabled = disabled || loading;
+  const classes = `btn btn-${variant} ${size === "sm" ? "btn-sm" : ""} ${className ?? ""}`;
+  if (href !== undefined) {
+    return (
+      <Link href={href} className={classes} aria-label={props["aria-label"]}>
+        {children}
+      </Link>
+    );
+  }
   return (
     <button
       type={type ?? "button"}
-      className={`btn btn-${variant} ${size === "sm" ? "btn-sm" : ""} ${className ?? ""}`}
+      className={classes}
       data-loading={loading ? "true" : undefined}
       disabled={isDisabled}
       aria-busy={loading || undefined}

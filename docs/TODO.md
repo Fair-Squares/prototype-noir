@@ -44,8 +44,8 @@ lib/proposalLifecycle. Remaining:
 - [x] DeFiVault backend fully removed + `totalYield` dropped across types/
       routes/consumers (21326ee). NAV is now `max(0, totalDeposits)`. Vault
       artifacts are gitignored codegen output, left on disk.
-- [ ] a11y: `HeaderWalletButton.tsx` menu items (role="menuitem" buttons) have
-      no `focus-visible` ring — add one (keyboard users can't see focus).
+- [x] a11y: `HeaderWalletButton.tsx` menu items `focus-visible` ring — done in
+      the UX overhaul (48558f4), all menu items covered.
 - [ ] API-route boilerplate (~19-21 routes repeat dynamic-import + getTestAccount
       + address-match guard + 503 live-mode block + Contract.at). Extract
       `lib/aztecRoute.ts` (resolveActor + connectContract + requireLiveMode) and

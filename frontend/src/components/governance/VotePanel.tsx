@@ -14,6 +14,9 @@ export interface VotePanelProps {
   windowClosed?: boolean;
   /** Wraps the real castVote call. */
   onVote: (voteYes: boolean) => void;
+  /** §4.6 inline gate: runs the one-time private eligibility check. */
+  onRunCheck?: () => void;
+  isRunningCheck?: boolean;
 }
 
 /**
@@ -30,6 +33,8 @@ export function VotePanel({
   eligibilityReason,
   windowClosed = false,
   onVote,
+  onRunCheck,
+  isRunningCheck = false,
 }: VotePanelProps) {
   if (proposal.status !== 0) {
     return (
@@ -62,10 +67,24 @@ export function VotePanel({
   }
 
   if (!canVote) {
+    // §4.6: the gate resolves inline — when the missing piece is the one-time
+    // private eligibility check, offer it right here instead of a dead end.
     return (
-      <p className="text-caption">
-        {eligibilityReason ?? "You are not cleared to vote yet."}
-      </p>
+      <div className="flex flex-col gap-2">
+        <p className="text-caption">
+          {eligibilityReason ?? "You are not cleared to vote yet."}
+        </p>
+        {onRunCheck ? (
+          <Button
+            className="w-fit"
+            size="sm"
+            onClick={onRunCheck}
+            loading={isRunningCheck}
+          >
+            {isRunningCheck ? "Confirming privately…" : "Confirm eligibility (private)"}
+          </Button>
+        ) : null}
+      </div>
     );
   }
 

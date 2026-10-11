@@ -61,6 +61,11 @@ export function InvestQuote({ amountEur, eurBalance, navPerFsftEur }: InvestQuot
       label: "Cash after deposit",
       value: formatEURDecimals(remainingCash),
     },
+    {
+      label: "Privacy",
+      value: "Your position stays private",
+      info: "Only you can see your deposit and balance. The fund publishes aggregates — totals and counts — never who invested what.",
+    },
   ];
 
   return (
@@ -87,6 +92,16 @@ export function InvestQuote({ amountEur, eurBalance, navPerFsftEur }: InvestQuot
           </div>
         ))}
       </dl>
+
+      {/* §4.3: the outcome row — the user signs off on the goal, not just the
+          amount. Deposits are pooled (never attributed to one project), so the
+          framing stays fund-wide and honest. */}
+      <p className="text-caption text-text-2">
+        <span className="font-semibold text-text-1">What it makes possible:</span>{" "}
+        your deposit pools with other investors&rsquo; to finance affordable
+        homes whose rents are capped below market — that, plus the capped
+        return, is the deal you&rsquo;re confirming.
+      </p>
 
       <p className="text-caption text-text-3">
         Your euros are recorded as principal (your NAV claim) as soon as you

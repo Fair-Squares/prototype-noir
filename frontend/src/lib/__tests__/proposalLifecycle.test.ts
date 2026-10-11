@@ -7,6 +7,7 @@ import {
   displayStatus,
   quorumFor,
   proposalLabel,
+  PAYOUT_LABELS,
 } from "@/lib/proposalLifecycle";
 
 // Minimal Proposal fixture. Only the fields the lifecycle helpers read are set;
@@ -147,6 +148,16 @@ describe("canonical governance vocabulary", () => {
       const { label } = displayStatus(p);
       expect(CANONICAL.has(label)).toBe(true);
       expect(RAW_ENUM.has(label)).toBe(false);
+    }
+  });
+
+  it("payout labels use the canonical v2 vocabulary, never the retired words", () => {
+    // UX overhaul §5.3: Funded → Paying out → Fully paid.
+    const RETIRED = new Set(["Distributing", "Fully claimed", "Distribution"]);
+    expect(PAYOUT_LABELS.payingOut).toBe("Paying out");
+    expect(PAYOUT_LABELS.fullyPaid).toBe("Fully paid");
+    for (const label of Object.values(PAYOUT_LABELS)) {
+      expect(RETIRED.has(label)).toBe(false);
     }
   });
 });

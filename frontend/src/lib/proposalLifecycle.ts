@@ -182,4 +182,15 @@ export function proposalLabel(proposal: Proposal): string {
   return `Housing proposal #${proposal.id}`;
 }
 
+/**
+ * Canonical payout-lifecycle labels (post-Funded), UX overhaul §5.3:
+ * Funded → Paying out → Fully paid. Every surface that renders a payout state
+ * imports these — never the raw words "Distributing" / "Fully claimed" / a
+ * hand-typed variant (the lifecycle Vitest guard enforces this vocabulary).
+ */
+export const PAYOUT_LABELS = {
+  payingOut: "Paying out",
+  fullyPaid: "Fully paid",
+} as const;
+
 export const SLOT_SECONDS = AZTEC_SLOT_DURATION_SEC;

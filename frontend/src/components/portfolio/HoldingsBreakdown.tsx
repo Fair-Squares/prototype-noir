@@ -83,7 +83,7 @@ export function HoldingsBreakdown({
             Rent earnings
             <InfoDot
               label="What are rent earnings"
-              content="Your pooled, pro-rata share of the rent the fund has collected on-chain (record_rent) across ALL its homes — not just any one. This is a separate earnings stream (your return on investment), claimable as EUR to withdraw or reinvest. It is income on top of your share value, NOT part of NAV."
+              content="Your pooled, pro-rata share of the rent the fund has collected on-chain across ALL its homes — not just any one. This is a separate earnings stream (your return on investment), claimable as EUR to withdraw or reinvest. It is income on top of your share value, NOT part of NAV."
             />
           </p>
           <p className="text-caption text-text-3">On-chain · separate from share value · withdraw or reinvest</p>

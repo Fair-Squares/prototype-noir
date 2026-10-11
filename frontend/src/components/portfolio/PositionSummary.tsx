@@ -1,11 +1,23 @@
-import { InfoDot, KpiCard, KpiGrid } from "@/components/ui";
+import Link from "next/link";
+import { InfoDot, KpiCard, KpiGrid, ModelledChip } from "@/components/ui";
 import { formatEUR, type PortfolioData } from "@/lib/contracts";
+import { formatCount, formatPct } from "@/lib/format";
+
+export interface PositionImpact {
+  /** The holder's share of FSFT supply, in percent (real arithmetic). */
+  sharePct: number;
+  /** Fund-level impact (modelled dossier layer, §3). */
+  homesEnabled: number;
+  projectsFunded: number;
+}
 
 export interface PositionSummaryProps {
   portfolio: PortfolioData;
   /** Claimable protocol rewards, resolved from rewards stats. */
   rewardsClaimable: number;
   rewardsSymbol: string;
+  /** D8: personal impact attribution — omitted when nothing is funded yet. */
+  impact?: PositionImpact;
 }
 
 /**
@@ -19,6 +31,7 @@ export function PositionSummary({
   portfolio,
   rewardsClaimable,
   rewardsSymbol,
+  impact,
 }: PositionSummaryProps) {
   const fundShareSymbol = portfolio.fundTokenSymbol ?? "FSFT";
   const cashSymbol = portfolio.eurTokenSymbol ?? "EURs";
@@ -72,6 +85,45 @@ export function PositionSummary({
           tone={rewardsClaimable > 0 ? "success" : "default"}
         />
       </KpiGrid>
+
+      {/* §3 lines 3+4: what the stake makes possible (D8, modelled pro-rata
+          attribution over real fund-level figures) and how to exit. */}
+      <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:items-baseline sm:justify-between">
+        {impact && impact.projectsFunded > 0 ? (
+          <p className="text-caption text-text-2">
+            {impact.sharePct > 0 ? (
+              <>
+                Your stake is ~{formatPct(impact.sharePct)} of a fund that funded{" "}
+                {formatCount(impact.projectsFunded)}{" "}
+                {impact.projectsFunded === 1 ? "project" : "projects"} —{" "}
+                {formatCount(impact.homesEnabled)} affordable homes.
+              </>
+            ) : (
+              <>
+                This fund has funded {formatCount(impact.projectsFunded)}{" "}
+                {impact.projectsFunded === 1 ? "project" : "projects"} —{" "}
+                {formatCount(impact.homesEnabled)} affordable homes.
+              </>
+            )}{" "}
+            <ModelledChip label="Modelled" />
+          </p>
+        ) : (
+          <p className="text-caption text-text-2">
+            Your money helps finance affordable homes — impact figures appear
+            once the first project is funded.
+          </p>
+        )}
+        <p className="text-caption shrink-0 text-text-2">
+          Exit:{" "}
+          <a href="#withdraw" className="underline underline-offset-2">
+            withdraw a deposit
+          </a>{" "}
+          or{" "}
+          <Link href="/dex" className="underline underline-offset-2">
+            sell shares
+          </Link>
+        </p>
+      </div>
     </section>
   );
 }

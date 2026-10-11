@@ -38,8 +38,8 @@ export function DistributionTab({
   if (!opened) {
     return (
       <EmptyState
-        title="Distribution not open yet"
-        description="Once this request is approved and executed, the fund opens a distribution against a snapshot of depositors. Allocations and your claimable share will appear here."
+        title="Payout not open yet"
+        description="Once this request is approved and the capital deployed, the fund opens a payout against a snapshot of depositors. Allocations and your claimable share will appear here."
       />
     );
   }
@@ -53,7 +53,7 @@ export function DistributionTab({
       </KpiGrid>
 
       <p className="text-caption text-text-2">
-        A distribution pays out <span className="font-semibold text-text-1">Fund Shares (FSFT)</span> —
+        A payout issues <span className="font-semibold text-text-1">Fund Shares (FSFT)</span> —
         your ownership stake in the property, minted to depositors pro-rata. It is not a cash payout;
         rent income is the separate EUR stream.
       </p>
@@ -71,7 +71,7 @@ export function DistributionTab({
                 of <span className="text-mono text-text-1">{formatEUR(snapshot)}</span>
               </>
             ) : null}{" "}
-            taken when the distribution opened.
+            taken when the payout opened.
           </li>
           <li>
             A <span className="font-semibold text-text-1">30% small-balance floor</span> is
@@ -91,7 +91,7 @@ export function DistributionTab({
           <p className="text-caption">Connect your wallet to see your claimable share.</p>
         ) : hasClaimed ? (
           <Alert tone="success" title="Already claimed">
-            You have claimed your share of this distribution.
+            You have claimed your share of this payout.
           </Alert>
         ) : (
           <div className="space-y-4">
@@ -119,7 +119,7 @@ export function DistributionTab({
               )}
             </div>
             <Button onClick={onClaim} loading={isClaiming} disabled={isClaiming || remaining === 0}>
-              {isClaiming ? "Claiming…" : "Claim distribution"}
+              {isClaiming ? "Claiming…" : "Claim payout"}
             </Button>
             {remaining === 0 ? (
               <p className="text-caption">The pool is fully claimed.</p>
