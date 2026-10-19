@@ -42,7 +42,8 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Reference",
     items: [
-      { num: "07", label: "About Fair Squares", href: "/learn", blurb: "Mission, how it works, parameters", tier: "more-reference" },
+      { num: "07", label: "Guided demo",        href: "/demo",  blurb: "The whole cycle in five steps",     tier: "more-reference" },
+      { num: "08", label: "About Fair Squares", href: "/learn", blurb: "Mission, how it works, parameters", tier: "more-reference" },
     ],
   },
 ];

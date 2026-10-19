@@ -11,8 +11,8 @@ export function PrototypeIntro({ rorPct }: { rorPct: number | null }) {
         Pool money to help buy affordable homes and share the rental income.
       </p>
       <div className="mt-6 flex flex-wrap items-center gap-3">
-        <Link href="/fund" className="btn btn-primary">Browse homes</Link>
-        <Link href="/learn" className="btn btn-ghost">How it works</Link>
+        <Link href="/demo" className="btn btn-primary">Take the 3-minute tour</Link>
+        <Link href="/fund" className="btn btn-ghost">Browse homes</Link>
       </div>
       {rorPct != null ? (
         <p className="text-caption mt-4 text-text-3">

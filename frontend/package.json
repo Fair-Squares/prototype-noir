@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "demo": "export AZTEC_LIVE=false NEXT_PUBLIC_SIMULATION=true && next build && next start",
     "lint": "next lint",
     "typecheck": "next typegen && tsc --noEmit --incremental false",
     "test": "vitest run",

@@ -731,6 +731,22 @@ Build pages on the `@/components/ui` primitives — do not reintroduce a per-pag
 wrapper. Any client page reading `useSearchParams()` must be wrapped in a
 `<Suspense>` boundary or the Vercel static build fails.
 
+### Guided demo (`/demo`) — the simplest end-to-end flow
+
+`app/demo/page.tsx` → `components/demo/DemoTour.tsx` walks ONE persona (Sofie =
+sim account test4, unverified at seed) through verify → invest → vote → own →
+earn on the featured Maashaven proposal (id 0), one primary action per screen.
+The stage is derived, never stored: `lib/demoJourney.ts` `deriveDemoStage(snapshot)`
+over `GET /api/demo` (`simGetDemoSnapshot`). User steps go through the ordinary
+API routes; the two steps that stand in for time/the keeper (`fund_home` = close
+vote + finalize + execute + sync covenant + open payout, `collect_rent` = one
+month of ROR rent) live in `simulationStore.ts` (`simDemoCloseVoteAndFund`,
+`simDemoCollectRent`) and carry a "Demo shortcut" chip. `simResetDemo` reseeds
+the store and gives the vote a 30-min window. `/api/demo` is **simulation-only
+(403 when `AZTEC_LIVE=true`)** — never add a live branch. `npm run demo` (in
+`frontend/`) builds + serves sim mode. Tests: `lib/__tests__/demoJourney.test.ts`
+(stage table + full walk against the real store).
+
 ### Project dossier & the demo layer (FUTURE_DEVELOPMENT_PLAN §9 / D1–D4)
 
 The §9 demo build ("housing first, mechanics second") adds a **modelled

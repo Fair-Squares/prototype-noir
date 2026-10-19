@@ -35,3 +35,10 @@ export function hasVotedLocally(account: string, proposalId: number): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(key(account, proposalId)) === "1";
 }
+
+/** Forget a remembered vote — used when the simulated demo restarts, which
+ *  wipes the server-side ballot the flag mirrored. */
+export function clearVotedLocally(account: string, proposalId: number): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(key(account, proposalId));
+}

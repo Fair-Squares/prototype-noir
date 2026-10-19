@@ -8,6 +8,8 @@
  * - Protocol token emissions + claiming
  */
 
+import { DEMO_ACCOUNT_INDEX, DEMO_PROPOSAL_ID } from "./demoJourney";
+
 // ── Accounts ─────────────────────────────────────────────────────────────────
 
 export const SIM_ACCOUNTS = [
@@ -1862,4 +1864,149 @@ export function simClaimRewards(address: string): { success: boolean; error?: st
 
 export function simGetAccounts() {
   return SIM_ACCOUNTS;
+}
+
+// ── Guided demo (/demo) ───────────────────────────────────────────────────────
+//
+// The guided walkthrough plays ONE persona (DEMO_ACCOUNT_INDEX, the seeded
+// unverified test4) through verify → invest → vote → own → earn on the
+// featured Maashaven proposal. The user's own steps go through the ordinary
+// API routes; only the steps a keeper or the passage of time performs (closing
+// the vote and buying the home, a month of rent) are demo shortcuts here, and
+// each one reuses the same sim functions the regular routes call.
+
+/** Voting window after a demo restart — long enough to walk the tour. */
+const DEMO_VOTING_WINDOW_SECONDS = 30 * 60;
+
+function demoAddress(): string {
+  const account = SIM_ACCOUNTS.find((a) => a.index === DEMO_ACCOUNT_INDEX);
+  if (!account) throw new Error(`Demo account ${DEMO_ACCOUNT_INDEX} missing from SIM_ACCOUNTS`);
+  return account.address;
+}
+
+function demoProposal(s: SimState): SimProposal {
+  const proposal = s.proposals.find((p) => p.id === DEMO_PROPOSAL_ID);
+  if (!proposal) throw new Error(`Demo proposal ${DEMO_PROPOSAL_ID} missing from the simulation`);
+  return proposal;
+}
+
+/** Throw away all simulated state and start from the seed, with the featured
+ *  home's vote open for a full demo window. */
+export function simResetDemo(): void {
+  _state = createInitialState();
+  demoProposal(_state).deadline = nowSeconds() + DEMO_VOTING_WINDOW_SECONDS;
+}
+
+export interface SimDemoSnapshot {
+  account: { index: number; alias: string; address: string };
+  verified: boolean;
+  eurBalance: number;
+  deposited: number;
+  shares: number;
+  totalShares: number;
+  /** Return on rent (ROR) in basis points — rent = ROR × purchase price. */
+  rorBps: number;
+  proposal: {
+    id: number;
+    title: string;
+    amount: number;
+    yesVotes: number;
+    noVotes: number;
+    quorumRequired: number;
+    status: number;
+    votingOpen: boolean;
+    distributionOpened: boolean;
+  };
+  hasVoted: boolean;
+  sharesClaimable: number;
+  hasClaimedShares: boolean;
+  monthlyRent: number;
+  rentEarned: number;
+  rentClaimable: number;
+  rentWithdrawn: number;
+  rentReinvested: number;
+}
+
+/** Everything the guided demo needs about its one persona. Sim-only: the
+ *  private-ballot "has voted" bit is readable here because the simulation keeps
+ *  ballots in server memory; the live network deliberately exposes no such read. */
+export function simGetDemoSnapshot(): SimDemoSnapshot {
+  const s = getState();
+  const address = demoAddress();
+  const account = SIM_ACCOUNTS.find((a) => a.index === DEMO_ACCOUNT_INDEX)!;
+  const acct = getOrCreateAccount(address);
+  const proposal = demoProposal(s);
+  const portfolio = simGetPortfolio(address);
+  return {
+    account: { index: account.index, alias: account.alias, address },
+    verified: acct.kycVerified,
+    eurBalance: acct.eurBalance,
+    deposited: acct.depositedAmount,
+    shares: acct.fsftBalance,
+    totalShares: s.fund.fsftTotalSupply,
+    rorBps: s.fund.rorBps,
+    proposal: {
+      id: proposal.id,
+      title: proposal.title,
+      amount: proposal.amount,
+      yesVotes: proposal.yesVotes,
+      noVotes: proposal.noVotes,
+      quorumRequired: proposal.quorumRequired,
+      status: proposal.status,
+      votingOpen: proposal.status === 0 && nowSeconds() < proposal.deadline,
+      distributionOpened: proposal.distributionOpened,
+    },
+    hasVoted: proposal.votedBy.includes(address),
+    sharesClaimable: simGetClaimableAmount(proposal.id, address),
+    hasClaimedShares: proposal.claimedBy.includes(address),
+    monthlyRent: demoMonthlyRent(s, proposal),
+    rentEarned: portfolio.rentEarned,
+    rentClaimable: portfolio.rentClaimable,
+    rentWithdrawn: portfolio.rentWithdrawn,
+    rentReinvested: portfolio.rentReinvested,
+  };
+}
+
+/** One month of ROR rent on the featured home: ROR × acquisition / 12, floored
+ *  at each step like record_rent. Acquisition = the funded amount. */
+function demoMonthlyRent(s: SimState, proposal: SimProposal): number {
+  const acquisition = s.acquisitionByProperty?.[proposal.id] ?? proposal.amount;
+  return Math.floor(Math.floor((acquisition * s.fund.rorBps) / 10000) / 12);
+}
+
+/** Demo shortcut for what the voting window + keeper do: close the vote now,
+ *  then — if it passed — fund the home and open its share payout. */
+export function simDemoCloseVoteAndFund(): { success: boolean; error?: string; approved?: boolean } {
+  const s = getState();
+  const proposal = demoProposal(s);
+  if (proposal.status !== 0) return { success: false, error: "The vote on this home is already closed" };
+  proposal.deadline = nowSeconds() - 1;
+  const finalized = simFinalizeProposal(proposal.id);
+  if (!finalized.success) return finalized;
+  // Re-read: finalize mutated the status the guard above narrowed.
+  if (demoProposal(s).status !== 1) return { success: true, approved: false };
+
+  const executed = simExecuteProposal(proposal.id);
+  if (!executed.success) return executed;
+  if (!s.acquisitionByProperty) s.acquisitionByProperty = {};
+  s.acquisitionByProperty[proposal.id] = proposal.amount;
+  if (proposal.covenant?.isSet) {
+    const synced = simSyncProposalCovenant(proposal.id);
+    if (!synced.success) return synced;
+  }
+  const opened = simOpenDistribution(proposal.id);
+  if (!opened.success) return opened;
+  return { success: true, approved: true };
+}
+
+/** Demo shortcut for a month passing: tenants of the featured home pay one
+ *  month of ROR rent into the shared pool. */
+export function simDemoCollectRent(): { success: boolean; error?: string; amount?: number } {
+  const s = getState();
+  const proposal = demoProposal(s);
+  if (proposal.status !== 3) return { success: false, error: "The home has not been bought yet" };
+  const amount = demoMonthlyRent(s, proposal);
+  const recorded = simRecordRent(proposal.id, amount);
+  if (!recorded.success) return recorded;
+  return { success: true, amount };
 }
