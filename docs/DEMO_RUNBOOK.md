@@ -46,7 +46,7 @@ cd frontend && npm ci && npm run demo     # next build + start, simulation mode
   refresh or a detour through `/fund` or `/portfolio` lands back on the right
   step — and those pages show the same data, acting as the same account (test4).
 - **Start over** (asks first) resets the whole simulated fund
-  (`POST /api/demo {action:"reset"}`) and reopens Maashaven's vote for 30 minutes.
+  (`POST /api/demo {action:"reset"}`) and reopens Maashaven's vote (seeded votes are open for a day).
 - Voting **no** shows the honest outcome: a tie is rejected, the home isn't bought.
 - `/api/demo` answers **403 on a live network** — the shortcuts never exist where
   money is real; `/demo` then points to the regular app flow instead.

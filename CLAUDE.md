@@ -747,7 +747,8 @@ API routes; the two steps that stand in for time/the keeper (`fund_home` = close
 vote + finalize + execute + sync covenant + open payout, `collect_rent` = one
 month of ROR rent) live in `simulationStore.ts` (`simDemoCloseVoteAndFund`,
 `simDemoCollectRent`) and carry a "Demo shortcut" chip. `simResetDemo` reseeds
-the store and gives the vote a 30-min window. `/api/demo` is **simulation-only
+the store (seeded votes are open for a day — a short window closed every vote on
+the public demo minutes after each server cold start). `/api/demo` is **simulation-only
 (403 when `AZTEC_LIVE=true`)** — never add a live branch. `npm run demo` (in
 `frontend/`) builds + serves sim mode. Tests: `lib/__tests__/demoJourney.test.ts`
 (stage table + full walk against the real store).

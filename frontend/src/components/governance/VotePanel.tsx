@@ -60,8 +60,7 @@ export function VotePanel({
   if (windowClosed) {
     return (
       <p className="text-caption">
-        The voting window has closed (the deadline block has passed), so no more ballots
-        can be cast. This proposal now needs finalising.
+        The voting window has closed, so no more ballots can be cast.
       </p>
     );
   }

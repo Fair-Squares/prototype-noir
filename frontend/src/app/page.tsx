@@ -29,6 +29,7 @@ import { JourneyStepper } from "@/components/journey/JourneyStepper";
 import { PersonaHandOff } from "@/components/journey/PersonaHandOff";
 import { PositionSnapshot } from "@/components/journey/PositionSnapshot";
 import { getProjectDossier } from "@/lib/projectDossier";
+import { isVotingEnded } from "@/lib/proposalLifecycle";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   fetchChainParams,
@@ -128,7 +129,9 @@ export default function OverviewPage() {
   }, [address, activeAccount?.index]);
 
   const nextStep = deriveNextStep(isConnected, kyc, portfolio);
-  const liveRequests = proposals.filter((p) => p.status === 0).length;
+  // Open = still inside its voting window (as /governance counts them); a past-
+  // deadline proposal awaiting finalisation reads "Voting ended", not open.
+  const liveRequests = proposals.filter((p) => p.status === 0 && !isVotingEnded(p)).length;
 
   // The one featured project (the seeded Maashaven dossier). Resolves by
   // proposal id / title-slug; null until proposals load or if none is authored.

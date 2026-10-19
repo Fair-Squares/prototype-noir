@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simResult } from "@/lib/aztecSim";
+import { simGetProperties } from "@/lib/simulationStore";
 
 // Lists the real-estate deed NFTs (AIP-721) the housing fund holds. The fund
 // mints a deed with token_id = proposalId + 1 when a proposal's distribution
@@ -8,7 +9,7 @@ import { simResult } from "@/lib/aztecSim";
 // fund. Valuation/amount comes from the fund's per-proposal distribution state.
 export async function GET() {
   if (!isLiveModeEnabled()) {
-    return NextResponse.json({ properties: [], source: "simulation" });
+    return NextResponse.json({ properties: simGetProperties(), source: "simulation" });
   }
 
   try {

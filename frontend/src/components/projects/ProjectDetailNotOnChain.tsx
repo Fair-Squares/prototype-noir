@@ -16,7 +16,7 @@ export function ProjectDetailNotOnChain() {
         Not recorded on-chain
         <InfoDot
           label="Why are these fields missing"
-          content="Fair Squares only commits to chain the figures it can prove: the capital ask, the vote tally, the distribution pool, and the property deed. Everything else lives off-chain and is intentionally left out here so nothing is fabricated."
+          content="Fair Squares only commits to chain the figures it can prove: the capital ask, the vote tally, the payout pool, and the property deed. Everything else lives off-chain and is intentionally left out here so nothing is fabricated."
         />
       </h2>
       <p className="text-caption mt-1 max-w-prose text-text-2">

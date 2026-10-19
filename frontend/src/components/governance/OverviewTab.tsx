@@ -130,8 +130,10 @@ export function OverviewTab({
         <p className="text-body text-text-1">
           {votingEnded ? (
             <>
-              Voting closed at <span className="text-mono">{window.closesAtLabel}</span> — this
-              request can now be finalised.
+              Voting closed at <span className="text-mono">{window.closesAtLabel}</span> —{" "}
+              {quorum.reached
+                ? "this request can now be finalised."
+                : "it did not reach quorum, so it can’t be finalised or funded."}
             </>
           ) : isActive ? (
             <>

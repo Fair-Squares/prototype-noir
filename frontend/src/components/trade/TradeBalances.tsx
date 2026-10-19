@@ -71,8 +71,8 @@ export function TradeBalances({
 
       {canTrade ? (
         <p className="text-caption text-text-3">
-          Buy orders settle over your private balance; if it&apos;s short, the public
-          portion is shielded for you automatically when you place the order.
+          Buy orders settle over your private balance; if it&apos;s short, the rest is
+          moved to your private balance for you when you place the order.
         </p>
       ) : null}
 

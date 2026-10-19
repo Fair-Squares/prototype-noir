@@ -59,7 +59,7 @@ export function ProjectDetailDossier({
           </div>
           <ModelledChip
             label="Modelled for demo"
-            hint="This dossier is illustrative project-finance detail overlaid on the real on-chain funding request. The capital stack, covenant, milestones and impact are modelled; the proposal amount, votes, distribution and deed are real on-chain figures shown in the other tabs."
+            hint="This dossier is illustrative project-finance detail overlaid on the real on-chain funding request. The capital stack, covenant, milestones and impact are modelled; the proposal amount, votes, payout and deed are real on-chain figures shown in the other tabs."
             hintAlign="right"
           />
         </div>
@@ -145,7 +145,10 @@ export function ProjectDetailDossier({
       </section>
 
       {/* Affordability covenant. */}
-      <CovenantCard dossier={dossier} />
+      <CovenantCard
+        dossier={dossier}
+        rorPct={fundStats?.rorBps ? fundStats.rorBps / 100 : undefined}
+      />
 
       {/* Capped return — cost-based ROR rent, fully to investors (D2). The
           covenant's numeric terms render as REAL when the proposal carries an
@@ -195,7 +198,7 @@ export function ProjectDetailDossier({
         <p className="text-caption mt-2 text-text-3">
           The small-depositor floor already over-allocates{" "}
           <span className="text-mono text-text-2">{SMALL_DEPOSITOR_FLOOR_PCT}%</span> of every
-          distribution to small savers on-chain — the same equity-first principle, extended to
+          payout to small savers on-chain — the same equity-first principle, extended to
           the people who live in the home.
         </p>
       </section>
@@ -245,7 +248,7 @@ export function ProjectDetailDossier({
   );
 }
 
-function CovenantCard({ dossier }: { dossier: ProjectDossier }) {
+function CovenantCard({ dossier, rorPct }: { dossier: ProjectDossier; rorPct?: number }) {
   const { covenant } = dossier;
   return (
     <section className="surface p-5">
@@ -271,7 +274,16 @@ function CovenantCard({ dossier }: { dossier: ProjectDossier }) {
         <div>
           <dt className="text-label">Investor return</dt>
           <dd className="text-body mt-0.5 text-text-1">
-            Capped at <span className="text-mono">~{covenant.cappedReturnPct}% net / year</span>
+            {rorPct != null ? (
+              <>
+                Capped at <span className="text-mono">~{rorPct}% / year</span> — the on-chain
+                return on rent
+              </>
+            ) : (
+              <>
+                Capped at <span className="text-mono">~{covenant.cappedReturnPct}% net / year</span>
+              </>
+            )}
           </dd>
         </div>
         <div className="sm:col-span-2">

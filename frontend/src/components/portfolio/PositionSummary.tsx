@@ -116,7 +116,7 @@ export function PositionSummary({
         ) : (
           <p className="text-caption text-text-2">
             Your money helps finance affordable homes — impact figures appear
-            once the first project is funded.
+            once a funded project has a published project dossier.
           </p>
         )}
         <p className="text-caption shrink-0 text-text-2">

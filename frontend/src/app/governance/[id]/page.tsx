@@ -33,6 +33,7 @@ import {
   type PropertyDeed,
 } from "@/lib/contracts";
 import { hasVotedLocally, markVoted } from "@/lib/votedStore";
+import { getProjectDossier } from "@/lib/projectDossier";
 
 const TAB_VALUES = ["overview", "distribution", "deed", "votes"] as const;
 type TabValue = (typeof TAB_VALUES)[number];
@@ -191,7 +192,7 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
         text:
           proposal?.listingId != null
             ? "Voting finalised. If approved, the request joins the funding queue and funds by priority matching."
-            : "Voting finalised. If approved, execute it next to open the distribution.",
+            : "Voting finalised. If approved, execute it next to open the payout.",
       });
       setReloadVersion((v) => v + 1);
       await reloadProposal();
@@ -211,7 +212,7 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
         setNotice({ tone: "danger", text: result.error ?? "Execution failed." });
         return;
       }
-      setNotice({ tone: "success", text: "Request executed and distribution opened." });
+      setNotice({ tone: "success", text: "Request executed and payout opened." });
       setReloadVersion((v) => v + 1);
       await reloadProposal();
     } catch (err: unknown) {
@@ -280,13 +281,16 @@ function ProposalDetail({ proposalId }: { proposalId: number }) {
   const window = votingWindowFor(proposal);
   const status = displayStatus(proposal);
 
+  const dossier = getProjectDossier(proposal);
+
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Investment committee"
-        title={proposalLabel(proposal)}
+        title={dossier?.name ?? proposalLabel(proposal)}
         description={
           <>
+            {dossier ? <>{proposalLabel(proposal)} · </> : null}
             {formatEUR(proposal.amount)} requested to acquire one affordable home
             {proposal.status === 0 && !window.closed && !window.unknown ? (
               <> · voting ends in {window.remainingLabel}</>

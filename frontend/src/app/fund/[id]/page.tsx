@@ -185,9 +185,10 @@ function ProjectDetail({ projectId }: { projectId: number }) {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Investment memo"
-        title={proposalLabel(proposal)}
+        title={dossier?.name ?? proposalLabel(proposal)}
         description={
           <>
+            {dossier ? <>{proposalLabel(proposal)} · </> : null}
             {formatEUR(proposal.amount)} requested to acquire one affordable home
             {proposal.status === 0 && !window.closed && !window.unknown ? (
               <> · voting ends in {window.remainingLabel}</>

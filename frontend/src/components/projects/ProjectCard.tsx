@@ -82,14 +82,14 @@ export function ProjectCard({ row, address, claiming, onClaim, lifecycle, queueR
   const positionNote: string | null = !connected
     ? "Connect a wallet to see your eligibility."
     : !row.distributionOpened
-      ? "No distribution open yet for this project."
+      ? "No payout open yet for this project."
       : row.hasClaimed
-        ? "You have claimed your share of this distribution."
+        ? "You have collected your share of this payout."
         : canClaim
           ? null
           : privateClaim
             ? "Your deposits are private — your share is computed in-circuit when you claim."
-            : "You have no claimable share of this distribution.";
+            : "You have no share to collect from this payout.";
 
   return (
     <article className="surface flex flex-col gap-4 p-5">

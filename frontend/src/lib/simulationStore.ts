@@ -334,10 +334,20 @@ function recalcInvestorCount(state: SimState): void {
 
 // ── Singleton ─────────────────────────────────────────────────────────────────
 
+/** Seeded votes stay open for a day. They are fixtures that start when a
+ *  server instance starts, so the short env window (meant for proposals people
+ *  create) closed every vote on the public demo minutes after each cold start.
+ *  The guided demo's "Close the vote now" shortcut ends them on demand. */
+const SEEDED_VOTING_WINDOW_SECONDS = 24 * 60 * 60;
+
+/** Stand-in address for the fund as deed owner (live: the HousingFund contract). */
+export const SIM_HOUSING_FUND_ADDRESS =
+  "0x2000000000000000000000000000000000000000000000000000000000000001";
+
 function createInitialState(): SimState {
   const accounts: Record<string, SimAccountState> = {};
   const now = nowSeconds();
-  const deadline = now + votingWindowSeconds();
+  const deadline = now + SEEDED_VOTING_WINDOW_SECONDS;
 
   accounts[SIM_ACCOUNTS[0].address] = {
     eurBalance: 150_000,
@@ -489,8 +499,32 @@ function createInitialState(): SimState {
         distributionClaimed: 0,
         claimedBy: [],
       },
+      {
+        // The home the seeded €30,000 "committed" and 30,000 shares stand for:
+        // funded earlier, payout fully collected pro-rata to deposits at the
+        // time (test1 €120k → 18,000, test2 €80k → 12,000 of €200k).
+        id: 3,
+        title: "Starter homes — Utrecht",
+        description: "Two starter homes for young key workers, funded before this demo began.",
+        descHash: "0x7574726563687400000000000000000000000000000000000000000000000000",
+        amount: 30_000,
+        yesVotes: 2,
+        noVotes: 0,
+        status: 3,
+        deadline: now - 7 * 24 * 60 * 60,
+        createdAt: now - 14 * 24 * 60 * 60,
+        proposer: SIM_ACCOUNTS[1].address,
+        votedBy: [SIM_ACCOUNTS[1].address, SIM_ACCOUNTS[2].address],
+        quorumRequired: quorumVotes(),
+        distributionOpened: true,
+        distributionAmount: 30_000,
+        distributionSnapshotDeposits: 200_000,
+        distributionClaimed: 30_000,
+        claimedBy: [SIM_ACCOUNTS[1].address, SIM_ACCOUNTS[2].address],
+      },
     ],
-    nextProposalId: 3,
+    nextProposalId: 4,
+    acquisitionByProperty: { 3: 30_000 },
     dex: {
       nextOrderId: 3,
       nextTradeId: 2,
@@ -1861,6 +1895,29 @@ export function simClaimRewards(address: string): { success: boolean; error?: st
   return { success: true, claimed: claimable };
 }
 
+// ── Property deeds ───────────────────────────────────────────────────────────
+
+/** Mirrors /api/property's live read: the fund mints a deed (token id =
+ *  proposal id + 1, token 0 reserved) when a funded proposal's payout opens,
+ *  valued at the payout amount. */
+export function simGetProperties(): Array<{
+  proposalId: number;
+  tokenId: number;
+  owner: string;
+  valuationEur: number;
+  distributionOpen: boolean;
+}> {
+  return getState()
+    .proposals.filter((p) => p.distributionOpened)
+    .map((p) => ({
+      proposalId: p.id,
+      tokenId: p.id + 1,
+      owner: SIM_HOUSING_FUND_ADDRESS,
+      valuationEur: p.distributionAmount,
+      distributionOpen: p.distributionOpened,
+    }));
+}
+
 // ── Accounts ──────────────────────────────────────────────────────────────────
 
 export function simGetAccounts() {
@@ -1876,9 +1933,6 @@ export function simGetAccounts() {
 // the vote and buying the home, a month of rent) are demo shortcuts here, and
 // each one reuses the same sim functions the regular routes call.
 
-/** Voting window after a demo restart — long enough to walk the tour. */
-const DEMO_VOTING_WINDOW_SECONDS = 30 * 60;
-
 function demoAddress(): string {
   const account = SIM_ACCOUNTS.find((a) => a.index === DEMO_ACCOUNT_INDEX);
   if (!account) throw new Error(`Demo account ${DEMO_ACCOUNT_INDEX} missing from SIM_ACCOUNTS`);
@@ -1891,11 +1945,10 @@ function demoProposal(s: SimState): SimProposal {
   return proposal;
 }
 
-/** Throw away all simulated state and start from the seed, with the featured
- *  home's vote open for a full demo window. */
+/** Throw away all simulated state and start from the seed (seeded votes are
+ *  open for a day). */
 export function simResetDemo(): void {
   _state = createInitialState();
-  demoProposal(_state).deadline = nowSeconds() + DEMO_VOTING_WINDOW_SECONDS;
 }
 
 export interface SimDemoSnapshot {

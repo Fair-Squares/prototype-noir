@@ -1,5 +1,5 @@
 import { InfoDot, StatusChip } from "@/components/ui";
-import { quorumFor, votingWindowFor } from "@/lib/proposalLifecycle";
+import { PAYOUT_LABELS, quorumFor, votingWindowFor } from "@/lib/proposalLifecycle";
 import {
   formatEUR,
   formatFSFT,
@@ -41,9 +41,9 @@ export function ProjectDetailDistribution({
         <section className="surface p-5">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
             <h2 className="text-heading inline-flex items-center gap-1 text-text-1">
-              Distribution to depositors
+              Payout to depositors
               <InfoDot
-                label="What is the distribution"
+                label="What is the payout"
                 content="When a funded home's value is realised, the proceeds open as a pool that depositors claim pro-rata against the deposits snapshotted at that moment."
               />
             </h2>
@@ -75,7 +75,7 @@ export function ProjectDetailDistribution({
                 Snapshot deposits
                 <InfoDot
                   label="What is the snapshot"
-                  content="The total depositor balance recorded the moment the distribution opened. Each depositor's claimable share is their slice of this snapshot."
+                  content="The total depositor balance recorded the moment the payout opened. Each depositor's claimable share is their slice of this snapshot."
                 />
               </dt>
               <dd className="text-body mt-0.5 text-mono text-text-1">
@@ -126,7 +126,7 @@ export function ProjectDetailDistribution({
           <h2 className="text-heading text-text-1">On-chain property deed</h2>
           {deed ? (
             deed.distributionOpen ? (
-              <StatusChip status="active" label="Held · distribution open" />
+              <StatusChip status="active" label={`Held · ${PAYOUT_LABELS.payingOut.toLowerCase()}`} />
             ) : (
               <StatusChip status="ready" label="Held by fund" />
             )

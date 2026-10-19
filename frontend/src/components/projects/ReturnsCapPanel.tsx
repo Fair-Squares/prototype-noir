@@ -130,7 +130,7 @@ export function ReturnsCapPanel({
         the worked euro figures are illustrative.{" "}
         {covenantOnChain
           ? "The affordability covenant is enforced on-chain — the fund contract rejects rent above the ceiling, so rents stay affordable by construction."
-          : "The covenant is not yet enforced in-circuit — the on-chain distribution still mints each holder their full FIFO + small-floor share."}
+          : "The covenant is not yet enforced in-circuit — the on-chain payout still mints each holder their full FIFO + small-floor share."}
       </p>
     </section>
   );

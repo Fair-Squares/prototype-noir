@@ -75,12 +75,15 @@ function extractVisibleText(source: string): string[] {
   // JSX text: letters between a closing `>`/`}` and the next `<`/`{` — the
   // `}` start covers text that follows an embedded expression
   // (`#{id} (AIP-721) is held…`). TS generics (`useState<T>(...)`) and code
-  // blocks produce pseudo-captures — real copy never contains `;` or `=`, so
-  // those captures are dropped.
+  // blocks produce pseudo-captures: those contain `=` or end a line with `;`,
+  // so they are dropped. Copy may use a mid-sentence semicolon ("private
+  // balance; if…") and HTML entities (`it&apos;s`), so a bare `;` must not
+  // drop a capture — that blanket rule once hid "shielded" on the trade page.
   const jsxText = /[>}]([^<>{}"'`]*[A-Za-z][^<>{}"'`]*)[<{]/g;
   let m: RegExpExecArray | null;
   while ((m = jsxText.exec(stripped)) !== null) {
-    if (!/[;=]/.test(m[1])) out.push(m[1]);
+    const text = m[1].replace(/&(?:[a-z]+|#\d+);/gi, "'");
+    if (!/=|;\s*(\n|$)/.test(text)) out.push(text);
     // Re-scan from just after the capture so back-to-back segments
     // (`}text{expr}text{`) aren't skipped by the consumed delimiter.
     jsxText.lastIndex = m.index + m[0].length - 1;

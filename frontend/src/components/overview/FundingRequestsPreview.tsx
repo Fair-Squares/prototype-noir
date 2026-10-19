@@ -113,7 +113,7 @@ export function FundingRequestsPreview({
       columns={columns}
       rows={rows}
       rowKey={(p) => p.id}
-      caption="Live housing funding requests"
+      caption="Housing funding requests"
       empty={{
         title: "No funding requests yet",
         description: (
