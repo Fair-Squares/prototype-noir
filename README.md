@@ -23,6 +23,19 @@ A privacy-first housing investment fund built on [Aztec Network](https://aztec.n
 
 ## Quick Start
 
+### Guided demo (fastest — no Docker, no blockchain)
+
+```bash
+cd frontend && npm ci && npm run demo
+```
+
+Open **http://localhost:3000/demo**. You play *Sofie*, a first-time saver, and
+walk the whole cycle in five steps — verify → invest → vote → own Fund Shares →
+earn rent (withdraw or reinvest) — one action per screen, on the in-memory
+simulation. Steps that normally wait on time or the fund's keeper (closing the
+vote and buying the home, a month of rent) are clearly tagged **Demo shortcut**.
+"Start over" resets the simulated fund. See [`docs/DEMO_RUNBOOK.md`](docs/DEMO_RUNBOOK.md).
+
 ### Full stack (Aztec network + contracts + frontend)
 
 ```bash
@@ -51,7 +64,7 @@ docker compose --profile sim up
 ```
 
 Instant startup — in-memory simulation engine, no blockchain required.
-Good for UI work and demos.
+Good for UI work and demos; the guided tour is at **http://localhost:3000/demo**.
 
 ---
 

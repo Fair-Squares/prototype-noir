@@ -61,6 +61,13 @@ export function logActivity(
   for (const listener of listeners) listener();
 }
 
+/** Drop an account's session log — used when the simulated demo restarts. */
+export function clearActivity(address: string): void {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(storageKey(address));
+  for (const listener of listeners) listener();
+}
+
 /** React hook: the account's session activity, newest first, live-updating. */
 export function useSessionActivity(address: string | null): ActivityEntry[] {
   const [entries, setEntries] = useState<ActivityEntry[]>([]);

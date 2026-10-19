@@ -19,6 +19,41 @@ audience.
   *represents* the Fair Squares capped-return tranche of a (modelled) capital
   stack — the two are never conflated into one euro figure.
 
+## 0.5 The guided demo (`/demo`) — start here for a first-time audience
+
+The fastest, clearest demo is the **guided tour**: one persona, one home, five
+steps, one primary action per screen. It runs on the in-memory simulation, so
+it needs no Docker and no Aztec node:
+
+```bash
+cd frontend && npm ci && npm run demo     # next build + start, simulation mode
+# open http://localhost:3000/demo  (or click "Take the 3-minute tour" on Home)
+```
+
+| Step | What the audience sees | Who acts |
+|---|---|---|
+| 1 Verify | "Verify with a demo passport" — documents stay private | Sofie |
+| 2 Invest | pick €500 / €1,000 / €5,000 and invest | Sofie |
+| 3 Vote | vote on *Maashaven Wonen — Rotterdam* (ballot private, totals public) | Sofie |
+| — | **Demo shortcut:** close the vote; if yes wins, the fund buys the home | stands in for the voting window + keeper |
+| 4 Own | collect Fund Shares, pro-rata to money in the fund | Sofie |
+| — | **Demo shortcut:** a month passes; tenants pay ROR rent (3% × €210,000 / 12 = €525) | stands in for the keeper recording rent |
+| 5 Earn | withdraw the rent as cash, or reinvest it | Sofie |
+
+- A side panel keeps Sofie's three numbers in view: money in the fund, Fund
+  Shares (and % of all shares), rent collected (withdrawn vs reinvested).
+- The stage is derived from the simulation's state (`GET /api/demo`), so a
+  refresh or a detour through `/fund` or `/portfolio` lands back on the right
+  step — and those pages show the same data, acting as the same account (test4).
+- **Start over** (asks first) resets the whole simulated fund
+  (`POST /api/demo {action:"reset"}`) and reopens Maashaven's vote for 30 minutes.
+- Voting **no** shows the honest outcome: a tie is rejected, the home isn't bought.
+- `/api/demo` answers **403 on a live network** — the shortcuts never exist where
+  money is real; `/demo` then points to the regular app flow instead.
+
+For a housing-partner deep dive on the real Aztec network, continue with the
+full-stack walkthrough below.
+
 ## 1. Start it (one command, laptop-only)
 
 ```bash
