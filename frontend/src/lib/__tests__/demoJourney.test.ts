@@ -113,6 +113,12 @@ describe("guided demo against the simulation store", () => {
 
     const claimed = simClaimDistribution(DEMO_PROPOSAL_ID, me);
     expect(claimed.claimedAmount).toBe(bought.sharesClaimable);
+    // Regression: €1,000 in must never show as €61,665 of shares. Shares are
+    // carved out of the deposit at purchase price, so they are worth at most
+    // what went in.
+    const held = simGetPortfolio(me);
+    expect(held.shareValueEur).toBe(held.balance * 1);
+    expect(held.shareValueEur).toBeLessThanOrEqual(held.depositedAmount);
     const owning = simGetDemoSnapshot();
     expect(deriveDemoStage(owning)).toBe("collect_rent");
 

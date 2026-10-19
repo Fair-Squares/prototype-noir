@@ -50,7 +50,9 @@ export interface FundStats {
   lastFsftMinted?: number;
   tokenPriceBps?: number;
   navEur?: number;
-  navPerFsftEur?: number;
+  /** EUR price of one Fund Share at purchase (the issuance price set when the
+   *  fund last bought a home); null before any share exists. See lib/shareValue. */
+  sharePriceEur?: number | null;
   /** Cumulative on-chain rent income recorded via HousingFund.record_rent. REAL. */
   totalRentIncome?: number;
   /** Return on Rent in basis points (HousingFund.ror_bps). REAL — rent = ROR × acquisition. */
@@ -481,11 +483,13 @@ export interface PortfolioData {
   /** Rent already reinvested back into the fund (reinvest side of the ledger). */
   rentReinvested?: number;
   tokenPriceBps?: number;
-  tokenPriceEur?: number;
+  /** EUR price of one Fund Share at purchase; null before any share exists. */
+  sharePriceEur?: number | null;
+  /** The holder's shares valued at purchase price — NOT total deposits ÷ shares.
+   *  null when shares are held but no issuance price is known. */
+  shareValueEur?: number | null;
   navEur?: number;
-  navPerFsftEur?: number;
   totalRentIncome?: number;
-  fsftMarketValue?: number;
   lastAssetSalePrice?: number;
   lastFsftMinted?: number;
   fundTokenSymbol?: string;

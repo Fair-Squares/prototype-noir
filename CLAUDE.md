@@ -337,10 +337,15 @@ modelled `CAPPED_RETURN_PCT` overlay (see the demo-layer note below).
 
 An FSFT holder has exactly two figures, and the UI must keep them distinct:
 
-1. **Stake / share value (NAV).** What their FSFT is worth as a claim on the
-   fund's **capital** — property value (and not-yet-deployed deposit principal).
-   In the read layer today `NAV = total_deposits` (property marks land later via
-   the valuation oracle, §3.2). **Rent does NOT inflate NAV.**
+1. **Stake / share value.** The fund's NAV is its pooled **capital**
+   (`NAV = total_deposits` in the read layer; property marks land later via the
+   valuation oracle, §3.2). A holder's FSFT are minted only when the fund buys a
+   home, out of their deposit, so shares are valued **at purchase price**:
+   `shareValueEur = balance × last_token_price_bps / 10000`
+   (`lib/shareValue.ts`, used by the sim and both live routes). **Never** value a
+   share as `total_deposits ÷ total_supply` — that prices each share against
+   deposits not yet spent on a home (it once showed €1,000 deposited as €61,665
+   of shares). **Rent does NOT inflate NAV or share value.**
 2. **Rent earnings.** A **separate, claimable income stream** — "monthly
    earnings" / the return on their investment. Paid out as EUR (withdraw) or
    reinvested; it never silently rolls into NAV-per-FSFT.

@@ -68,11 +68,11 @@ export function FundParticipationKpis({ stats }: { stats: FundStats }) {
         label="Fund shares (FSFT)"
         value={stats.totalSupply.toLocaleString()}
         sub={
-          stats.navPerFsftEur != null
-            ? `${formatEURDecimals(stats.navPerFsftEur)} per share`
+          stats.sharePriceEur != null
+            ? `${formatEURDecimals(stats.sharePriceEur)} per share at purchase`
             : "Shares outstanding"
         }
-        hint="FSFT shares outstanding. Each is a claim on a slice of the fund's net asset value."
+        hint="FSFT shares outstanding. Shares are issued when the fund buys a home, at the price paid, and are valued at that price until the homes are revalued."
       />
     </KpiGrid>
   );

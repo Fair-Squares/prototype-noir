@@ -19,7 +19,7 @@ export const LEXICON = {
   /** Ownership. First mention per screen: `sharesFirstMention`; after: `shares`. */
   shares: "Shares",
   sharesFirstMention: "shares (FSFT)",
-  sharePrice: "Share price (NAV)",
+  sharePrice: "Share price (at purchase)",
 
   /** Income streams — never merged with share value (canonical economic model). */
   rentalIncome: "Rental income",
@@ -45,7 +45,7 @@ export const LEXICON = {
  * same definition renders wherever the term first appears on a screen.
  */
 export const TERM_DEFINITIONS = {
-  nav: "Net asset value — the fund's assets divided by shares outstanding. Your share price.",
+  nav: "Net asset value — the fund's pooled capital. A share is valued at the price paid for the homes until they are revalued.",
   cappedReturn:
     "Returns are capped at ~3% by design, so rents stay below market. This is the deal.",
   covenant:

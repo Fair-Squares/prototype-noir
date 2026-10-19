@@ -70,12 +70,12 @@ export function OverviewNextStep({
   const copy = COPY[step];
   const useConnectButton = step === "connect" && Boolean(connectAction);
 
-  // Only quote a real, held value — never a placeholder.
+  // Only quote a real, held value — never a placeholder. The position is the
+  // money put in: Fund Shares are issued out of it at purchase price, so adding
+  // a share value on top would count the same euros twice.
   const positionEur =
-    step === "portfolio" && portfolio != null
-      ? portfolio.navEur != null && portfolio.balance > 0 && portfolio.navPerFsftEur != null
-        ? portfolio.balance * portfolio.navPerFsftEur
-        : portfolio.fsftMarketValue ?? null
+    step === "portfolio" && portfolio != null && portfolio.depositedAmount > 0
+      ? portfolio.depositedAmount
       : null;
 
   return (
@@ -96,11 +96,11 @@ export function OverviewNextStep({
           <p className="text-caption mt-1 max-w-md text-text-2">{copy.body}</p>
           {positionEur != null ? (
             <p className="text-caption mt-2 text-text-2">
-              Your position is worth about{" "}
+              You have{" "}
               <span className="text-mono tabular-nums text-text-1">
                 {formatEUR(positionEur)}
-              </span>
-              .
+              </span>{" "}
+              in the fund.
             </p>
           ) : null}
         </div>

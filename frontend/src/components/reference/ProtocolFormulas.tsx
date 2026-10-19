@@ -60,11 +60,13 @@ export function ProtocolFormulas() {
       </Formula>
 
       <Formula
-        title="Net asset value (NAV)"
-        expr={"navEur       = max(0, totalFundDeposits)\nnavPerFsftEur = totalSupply > 0 ? navEur ÷ totalSupply : 0"}
+        title="Net asset value (NAV) and share value"
+        expr={"navEur        = max(0, totalFundDeposits)\nsharePriceEur = lastTokenPriceBps ÷ 10000\nshareValueEur = balance × sharePriceEur"}
       >
-        NAV is the pooled fund capital; NAV per FSFT divides that by the FSFT total
-        supply (rounded to 4 decimals). From <span className="text-mono">api/portfolio/route.ts</span>.
+        NAV is the pooled fund capital. Shares are minted only when the fund buys a home, so they
+        are valued at that issuance price until a valuation oracle marks the homes — never total
+        deposits ÷ shares, which would value each share against money not yet spent on a home.
+        From <span className="text-mono">lib/shareValue.ts</span>.
       </Formula>
 
       <Formula

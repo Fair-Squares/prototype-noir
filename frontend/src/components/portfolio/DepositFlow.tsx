@@ -125,15 +125,8 @@ export function DepositFlow({ onDeposited }: { onDeposited?: () => void }) {
   const eurBalance = portfolio?.eurBalance ?? 0;
   const hasCash = eurBalance > 0;
 
-  const navPerFsftEur = useMemo(() => {
-    if (portfolio?.navPerFsftEur != null) return portfolio.navPerFsftEur;
-    if (stats?.navPerFsftEur != null) return stats.navPerFsftEur;
-    if (stats && stats.totalSupply > 0) {
-      const fundValue = stats.navEur ?? Math.max(0, stats.totalDeposits);
-      return fundValue / stats.totalSupply;
-    }
-    return 0;
-  }, [portfolio, stats]);
+  // Shares are issued at purchase price; null until the fund has bought a home.
+  const sharePriceEur = portfolio?.sharePriceEur ?? stats?.sharePriceEur ?? null;
 
   const parsedAmount = Number.parseFloat(amount);
   const amountEur = Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : 0;
@@ -231,9 +224,9 @@ export function DepositFlow({ onDeposited }: { onDeposited?: () => void }) {
       <KpiGrid cols={2}>
         <KpiCard label="Available cash" value={formatEUR(eurBalance)} sub="EUR in your wallet" />
         <KpiCard
-          label="Value per share"
-          value={navPerFsftEur > 0 ? `€${navPerFsftEur.toFixed(4)}` : "—"}
-          sub={navPerFsftEur > 0 ? "Fund value ÷ shares in circulation" : "Set at first payout"}
+          label="Price per share"
+          value={sharePriceEur != null ? formatEURDecimals(sharePriceEur) : "—"}
+          sub={sharePriceEur != null ? "Price paid when the fund bought a home" : "Set when the fund buys its first home"}
         />
       </KpiGrid>
 
@@ -384,7 +377,7 @@ export function DepositFlow({ onDeposited }: { onDeposited?: () => void }) {
               <InvestQuote
                 amountEur={amountEur}
                 eurBalance={eurBalance}
-                navPerFsftEur={navPerFsftEur}
+                sharePriceEur={sharePriceEur}
               />
 
               {submitting ? (

@@ -64,13 +64,13 @@ export function CapitalHeader({ stats, loading }: CapitalHeaderProps) {
             />
           </span>{" "}
           <span className="text-mono text-text-1">{formatEUR(stats.navEur)}</span>
-          {typeof stats.navPerFsftEur === "number" ? (
+          {stats.sharePriceEur != null ? (
             <>
               {" · "}
               <span className="text-mono text-text-1">
-                {formatEURDecimals(stats.navPerFsftEur)}
+                {formatEURDecimals(stats.sharePriceEur)}
               </span>{" "}
-              per Fund Share
+              per Fund Share at purchase
             </>
           ) : null}
         </p>

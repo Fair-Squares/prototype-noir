@@ -38,7 +38,7 @@ export function HoldingsBreakdown({
 }: HoldingsBreakdownProps) {
   const fundShareSymbol = portfolio.fundTokenSymbol ?? "FSFT";
   const cashSymbol = portfolio.eurTokenSymbol ?? "EURs";
-  const fsftMarketValue = portfolio.fsftMarketValue ?? 0;
+  const shareValue = portfolio.shareValueEur ?? null;
   const protocolBalance = portfolio.protocolTokenBalance ?? 0;
 
   const rows: HoldingRow[] = [
@@ -51,7 +51,7 @@ export function HoldingsBreakdown({
         </div>
       ),
       amount: portfolio.balance.toLocaleString(),
-      value: fsftMarketValue > 0 ? formatEUR(fsftMarketValue) : "—",
+      value: shareValue != null && shareValue > 0 ? formatEUR(shareValue) : "—",
     },
     {
       key: "cash",
@@ -158,25 +158,17 @@ export function HoldingsBreakdown({
 
       <AdvancedDetails summary="Valuation & fund detail">
         <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-          {portfolio.navPerFsftEur !== undefined ? (
+          {portfolio.sharePriceEur != null ? (
             <div className="flex flex-col gap-0.5">
               <dt className="text-label flex items-center gap-1.5">
-                Value per share
+                Price per share
                 <InfoDot
-                  label="What is value per share"
-                  content="Net asset value: the fund's assets divided by the number of shares outstanding. It is the reference value of one fund share, not a price target."
+                  label="How shares are valued"
+                  content="Shares are issued when the fund buys a home, at the price paid, and valued at that price until the homes are revalued. It is not a market quote."
                 />
               </dt>
               <dd className="text-body text-mono text-text-1">
-                {formatEURDecimals(portfolio.navPerFsftEur)}
-              </dd>
-            </div>
-          ) : null}
-          {portfolio.tokenPriceEur !== undefined ? (
-            <div className="flex flex-col gap-0.5">
-              <dt className="text-label">Issue price per share</dt>
-              <dd className="text-body text-mono text-text-1">
-                {formatEURDecimals(portfolio.tokenPriceEur)}
+                {formatEURDecimals(portfolio.sharePriceEur)}
               </dd>
             </div>
           ) : null}

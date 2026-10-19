@@ -2,6 +2,7 @@
 
 import { KpiCard, KpiGrid } from "@/components/ui";
 import { formatEUR, formatFSFT, type PortfolioData } from "@/lib/contracts";
+import { formatCount } from "@/lib/format";
 
 export interface PositionSnapshotProps {
   portfolio: PortfolioData;
@@ -13,10 +14,12 @@ export interface PositionSnapshotProps {
  * Shared by the journey home and the portfolio page.
  */
 export function PositionSnapshot({ portfolio }: PositionSnapshotProps) {
-  const shareValue =
-    portfolio.fsftMarketValue ??
-    (portfolio.navPerFsftEur != null ? Math.floor(portfolio.balance * portfolio.navPerFsftEur) : null);
-  const claimableIncome = (portfolio.rentClaimable ?? 0) + (portfolio.rewardsClaimable ?? 0);
+  const shareValue = portfolio.shareValueEur ?? null;
+  // Rent is euros; participation rewards are FSP tokens — never summed into
+  // one euro figure (rewards are a separate program, not rental income).
+  const rentClaimable = portfolio.rentClaimable ?? 0;
+  const rewardsClaimable = portfolio.rewardsClaimable ?? 0;
+  const rewardsSymbol = portfolio.protocolTokenSymbol ?? "FSP";
 
   return (
     <KpiGrid cols={4}>
@@ -29,16 +32,26 @@ export function PositionSnapshot({ portfolio }: PositionSnapshotProps) {
       <KpiCard
         label="Fund shares"
         value={formatFSFT(portfolio.balance)}
-        sub={shareValue != null ? `≈ ${formatEUR(shareValue)} at NAV` : "Awaiting NAV mark"}
+        sub={
+          shareValue != null && portfolio.balance > 0
+            ? `${formatEUR(shareValue)} at purchase price`
+            : "Issued when the fund buys a home"
+        }
         tone="accent"
-        hint="Your FSFT balance valued at NAV per share — capital backing, not a market quote."
+        hint="Your FSFT balance valued at the price paid for the homes — part of your deposit, not extra money and not a market quote."
       />
       <KpiCard
-        label="Claimable income"
-        value={formatEUR(claimableIncome)}
-        tone={claimableIncome > 0 ? "success" : "default"}
-        sub={claimableIncome > 0 ? "Rent + rewards ready to claim" : "Nothing waiting"}
-        hint="Unclaimed rent earnings plus claimable participation rewards. Distribution claims per funded home are listed on the portfolio page."
+        label="Rent to collect"
+        value={formatEUR(rentClaimable)}
+        tone={rentClaimable > 0 ? "success" : "default"}
+        sub={
+          rewardsClaimable > 0
+            ? `Plus ${formatCount(rewardsClaimable)} ${rewardsSymbol} participation rewards`
+            : rentClaimable > 0
+              ? "Ready to withdraw or reinvest"
+              : "Nothing waiting"
+        }
+        hint="Unclaimed rent earnings in euros. Participation rewards are separate tokens, not rental income. Payouts per funded home are listed on the portfolio page."
       />
       <KpiCard
         label="Rent earned to date"

@@ -9,6 +9,7 @@
  */
 
 import { DEMO_ACCOUNT_INDEX, DEMO_PROPOSAL_ID } from "./demoJourney";
+import { sharePriceFromBps, shareValueAtPurchase } from "./shareValue";
 
 // ── Accounts ─────────────────────────────────────────────────────────────────
 
@@ -352,7 +353,7 @@ function createInitialState(): SimState {
   };
   accounts[SIM_ACCOUNTS[1].address] = {
     eurBalance: 42_000,
-    fsftBalance: 1_800,
+    fsftBalance: 18_000,
     protocolTokenBalance: 1_200,
     kycVerified: true,
     investorRole: true,
@@ -364,7 +365,7 @@ function createInitialState(): SimState {
   };
   accounts[SIM_ACCOUNTS[2].address] = {
     eurBalance: 35_000,
-    fsftBalance: 1_300,
+    fsftBalance: 12_000,
     protocolTokenBalance: 300,
     kycVerified: true,
     investorRole: true,
@@ -403,10 +404,12 @@ function createInitialState(): SimState {
     fund: {
       totalDeposits: 700_000,
       totalInDefi: 210_000,
+      // Consistent with how shares are issued: €30,000 already spent on a home
+      // minted 30,000 shares at €1 (18,000 + 12,000 held by test1/test2).
       totalAllocated: 30_000,
-      fsftTotalSupply: 3_100,
-      lastAssetSalePrice: 240_000,
-      lastFsftMinted: 1_200,
+      fsftTotalSupply: 30_000,
+      lastAssetSalePrice: 30_000,
+      lastFsftMinted: 30_000,
       tokenPriceBps: 10_000,
       isPaused: false,
       investorCount: 3,
@@ -646,7 +649,6 @@ export function simGetFundStats() {
   const { fund } = getState();
   // NAV = pooled CAPITAL only. Rent is surfaced separately as totalRentIncome.
   const navEur = Math.max(0, fund.totalDeposits);
-  const navPerFsftEur = fund.fsftTotalSupply > 0 ? roundTo4(navEur / fund.fsftTotalSupply) : 0;
   const available = Math.max(0, fund.totalDeposits - fund.totalInDefi - fund.totalAllocated);
 
   return {
@@ -664,7 +666,7 @@ export function simGetFundStats() {
     totalRentIncome: fund.rentIncome,
     rorBps: fund.rorBps,
     navEur,
-    navPerFsftEur,
+    sharePriceEur: sharePriceFromBps(fund.tokenPriceBps),
     parkedAllocationBps: fund.parkedAllocationBps,
     parkedMinBps: fund.parkedMinBps,
     parkedMaxBps: fund.parkedMaxBps,
@@ -835,8 +837,9 @@ export function simGetPortfolio(address: string) {
   const eligibility = simGetVotingEligibility(address);
   const sharePercent = fund.fsftTotalSupply > 0 ? (acct.fsftBalance / fund.fsftTotalSupply) * 100 : 0;
   // NAV = pooled CAPITAL only; rent does NOT inflate share value (CLAUDE.md).
+  // Shares are valued at purchase price (lib/shareValue.ts).
   const navEur = Math.max(0, fund.totalDeposits);
-  const navPerFsftEur = fund.fsftTotalSupply > 0 ? roundTo4(navEur / fund.fsftTotalSupply) : 0;
+  const sharePriceEur = sharePriceFromBps(fund.tokenPriceBps);
   // The holder's pooled pro-rata slice of REAL rent income — a SEPARATE claimable
   // earnings stream (withdraw or reinvest), not part of NAV. No fake APY. This is
   // lifetime EARNED; claimable nets out what they already withdrew/reinvested.
@@ -847,7 +850,6 @@ export function simGetPortfolio(address: string) {
   const rentWithdrawn = acct.rentWithdrawn ?? 0;
   const rentReinvested = acct.rentReinvested ?? 0;
   const rentClaimable = Math.max(0, rentEarned - rentWithdrawn - rentReinvested);
-  const tokenPriceEur = fund.tokenPriceBps / 10_000;
   const rewards = simGetRewardsStatus(address);
 
   return {
@@ -868,11 +870,10 @@ export function simGetPortfolio(address: string) {
     rentWithdrawn,
     rentReinvested,
     tokenPriceBps: fund.tokenPriceBps,
-    tokenPriceEur,
-    navPerFsftEur,
+    sharePriceEur,
+    shareValueEur: shareValueAtPurchase(acct.fsftBalance, sharePriceEur),
     navEur,
     totalRentIncome: fund.rentIncome,
-    fsftMarketValue: Math.round(acct.fsftBalance * navPerFsftEur * 100) / 100,
     lastAssetSalePrice: fund.lastAssetSalePrice,
     lastFsftMinted: fund.lastFsftMinted,
     protocolTokenBalance: acct.protocolTokenBalance,

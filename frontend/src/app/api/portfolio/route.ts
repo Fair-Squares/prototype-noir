@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sharePriceFromBps, shareValueAtPurchase } from "@/lib/shareValue";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simGetPortfolio } from "@/lib/simulationStore";
 import { simResult } from "@/lib/aztecSim";
@@ -272,14 +273,14 @@ export async function GET(request: NextRequest) {
     rewardsClaimable = rewardsResult;
 
     const sharePercent = totalSupply > 0 ? Math.round((fsftBalance / totalSupply) * 10000) / 100 : 0;
-    const tokenPriceEur = tokenPriceBps > 0 ? tokenPriceBps / 10000 : 0;
+    // Shares are valued at purchase price (lib/shareValue.ts), never total
+    // deposits ÷ shares outstanding.
+    const sharePriceEur = sharePriceFromBps(tokenPriceBps);
     // NAV = pooled CAPITAL only (deposit principal). Rent is a SEPARATE claimable
     // earnings stream and does NOT inflate NAV / share value — the holder's rent
     // is surfaced via `estimatedYield` (their pooled pro-rata rent share). See the
     // canonical model in CLAUDE.md and docs/PHASE1_YIELD_AND_RENT.md.
     const navEur = Math.max(0, totalFundDeposits);
-    const navPerFsftEur = totalSupply > 0 ? Math.round((navEur / totalSupply) * 10000) / 10000 : 0;
-    const fsftMarketValue = Math.round(fsftBalance * navPerFsftEur * 100) / 100;
     // Lifetime EARNED rent (pro-rata); claimable nets out the on-chain ledger.
     const rentEarned = totalSupply > 0 ? Math.round((totalRentIncome * fsftBalance) / totalSupply) : 0;
     const hasDepositTicket = depositTicket > 0;
@@ -312,11 +313,10 @@ export async function GET(request: NextRequest) {
       rentReinvested,
       rentClaimable: Math.max(0, rentEarned - rentWithdrawn - rentReinvested),
       tokenPriceBps,
-      tokenPriceEur,
+      sharePriceEur,
+      shareValueEur: shareValueAtPurchase(fsftBalance, sharePriceEur),
       navEur,
-      navPerFsftEur,
       totalRentIncome,
-      fsftMarketValue,
       lastAssetSalePrice,
       lastFsftMinted,
       protocolTokenBalance,

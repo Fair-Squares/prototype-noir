@@ -35,8 +35,10 @@ export function PositionSummary({
 }: PositionSummaryProps) {
   const fundShareSymbol = portfolio.fundTokenSymbol ?? "FSFT";
   const cashSymbol = portfolio.eurTokenSymbol ?? "EURs";
-  const fsftMarketValue = portfolio.fsftMarketValue ?? 0;
-  const totalPositionValue = fsftMarketValue + portfolio.eurBalance;
+  // Shares at purchase price (lib/shareValue.ts); null = shares held but no
+  // issuance price known, so no total is quoted rather than a wrong one.
+  const shareValue = portfolio.shareValueEur ?? null;
+  const totalPositionValue = shareValue != null ? shareValue + portfolio.eurBalance : null;
 
   return (
     <section className="surface p-5">
@@ -48,12 +50,14 @@ export function PositionSummary({
           <span className="text-label">Shares &amp; cash value</span>
           <InfoDot
             label="What is shares and cash value"
-            content="The market value of your fund shares plus the cash held in your wallet. Deposited capital awaiting share issuance is shown separately below. It is not a forecast — all figures come from current on-chain state."
+            content="Your fund shares at the price paid for the homes, plus the cash in your wallet. Deposited money not yet used for a home is shown separately below. It is not a forecast — all figures come from current on-chain state."
           />
         </div>
-        <p className="text-display text-text-1">{formatEUR(totalPositionValue)}</p>
+        <p className="text-display text-text-1">
+          {totalPositionValue != null ? formatEUR(totalPositionValue) : "—"}
+        </p>
         <p className="text-caption flex flex-wrap items-baseline gap-x-2 text-text-2">
-          <span>Fund shares {formatEUR(fsftMarketValue)}</span>
+          <span>Fund shares {shareValue != null ? formatEUR(shareValue) : "—"} at purchase price</span>
           <span>+ cash {formatEUR(portfolio.eurBalance)}</span>
         </p>
       </div>
@@ -63,7 +67,9 @@ export function PositionSummary({
           label={`Fund shares (${fundShareSymbol})`}
           value={portfolio.balance.toLocaleString()}
           sub={
-            fsftMarketValue > 0 ? `Worth ${formatEUR(fsftMarketValue)}` : "Ownership in the fund"
+            shareValue != null && shareValue > 0
+              ? `${formatEUR(shareValue)} at purchase price`
+              : "Ownership in the fund"
           }
           hint="Your fund-share token balance, representing your ownership in the housing fund."
         />

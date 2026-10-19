@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sharePriceFromBps } from "@/lib/shareValue";
 import { isLiveModeEnabled } from "@/lib/aztecLive";
 import { simGetFundStats } from "@/lib/simulationStore";
 import { simResult } from "@/lib/aztecSim";
@@ -137,7 +138,7 @@ export async function GET() {
     // "Rent earnings" display. See the canonical model in CLAUDE.md and
     // docs/PHASE1_YIELD_AND_RENT.md.
     const navEur = Math.max(0, totalDeposits);
-    const navPerFsftEur = totalSupply > 0 ? Math.round((navEur / totalSupply) * 10000) / 10000 : 0;
+    const tokenPriceBps = toNumberStrict(valuation.last_token_price_bps, "HousingFund.get_valuation.last_token_price_bps");
 
     return NextResponse.json({
       totalDeposits,
@@ -149,10 +150,12 @@ export async function GET() {
       totalSupply,
       lastAssetSalePrice: toNumberStrict(valuation.last_asset_sale_price, "HousingFund.get_valuation.last_asset_sale_price"),
       lastFsftMinted: toNumberStrict(valuation.last_fsft_minted, "HousingFund.get_valuation.last_fsft_minted"),
-      tokenPriceBps: toNumberStrict(valuation.last_token_price_bps, "HousingFund.get_valuation.last_token_price_bps"),
+      tokenPriceBps,
       valuationBlock: toNumberStrict(valuation.last_valuation_block, "HousingFund.get_valuation.last_valuation_block"),
       navEur,
-      navPerFsftEur,
+      // Shares are valued at purchase price (lib/shareValue.ts), never
+      // total deposits ÷ shares outstanding.
+      sharePriceEur: sharePriceFromBps(tokenPriceBps),
       totalRentIncome,
       rorBps,
       parkedAllocationBps: toNumberStrict(parkedPolicy.target_bps, "HousingFund.get_parked_capital_policy.target_bps"),
