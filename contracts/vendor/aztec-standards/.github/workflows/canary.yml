@@ -1,0 +1,50 @@
+name: Canary Release
+
+on: workflow_dispatch
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ══════════════════════════════════════════════════════════════════════════════
+  # CANARY RELEASE JOB
+  # ══════════════════════════════════════════════════════════════════════════════
+  canary:
+    name: Canary Release
+    environment: Development
+    runs-on: ubuntu-latest-m
+    timeout-minutes: 60
+
+    env:
+      PROJECT_NAME: '@defi-wonderland/aztec-standards'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Aztec environment
+        id: setup-aztec
+        uses: defi-wonderland/aztec-ci-actions/actions/setup-aztec@v0
+        with:
+          start-pxe: 'false'
+          run-codegen: 'true'
+
+      - name: Set canary version
+        run: yarn version --new-version "0.0.0-${GITHUB_SHA::8}" --no-git-tag-version
+
+      - name: Build package
+        run: yarn build
+
+      - name: Setup Node.js for NPM publish
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Publish to NPM
+        run: cd export/${{ env.PROJECT_NAME }} && npm publish --access public --tag canary
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

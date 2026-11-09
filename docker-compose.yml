@@ -1,0 +1,263 @@
+# Fair Squares -- Local Development Stack
+#
+# Deploy (full Aztec network + contracts + frontend):
+#   ./scripts/compile-contracts.sh && docker compose --profile aztec up
+#
+# The azteclabs/aztec:6.0.0 image as published today is a pure RUNTIME
+# (node, anvil, cli-wallet, `aztec codegen`; bb-avm + noir-execute but NO
+# nargo), so contracts are compiled on the HOST with the pinned toolchain
+# (.aztec-version) and the `aztec-bootstrap` container only verifies the
+# bind-mounted artifacts (freshness + aztec_version), runs codegen, deploys,
+# wires and seeds. If an image with nargo is used, the bootstrap compiles
+# in-container as before (FS_HOST_ARTIFACTS=1 forces the host path).
+#
+# This boots a single Aztec local-network container (which runs its OWN
+# automine Anvil L1 + Aztec node + PXE in-process) -> deploys all Noir
+# contracts -> writes contract addresses to a shared volume -> starts the
+# frontend with live Aztec connectivity.
+#
+# Frontend-only (simulation mode, no Aztec needed):
+#   docker compose --profile sim up
+#
+# WHY ONE SERVICE (and why it's fast):
+#   `aztec start --local-network` is designed to manage its own L1. On Aztec v6
+#   the local network runs the deterministic `AutomineSequencer` (it replaced
+#   the pre-v6 `AnvilTestWatcher`): it switches anvil into automine itself,
+#   polls the mempool every 50 ms, builds a single-block checkpoint as soon as
+#   one tx is pending, warps L1 time to the next L2 slot with cheat codes,
+#   publishes the checkpoint to L1 in the same step and synthetically settles
+#   epochs. No wall-clock slot is ever waited on, so a tx is proposed in well
+#   under a second and the whole bootstrap lands in about a minute. The
+#   entrypoint below starts a bare `anvil` (no --block-time) in the same
+#   container, exactly like the upstream `aztec.sh` host wrapper does.
+
+# Aztec v6 moved the node/CLI image to the azteclabs org (aztec-labs-eng/aztec-node).
+# Keep this in step with .aztec-version (host toolchain) and the @aztec-labs/*
+# npm pins in frontend/ + scripts/.
+x-aztec-image: &aztec-image azteclabs/aztec:6.0.0
+
+services:
+  # -- Frontend (live Aztec mode) ----------------------------------------------
+  frontend:
+    build: ./frontend
+    profiles: ["aztec"]
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      aztec-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      - NEXT_PUBLIC_DEV_MODE=true
+      # Force live mode for the aztec profile. The frontend Docker image sets
+      # NEXT_PUBLIC_SIMULATION=true by default, so we must override it here.
+      - NEXT_PUBLIC_SIMULATION=false
+      - AZTEC_LIVE=true
+      # Contract addresses are still loaded from /env/.env.contracts.
+      - NEXT_PUBLIC_AZTEC_PXE_URL=http://aztec:8080
+      - NEXT_TELEMETRY_DISABLED=1
+      # Proverless by default (a local network never needs client proofs); the
+      # server-side EmbeddedWallet reads this and skips ClientIVC proof
+      # generation (~4 s/tx). Override to true only for proving-realism tests.
+      - PXE_PROVER_ENABLED=${PXE_PROVER_ENABLED:-false}
+      # Surface the live chain timing so /api/chain/params (Reference page)
+      # reflects the network's slot duration. local-network uses the protocol
+      # default (36 s L2 / 12 s L1); the AutomineSequencer warps L1 time across
+      # it, so this is a DISPLAY value only -- it does not gate wall-clock speed.
+      - AZTEC_SLOT_DURATION=${AZTEC_SLOT_DURATION:-36}
+      - ETHEREUM_SLOT_DURATION=${ETHEREUM_SLOT_DURATION:-12}
+      # Run mode. DEFAULT is PRODUCTION (next build + next start): routes are
+      # pre-compiled, so first-visit latency is ~instant instead of the 3-4 s
+      # per-route on-demand compile that `next dev` pays. Set FRONTEND_DEV=1 only
+      # when you are EDITING the frontend and want hot reload (slower to use).
+      - FRONTEND_DEV=${FRONTEND_DEV:-}
+      # The server-side EmbeddedWallet runs an in-process PXE that executes jobs
+      # one-at-a-time. A page that fires many parallel reads makes it log a
+      # benign "PXE is already processing N jobs" WARN per queued read — it is
+      # NOT an error or a leak (when the frontend gets no requests the PXE is
+      # silent). Quiet just that module so the noise doesn't look like a fault;
+      # raise FRONTEND_LOG_LEVEL to "info" to see it again when debugging.
+      - LOG_LEVEL=${FRONTEND_LOG_LEVEL:-info;error:embedded-wallet:pxe}
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - ./contracts:/contracts:ro
+      - contract-env:/env:ro
+    entrypoint:
+      - sh
+      - -c
+      - |
+        if [ -f /env/.env.contracts ]; then
+          echo "[frontend] Loading contract addresses from bootstrap..."
+          cp /env/.env.contracts /app/.env.local
+        fi
+        if [ "$${FRONTEND_DEV:-}" = "1" ]; then
+          echo "[frontend] DEV mode — hot reload; routes compile on first visit"
+          exec npm run dev
+        fi
+        echo "[frontend] PRODUCTION mode — building (one-time ~60s), then serving pre-compiled routes"
+        npm run build || { echo "[frontend] BUILD FAILED — aborting (see error above)"; exit 1; }
+        exec npm run start
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 150s
+
+  # -- Seed tradable FSFT into all three accounts (real distribution flow) ------
+  # Runs once the frontend is healthy and drives the live API routes:
+  #   deposit x3 -> create proposal -> vote x2 -> finalize -> execute (opens the
+  #   distribution) -> claim x3, so test0/1/2 each hold private FSFT minted from
+  #   an executed fund proposal — ready to sell on the DEX. One-shot; exits 0.
+  # Reuses the proven server-side wallet via HTTP (reliable, unlike a fresh PXE).
+  fsft-seed:
+    image: *aztec-image
+    profiles: ["aztec"]
+    working_dir: /workspace
+    depends_on:
+      frontend:
+        condition: service_healthy
+    environment:
+      - FRONTEND_URL=http://frontend:3000
+    volumes:
+      - ./:/workspace
+    entrypoint: ["bash", "./scripts/seed-fsft.sh"]
+    restart: "no"
+
+  # -- Frontend (simulation only, no Aztec) ------------------------------------
+  frontend-sim:
+    build: ./frontend
+    profiles: ["sim"]
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      - NEXT_PUBLIC_DEV_MODE=true
+      - NEXT_PUBLIC_SIMULATION=true
+      - NEXT_TELEMETRY_DISABLED=1
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  # -- Aztec Local Network (automine L1 + Node + PXE, single container) ---------
+  # The image ENTRYPOINT is the raw node binary, which does NOT auto-start anvil
+  # (only the `aztec.sh` host wrapper does). So we replicate the wrapper's
+  # local-network preamble here: start a bare anvil and point the node at it via
+  # ETHEREUM_HOSTS=127.0.0.1. The node's AutomineSequencer then owns L1 time
+  # (see the header comment).
+  aztec:
+    image: *aztec-image
+    profiles: ["aztec"]
+    ports:
+      - "8080:8080"
+      # Expose the in-container L1 for debugging (cast block-number, etc.).
+      - "8545:8545"
+    environment:
+      # info, but silence the per-slot sequencer chatter for readable logs
+      # (matches the host wrapper's local-network default).
+      LOG_LEVEL: ${AZTEC_LOG_LEVEL:-info;silent:sequencer}
+      L1_CHAIN_ID: "31337"
+      # Point the node at the anvil started in the entrypoint below.
+      ETHEREUM_HOSTS: http://127.0.0.1:8545
+      # Ship the prefunded test accounts (test0/test1/test2) on start.
+      TEST_ACCOUNTS: "true"
+      # Fast polling intervals -- copied from the `aztec.sh` local-network path
+      # so the archiver / world state / p2p pick up new blocks within ~500 ms.
+      # (v6 dropped SEQ_TX_POLLING_INTERVAL_MS: the AutomineSequencer polls the
+      # mempool every 50 ms on its own.)
+      ARCHIVER_POLLING_INTERVAL_MS: "500"
+      P2P_BLOCK_CHECK_INTERVAL_MS: "500"
+      WS_BLOCK_CHECK_INTERVAL_MS: "500"
+      ARCHIVER_VIEM_POLLING_INTERVAL_MS: "500"
+      # The automine build only picks txs that have aged past the p2p min pool
+      # age. On a single-node network that 2 s is pure delay stacked on every
+      # tx, so zero it: a tx is built the next 50 ms poll after it arrives.
+      P2P_MIN_TX_POOL_AGE_MS: "0"
+      # Proverless client/wallet (the node already runs realProofs=false on a
+      # local network). Saves ~4 s/tx of ClientIVC proving. Set true for realism.
+      PXE_PROVER_ENABLED: ${PXE_PROVER_ENABLED:-false}
+      # L1 (rollup) governance voting duration for the local chain. Fair Squares'
+      # own Governance contract is unrelated; this only shortens the L1 side.
+      # AZTEC_EXIT_DELAY_SECONDS=0, which used to sit here, is REJECTED by the
+      # v6 L1 deploy ("DeployRollupLib: exitDelaySeconds is zero") and kills the
+      # node at start -- leave the exit delay at its default.
+      AZTEC_GOVERNANCE_VOTING_DURATION: ${AZTEC_GOVERNANCE_VOTING_DURATION:-300}
+      # Per-tx DA gas admission cap. v6 derives it from the L1 constants:
+      #   daGas = min(MAX_TX_DA_GAS, budget, ceil(budget / blocksPerCheckpoint * 1.5))
+      # with blocksPerCheckpoint = AZTEC_SLOT_DURATION / ETHEREUM_SLOT_DURATION.
+      # The node default (72 s / 12 s = 6 blocks) caps a tx at ~53 k DA gas and
+      # publishing HousingFund's public bytecode needs ~55 k ("Out of gas: total
+      # DA used 55200 of 53283"). 36 s / 12 s = 3 blocks raises the cap to ~106 k
+      # (the public testnet allows ~117 k). The frontend already displays 36 s.
+      AZTEC_SLOT_DURATION: ${AZTEC_SLOT_DURATION:-36}
+      ETHEREUM_SLOT_DURATION: ${ETHEREUM_SLOT_DURATION:-12}
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -e
+        echo "[aztec] starting anvil (no --block-time; the node's AutomineSequencer drives it) on :8545"
+        anvil --silent --host 0.0.0.0 --port 8545 &
+        echo "[aztec] waiting for L1..."
+        until cast block-number --rpc-url http://127.0.0.1:8545 >/dev/null 2>&1; do sleep 0.2; done
+        echo "[aztec] L1 up; launching local-network node + PXE"
+        exec node --no-warnings /usr/src/yarn-project/aztec/dest/bin/index.js start --local-network
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/status"]
+      interval: 5s
+      timeout: 10s
+      retries: 60
+      start_period: 120s
+
+  # -- Bootstrap (compile + deploy contracts) -----------------------------------
+  aztec-bootstrap:
+    image: *aztec-image
+    profiles: ["aztec"]
+    working_dir: /workspace
+    depends_on:
+      aztec:
+        condition: service_healthy
+    environment:
+      - AZTEC_NODE_URL=http://aztec:8080
+      - PXE_URL=http://aztec:8080
+      # Proverless deploys by default: scripts/local-deploy.ts (one SDK process
+      # for the ~26 deploy/wiring/seed txs) skips ClientIVC proving unless this
+      # is "true" (~4 s/tx of proving otherwise).
+      - PXE_PROVER_ENABLED=${PXE_PROVER_ENABLED:-false}
+      # Governance voting window for the local demo: 12 blocks. Blocks are
+      # produced on-demand (only when there are txs), so the window advances
+      # with on-chain activity rather than wall-clock time. 5 was too tight for
+      # interactive voting — clicking through the UI + proof-gen can mine several
+      # blocks, closing the window before a ballot lands (its public tally tail
+      # then reverts "voting window closed"). 12 gives headroom while staying
+      # small enough that seed-fsft.sh can still advance past the deadline to
+      # finalise (see MAX_ADVANCE in scripts/seed-fsft.sh — keep it >= this).
+      - GOVERNANCE_VOTING_WINDOW_BLOCKS=${GOVERNANCE_VOTING_WINDOW_BLOCKS:-12}
+      # The deploy wallet sets maxFeesPerGas = currentMinFees * (1 + padding).
+      # Too low (SDK default 0.5) -> local fee spikes revert sends. Too high
+      # (1000) -> the fee pre-reservation exceeds the account's fee juice
+      # ("Insufficient fee payer balance"). 30 matches serverWallet.ts.
+      - WALLET_MIN_FEE_PADDING=${WALLET_MIN_FEE_PADDING:-30}
+      # Contract compiles run as a pool of background jobs, one per core by
+      # default (nargo is single-threaded, ~0.45 GB each). Lower this on a
+      # memory-constrained docker VM.
+      - BOOTSTRAP_COMPILE_JOBS=${BOOTSTRAP_COMPILE_JOBS:-}
+    volumes:
+      - ./:/workspace
+      - contract-env:/out
+      # Persist nargo's git-dependency cache so re-bootstraps don't re-clone
+      # aztec-nr. nargo keeps it at $HOME/nargo/github.com/... (no dot --
+      # /root/.nargo only ever held the host installer's bin dir, so the old
+      # mount cached nothing).
+      - nargo-cache:/root/nargo
+    entrypoint: ["bash", "./scripts/bootstrap-local-network.sh"]
+    restart: "no"
+
+volumes:
+  contract-env:
+  nargo-cache:

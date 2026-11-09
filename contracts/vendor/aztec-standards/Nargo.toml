@@ -1,0 +1,18 @@
+[workspace]
+# vault_contract + vault_deployer (AIP-4626) dropped: the Fair Squares model is
+# deposit-EUR-is-withdrawable + FSFT-minted-on-acquisition, which the 4626 vault
+# (immediate pro-rata shares on deposit) does not fit.
+members = [
+"src/token_contract",
+"src/dripper",
+"src/nft_contract",
+"src/escrow_contract",
+"src/escrow_contract/src/test/test_logic_contract",
+"src/generic_proxy",
+]
+
+[benchmark]
+token = "benchmarks/token_contract.benchmark.ts"
+nft = "benchmarks/nft_contract.benchmark.ts"
+escrow = "benchmarks/escrow_contract.benchmark.ts"
+logic = "benchmarks/logic_contract.benchmark.ts"

@@ -1,0 +1,15 @@
+[package]
+name = "housing_fund"
+type = "contract"
+authors = ["Fair Squares"]
+compiler_version = ">=0.18.0"
+
+[dependencies]
+aztec = { git = "https://github.com/aztec-labs-eng/aztec-nr", tag = "v6.0.0", directory = "aztec" }
+deposit_note = { path = "../deposit_note" }
+# FSFT is now the vendored AIP-20 Token (this fund is its immutable minter).
+token_contract = { path = "../vendor/aztec-standards/src/token_contract" }
+governance = { path = "../governance" }
+kyc_verifier = { path = "../kyc_verifier" }
+# AIP-721 property-deed NFT (vendored aztec-standards); minted on proposal execution.
+nft_contract = { path = "../vendor/aztec-standards/src/nft_contract" }

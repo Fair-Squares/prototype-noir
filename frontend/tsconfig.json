@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [{ "name": "next" }],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "//exclude-artifacts": "Generated aztec codegen wrappers (src/artifacts/*.ts) are dead code — the app loads the raw JSON via loadGeneratedArtifactJson, never these classes. Their codegen-embedded artifact object omits aztec_version and fails the strict NoirCompiledContract cast, so exclude the generated dir from type-checking.",
+  "//exclude-tests": "Test files (src/**/__tests__) and vitest.config.ts import from `vitest`, a devDependency. `next build` type-checks the whole tsconfig program, so including them couples the PRODUCTION build to vitest being installed — which breaks `docker compose --profile aztec up` (the frontend image's node_modules omits/lags devDeps). Vitest runs these via its own config regardless of tsconfig, so excluding them here keeps `npm test` working while decoupling the build from test tooling.",
+  "//exclude-root-owned": "The pre-v6 docker bootstrap wrote src/artifacts as root; such a dir can only be renamed aside (src/artifacts.root-owned-*), and `next build` would otherwise type-check those stale v4 codegen copies and fail on '@aztec/aztec.js/*'. Keep them out of the program too.",
+  "exclude": ["node_modules", "src/artifacts/**/*.ts", "src/artifacts.root-owned-*/**", "vitest.config.ts", "src/**/__tests__/**"]
+}

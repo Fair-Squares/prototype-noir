@@ -1,0 +1,550 @@
+@import "tailwindcss";
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Fair Squares — official brand tokens (from the design-system bundle).
+   Palette/type/shape are canonical; see "Fair Squares brand & design system"
+   in CLAUDE.md. Civic-tech: warm off-white, teal everyday accent, magenta as the
+   single highlight, anthracite text/dark surfaces. No gradients, no textures.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ---------- Brand core (exact bundle hexes) ---------- */
+  --color-fs-magenta: #BF1363;
+  --color-fs-magenta-light: #D02E78;
+  --color-fs-teal: #39A6A3;
+  --color-fs-teal-light: #4FB0AD;
+  --color-fs-teal-dark: #266F6D; /* teal-700: readable text and white-on-teal controls */
+  --color-fs-anthracite: #231E23;
+  --color-fs-anthracite-soft: #322C32;
+  --color-fs-mint: #DEEEEA;
+
+  /* ---------- Teal scale ---------- */
+  --color-teal-50:  #EAF6F5;
+  --color-teal-100: #CDE9E8;
+  --color-teal-200: #A6D7D5;
+  --color-teal-300: #74C0BE;
+  --color-teal-400: #4FB0AD;
+  --color-teal-500: #39A6A3;
+  --color-teal-600: #2E8C89;
+  --color-teal-700: #266F6D;
+  --color-teal-800: #1F5755;
+  --color-teal-900: #163E3D;
+
+  /* ---------- Magenta scale ---------- */
+  --color-magenta-50:  #FCE8F1;
+  --color-magenta-100: #F7C2DA;
+  --color-magenta-300: #E25593;
+  --color-magenta-500: #BF1363;
+  --color-magenta-600: #A20F53;
+
+  /* ---------- Ink / neutral scale ---------- */
+  --color-ink-900: #231E23;
+  --color-ink-800: #322C32;
+  --color-ink-700: #4A444A;
+  --color-ink-600: #635D63;
+  --color-ink-500: #837D83;
+  --color-ink-400: #A8A2A8;
+  --color-ink-300: #CBC7CB;
+  --color-ink-200: #E4E1E4;
+  --color-ink-100: #F0EEF0;
+  --color-ink-50:  #F7F6F7;
+
+  /* ---------- Surfaces / text ---------- */
+  --color-bg: #F7F9F8;            /* off-white ground */
+  --color-card: #FFFFFF;
+  --color-card-hover: #EAF6F5;    /* teal-50 */
+  --color-border: rgba(35, 30, 35, 0.12);
+  --color-border-strong: rgba(35, 30, 35, 0.20);
+
+  --color-text-1: #231E23;        /* anthracite — primary text */
+  --color-text-2: #635D63;        /* secondary */
+  --color-text-3: #635D63;        /* readable captions and metadata */
+
+  /* Semantic aliases — components reference intent, not raw brand names.
+     Brand rule: teal is the PRIMARY CTA fill + everyday accent; magenta is the
+     single highlight per view; anthracite is text + dark surfaces. */
+  --color-primary: #39A6A3;        /* teal — primary CTA */
+  --color-primary-press: #266F6D;  /* teal-700 */
+  --color-accent: #266F6D;         /* darker teal — visible focus rings, hovers */
+  --color-highlight: #BF1363;      /* magenta — one highlight per view */
+  --color-ink: #231E23;            /* anthracite — dark surfaces, ghost buttons */
+  --color-alert: #BF1363;
+  --color-surface: #FFFFFF;
+  --color-surface-muted: #EFF3F1;
+
+  /* Status palette — civic-finance, muted (not crypto-neon). */
+  --color-success: #266F6D;        /* verified / healthy / covenant OK */
+  --color-success-bg: #E4F1EB;
+  --color-warning: #8A5200;        /* pending / delayed */
+  --color-warning-bg: #F6ECDA;
+  --color-danger: #C0353B;         /* breach / impaired / error */
+  --color-danger-bg: #F6E3E1;
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; }
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text-1);
+  font-family: var(--font-dm), "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  font-feature-settings: "kern", "liga";
+  -webkit-font-smoothing: antialiased;
+}
+
+button, a, input, [role="button"] {
+  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, opacity 160ms ease, transform 160ms ease;
+}
+
+:where(a, button, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--color-teal-700);
+  outline-offset: 3px;
+}
+:where(a, button, input, summary) { touch-action: manipulation; }
+html { scroll-padding-top: 5.5rem; }
+:where(h1, h2, h3, [id]) { scroll-margin-top: 5.5rem; }
+:where(h1, h2, h3) { text-wrap: balance; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Type scale — keep the app's compact data sizes; adopt the brand families.
+   Display + section headings = Nexa (the brand face); h3 and body = DM Sans.
+   Big DATA numbers (.text-kpi) stay DM Sans tabular — Nexa lacks tabular figures
+   and would misalign columns (brand: stats in DM Sans tabular, never mono).
+   ─────────────────────────────────────────────────────────────────────── */
+
+h1, .text-display {
+  font-family: var(--font-nexa), "Nexa", var(--font-dm), system-ui, sans-serif;
+  font-size: 1.875rem;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  font-weight: 800;
+}
+
+h2, .text-heading {
+  font-family: var(--font-nexa), "Nexa", var(--font-dm), system-ui, sans-serif;
+  font-size: 1.125rem;
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+  font-weight: 700;
+}
+
+h3 {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+@layer components {
+.text-meta {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  font-weight: 500;
+  color: var(--color-text-3);
+}
+}
+
+/* Eyebrow — tiny uppercase teal section label (brand signature). */
+.text-tag {
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.text-num {
+  font-size: 0.6875rem;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Page ground — flat warm off-white. The brand uses NO blueprint grid, NO
+   gradients, NO textures; mint bands (.band-mint) segment the page instead.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.band-mint {
+  background: var(--color-fs-mint);
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Surface — every card. Rounded 16px, hairline border, soft low-opacity
+   anthracite shadow (brand: rounded + soft, not sharp/console).
+   ─────────────────────────────────────────────────────────────────────── */
+
+.surface {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(35, 30, 35, 0.06);
+}
+
+.surface-muted {
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+}
+
+/* Mint-tinted emphasis card. */
+.surface-mint {
+  background: var(--color-fs-mint);
+  border: 1px solid rgba(57, 166, 163, 0.22);
+  border-radius: 16px;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   App shell — calm horizontal top nav. A tab is a plain word with an active
+   underline (aria-current), the underline in the magenta highlight.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.topnav-tab {
+  position: relative;
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  padding: 0.4rem 0.7rem;
+  border-radius: 0.5rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--color-text-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.topnav-tab:hover {
+  background: rgba(57, 166, 163, 0.08);
+  color: var(--color-text-1);
+}
+.topnav-tab:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.topnav-tab[data-active="true"] {
+  color: var(--color-text-1);
+  font-weight: 600;
+}
+.topnav-tab[data-active="true"]::after {
+  content: "";
+  position: absolute;
+  left: 0.7rem;
+  right: 0.7rem;
+  bottom: -0.65rem;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--color-fs-magenta);
+}
+
+/* "More" popover rows + mobile drawer rows share a calm hover/active model. */
+.menu-row,
+.drawer-row {
+  display: block;
+  min-height: 2.75rem;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-text-2);
+}
+.menu-row {
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+.menu-row:hover,
+.drawer-row:hover {
+  background: rgba(57, 166, 163, 0.08);
+  color: var(--color-text-1);
+}
+.menu-row:focus-visible,
+.drawer-row:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+.menu-row[data-active="true"],
+.drawer-row[data-active="true"] {
+  background: rgba(57, 166, 163, 0.12);
+  color: var(--color-text-1);
+}
+.drawer-row {
+  position: relative;
+  margin-bottom: 0.15rem;
+}
+.drawer-row[data-active="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.4rem;
+  bottom: 0.4rem;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--color-fs-magenta);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Mobile bottom nav — the single mobile primary-nav pattern (no hamburger +
+   clipped tab strip). Four equal cells (Home/Projects/Portfolio/More), ≥44px.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.bottomnav-item {
+  flex: 1 1 0%;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  min-height: 3.25rem;
+  padding: 0.45rem 0.25rem;
+  border: 0;
+  background: transparent;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-2);
+  cursor: pointer;
+  position: relative;
+}
+.bottomnav-item:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+.bottomnav-item[data-active="true"] {
+  color: var(--color-fs-teal-dark);
+}
+.bottomnav-item[data-active="true"]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 1.1rem;
+  right: 1.1rem;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--color-fs-magenta);
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Hide scrollbar on the tab overflow strip (Tabs)
+   ─────────────────────────────────────────────────────────────────────── */
+
+.tab-strip { scrollbar-width: thin; scrollbar-color: var(--color-teal-700) var(--color-ink-100); }
+.tab-strip::-webkit-scrollbar { height: 6px; }
+.tab-strip::-webkit-scrollbar-track { background: var(--color-ink-100); }
+.tab-strip::-webkit-scrollbar-thumb { background: var(--color-teal-700); border-radius: 999px; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Typography classes. Reusable — do not re-derive one-off
+   `text-xs uppercase tracking-wide` combinations per page.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.text-kpi {
+  font-size: 1.75rem;
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.text-kpi-sm {
+  font-size: 1.25rem;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.text-label {
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-fs-teal-dark);
+}
+.text-body { font-size: 1rem; line-height: 1.6; font-weight: 400; }
+@layer components {
+  .text-caption { font-size: 0.8125rem; line-height: 1.5; font-weight: 500; color: var(--color-text-3); }
+}
+.text-mono { font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Buttons — pill radius (brand). One shared height, focus ring, disabled +
+   loading state. primary = teal fill, highlight = magenta (single top action),
+   secondary = anthracite outline, ghost, danger.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.65rem 1.25rem;
+  border-radius: 999px;
+  border: 1.5px solid transparent;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: normal;
+  text-align: center;
+  max-width: 100%;
+  user-select: none;
+}
+.btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
+.btn[data-loading="true"] { cursor: progress; opacity: 0.8; }
+.btn-sm { min-height: 2.75rem; padding: 0.65rem 0.9rem; font-size: 0.8125rem; }
+@media (pointer: coarse) {
+  .btn { min-height: 2.75rem; }
+  .btn-sm { min-height: 2.75rem; }
+}
+
+.btn-primary { background: var(--color-primary); color: var(--color-ink); border-color: var(--color-primary); box-shadow: 0 8px 22px rgba(57, 166, 163, 0.22); }
+.btn-primary:hover:not(:disabled) { background: var(--color-fs-teal-dark); color: #fff; border-color: var(--color-fs-teal-dark); transform: translateY(-1px); }
+.btn-primary:active:not(:disabled) { background: var(--color-primary-press); color: #fff; transform: none; }
+.btn-highlight { background: var(--color-highlight); color: #fff; border-color: var(--color-highlight); box-shadow: 0 8px 22px rgba(191, 19, 99, 0.20); }
+.btn-highlight:hover:not(:disabled) { background: var(--color-magenta-600); border-color: var(--color-magenta-600); transform: translateY(-1px); }
+.btn-secondary { background: var(--color-surface); color: var(--color-text-1); border-color: var(--color-border-strong); }
+.btn-secondary:hover:not(:disabled) { background: var(--color-card-hover); border-color: var(--color-accent); }
+.btn-ghost { background: transparent; color: var(--color-text-2); border-color: transparent; }
+.btn-ghost:hover:not(:disabled) { background: rgba(35, 30, 35, 0.06); color: var(--color-text-1); }
+.btn-danger { background: var(--color-danger); color: #fff; border-color: var(--color-danger); }
+.btn-danger:hover:not(:disabled) { background: #98201a; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Status chips — one pill shape, semantic variants. Status never relies on
+   color alone (always paired with a text label).
+   ─────────────────────────────────────────────────────────────────────── */
+
+@layer components {
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 1.4;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.chip::before { content: ""; width: 0.4rem; height: 0.4rem; border-radius: 999px; background: currentColor; opacity: 0.85; }
+.chip-neutral { background: var(--color-surface-muted); color: var(--color-text-2); border-color: var(--color-border); }
+.chip-accent  { background: rgba(57,166,163,0.12); color: var(--color-fs-teal-dark); border-color: rgba(57,166,163,0.3); }
+.chip-success { background: var(--color-success-bg); color: var(--color-success); border-color: rgba(46,140,137,0.25); }
+.chip-warning { background: var(--color-warning-bg); color: var(--color-warning); border-color: rgba(178,107,0,0.25); }
+.chip-danger  { background: var(--color-danger-bg); color: var(--color-danger); border-color: rgba(192,53,59,0.25); }
+.chip-alert   { background: rgba(191,19,99,0.08); color: var(--color-fs-magenta); border-color: rgba(191,19,99,0.25); }
+
+/* Simulation/demo chip — dashed, low-key, never dominant. */
+.chip-sim { background: rgba(191,19,99,0.05); color: var(--color-fs-magenta); border: 1px dashed rgba(191,19,99,0.45); }
+.chip-sim::before { display: none; }
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Status text colors — semantic intent classes so components reference status
+   by name, not by arbitrary `text-[var(...)]` values. Pair with .chip-* /
+   .alert-* for the matching tints.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.text-success { color: var(--color-success); }
+.text-warning { color: var(--color-warning); }
+.text-danger  { color: var(--color-danger); }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Loading skeletons & progress fills — muted ground + status fill, via class.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.skeleton-bar { background: var(--color-surface-muted); }
+.bar-success  { background: var(--color-success); }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Alert tones — each pairs a muted tint with a matching hairline border. Calm
+   by design (no full-saturation fills); the matching text color is .text-* /
+   .text-fs-teal-dark applied by the component.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.alert-info    { border-color: rgba(57,166,163,0.3);  background: rgba(57,166,163,0.1); }
+.alert-success { border-color: rgba(46,140,137,0.25); background: var(--color-success-bg); }
+.alert-warning { border-color: rgba(178,107,0,0.25);  background: var(--color-warning-bg); }
+.alert-danger  { border-color: rgba(192,53,59,0.25);  background: var(--color-danger-bg); }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Stepper marker / connector done-state — the completed-step accent (success).
+   Active (magenta) + upcoming states stay as brand utility classes.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.stepper-marker-done    { border-color: var(--color-success); background: var(--color-success); color: #fff; }
+.stepper-connector-done { background: var(--color-success); }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Marketing surfaces — the public landing (/learn) + disconnected home.
+   These four are the ONLY additions the marketing sections need beyond the
+   existing tokens/classes; everything else (.surface, .surface-mint, .btn-*,
+   .chip-*, .band-mint, .text-*) is reused. Subtle radial dot texture is the one
+   kit-sanctioned background pattern (no gradients/glassmorphism/grid).
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* Subtle radial teal-dot texture (hero art + dark CTA/calculator panels).
+   Apply as an absolutely-positioned overlay div (inset-0, pointer-events-none);
+   on dark panels dim/tune via the overlay element's own opacity utility. */
+.dot-pattern {
+  background-image: radial-gradient(rgba(57, 166, 163, 0.16) 1.4px, transparent 1.4px);
+  background-size: 22px 22px;
+}
+
+/* Dark anthracite panel — calculator results + MarketingCTA. Text inside uses
+   white / .text-fs-mint utilities. Larger 24px radius than the 16px .surface. */
+.panel-dark {
+  background: var(--color-fs-anthracite);
+  color: #fff;
+  border-radius: 24px;
+}
+
+/* Ghost-on-dark CTA — the secondary action over .panel-dark. Pairs with the
+   shared .btn base (pill, height, focus ring). */
+.btn-ghost-dark { background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.55); }
+.btn-ghost-dark:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.8);
+  transform: translateY(-1px);
+}
+
+/* Styled range slider — ImpactCalculator investment amount. */
+.range-teal {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-ink-200);
+  outline: none;
+}
+.range-teal:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 4px; }
+.range-teal::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--color-fs-teal);
+  box-shadow: 0 2px 8px rgba(35, 30, 35, 0.25);
+  cursor: pointer;
+}
+.range-teal::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--color-fs-teal);
+  box-shadow: 0 2px 8px rgba(35, 30, 35, 0.25);
+  cursor: pointer;
+}

@@ -1,0 +1,95 @@
+import type { NextConfig } from "next";
+import path from "path";
+
+// ALL Aztec packages must be excluded from the server bundle. Aztec v6 publishes
+// them under two npm scopes: @aztec-labs/* (aztec.js, wallets, accounts, ...)
+// and @aztec-foundation/* (bb.js, bb-avm-sim, ...). They use NAPI binaries,
+// worker_threads, and WASM that crash the Next.js server worker process. The
+// server uses plain-fetch JSON-RPC instead. With AZTEC_LIVE=false, these are
+// never called; with AZTEC_LIVE=true the API route try/catch handles any
+// runtime failure gracefully.
+const AZTEC_SERVER_EXTERNALS_PREFIXES = ["@aztec-labs/", "@aztec-foundation/"];
+// zkPassport SDK uses WebSockets + node:crypto — server only
+const ZKPASSPORT_EXTERNALS_PREFIX = "@zkpassport/";
+
+const nextConfig: NextConfig = {
+  outputFileTracingRoot: __dirname,
+
+  // Retired destinations keep working.
+  // Deposit/withdraw/rewards live on Portfolio (the money hub); explain and
+  // reference merged into the single About page.
+  async redirects() {
+    return [
+      { source: "/invest", destination: "/portfolio#deposit", permanent: false },
+      { source: "/rewards", destination: "/portfolio#claims", permanent: false },
+      { source: "/explain", destination: "/learn#how-it-works", permanent: false },
+      { source: "/reference", destination: "/learn#parameters", permanent: false },
+    ];
+  },
+
+  // Build output dir. Defaults to ".next" (unchanged for docker / next start);
+  // set NEXT_DIST_DIR to build into an isolated folder without clobbering a
+  // running production server's ".next".
+  distDir: process.env.NEXT_DIST_DIR || ".next",
+
+  webpack: (config, { isServer }) => {
+    // ── WebAssembly support (required for @aztec-foundation/bb.js in browser) ─────────
+    config.experiments = { ...config.experiments, asyncWebAssembly: true };
+
+    // ── Node.js polyfills for browser bundles ──────────────────────────────
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+        worker_threads: false,
+      };
+    }
+
+    // ── @aztec-labs/wallets/embedded: browser (WASM) build in client bundles ────
+    // The package exports two builds:
+    //   "browser" → BrowserEmbeddedWallet (WASM — safe in Next.js client)
+    //   "node"    → EmbeddedWallet        (NAPI — DO NOT use server-side)
+    // Alias directly to the built browser.js file, bypassing exports map.
+    if (!isServer) {
+      const browserEntry = path.resolve(
+        __dirname,
+        "node_modules/@aztec-labs/wallets/dest/embedded/entrypoints/browser.js"
+      );
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        "@aztec-labs/wallets/embedded": browserEntry,
+      };
+    }
+
+    // ── Exclude WASM/NAPI packages from the server bundle ──────────────────
+    // When AZTEC_LIVE=false (server routes use simulation), these packages are
+    // never called. When AZTEC_LIVE=true, the try/catch in API routes handles
+    // any runtime require() failure gracefully.
+    if (isServer) {
+      const currentExternals = config.externals ?? [];
+      const externalsArray = Array.isArray(currentExternals)
+        ? currentExternals
+        : [currentExternals];
+
+      config.externals = [
+        ...externalsArray,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (ctx: any, callback: any) => {
+          if (
+            AZTEC_SERVER_EXTERNALS_PREFIXES.some((p) => ctx.request?.startsWith(p)) ||
+            ctx.request?.startsWith(ZKPASSPORT_EXTERNALS_PREFIX)
+          ) {
+            return callback(null, `commonjs ${ctx.request}`);
+          }
+          callback();
+        },
+      ];
+    }
+
+    return config;
+  },
+};
+
+export default nextConfig;

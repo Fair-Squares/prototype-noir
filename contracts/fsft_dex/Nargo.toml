@@ -1,0 +1,12 @@
+[package]
+name = "fsft_dex"
+type = "contract"
+authors = ["Fair Squares"]
+compiler_version = ">=0.18.0"
+
+[dependencies]
+aztec = { git = "https://github.com/aztec-labs-eng/aztec-nr", tag = "v6.0.0", directory = "aztec" }
+# FSFT and EUR settlement legs are vendored AIP-20 Token instances.
+token_contract = { path = "../vendor/aztec-standards/src/token_contract" }
+kyc_verifier = { path = "../kyc_verifier" }
+housing_fund = { path = "../housing_fund" }

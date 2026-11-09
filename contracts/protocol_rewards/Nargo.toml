@@ -1,0 +1,13 @@
+[package]
+name = "protocol_rewards"
+type = "contract"
+authors = ["Fair Squares"]
+compiler_version = ">=0.18.0"
+
+[dependencies]
+aztec = { git = "https://github.com/aztec-labs-eng/aztec-nr", tag = "v6.0.0", directory = "aztec" }
+# ProtocolToken is the vendored AIP-20 Token (this contract is its immutable minter).
+token_contract = { path = "../vendor/aztec-standards/src/token_contract" }
+housing_fund = { path = "../housing_fund" }
+governance = { path = "../governance" }
+kyc_verifier = { path = "../kyc_verifier" }

@@ -1,0 +1,57 @@
+# Node
+node_modules/
+**/node_modules/
+
+# Next.js
+.next/
+**/.next/
+out/
+
+# Build / coverage
+build/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.local.example
+
+# Testnet account secrets (plaintext schnorr seed; never commit)
+scripts/.testnet/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Aztec / Noir artifacts
+contracts/*/target/
+contracts/vendor/**/target/
+artifacts/
+frontend/src/artifacts/
+proofs/output/
+proofs/recursive/*/target/
+proofs/recursive/*/Prover.toml
+
+# Local PXE / wallet runtime data (may contain keys) + agent runtime lock
+scripts/pxe_data_*/
+scripts/wallet_data_*/
+.claude/scheduled_tasks.lock
+
+# node_modules as a symlink (worktree hooks) — dir-only patterns above miss it
+**/node_modules
+
+# aztec v6 EmbeddedWallet persistent stores (testnet scripts run non-ephemeral)
+scripts/aztec-wallet-data/
+# build outputs the pre-v6 docker bootstrap wrote as root; renamed aside during the v6 upgrade
+*.root-owned-*

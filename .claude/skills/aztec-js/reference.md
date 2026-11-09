@@ -1,0 +1,284 @@
+# Aztec.js Reference
+
+## Scope and Pin
+
+- Skill: `aztec-js`
+- Version label: `v6.0.0`
+- Commit SHA: `c5cf1822921c39e0ccfabcf1b12a26d1ca5fae20`
+- Primary source map: `docs/internal_notes/llm_docs_skill_candidates.md`
+- Upstream repo: `https://github.com/aztec-labs-eng/aztec-node`
+
+## Required Checkout State
+
+```bash
+git clone https://github.com/aztec-labs-eng/aztec-node.git
+cd aztec-packages
+git checkout v6.0.0
+git status
+git rev-parse HEAD
+```
+
+Expected:
+
+- `HEAD detached at v6.0.0`
+- `c5cf1822921c39e0ccfabcf1b12a26d1ca5fae20`
+
+## Pinned Source Corpus
+
+Guides and tutorials:
+
+- `docs/docs-developers/docs/aztec-js/**`
+- `docs/docs-developers/docs/tutorials/js_tutorials/**`
+
+Generated TypeScript API docs (devnet):
+
+- `docs/static/typescript-api/devnet/accounts.md`
+- `docs/static/typescript-api/devnet/aztec.js.md`
+- `docs/static/typescript-api/devnet/constants.md`
+- `docs/static/typescript-api/devnet/entrypoints.md`
+- `docs/static/typescript-api/devnet/foundation.md`
+- `docs/static/typescript-api/devnet/llm-summary.txt`
+- `docs/static/typescript-api/devnet/pxe.md`
+- `docs/static/typescript-api/devnet/stdlib.md`
+- `docs/static/typescript-api/devnet/wallet-sdk.md`
+
+Referenced examples and tests:
+
+- `docs/examples/ts/aztecjs_connection/**`
+- `docs/examples/ts/aztecjs_advanced/**`
+- `docs/examples/ts/aztecjs_authwit/**`
+- `docs/examples/ts/aztecjs_testing/**`
+- `docs/examples/ts/aztecjs_getting_started/**`
+- `docs/examples/ts/token_bridge/**`
+- `yarn-project/end-to-end/src/composed/**`
+- `yarn-project/end-to-end/src/e2e_deploy_contract/**`
+
+Remote pinned docs root:
+
+- `https://github.com/aztec-labs-eng/aztec-node/tree/v6.0.0/docs`
+
+## Full API Coverage Matrix
+
+This skill covers all packages present in the pinned devnet API corpus.
+
+| Package doc | Classes | Interfaces | Functions | Types | Enums |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `aztec.js.md` | 55 | 10 | 51 | 63 | 4 |
+| `accounts.md` | 16 | 1 | 12 | 9 | 0 |
+| `pxe.md` | 37 | 12 | 16 | 17 | 1 |
+| `entrypoints.md` | 4 | 2 | 1 | 6 | 1 |
+| `wallet-sdk.md` | 4 | 14 | 9 | 5 | 1 |
+| `stdlib.md` | 283 | 106 | 358 | 228 | 17 |
+| `foundation.md` | 76 | 28 | 270 | 60 | 0 |
+| `constants.md` | 0 | 0 | 0 | 499 | 1 |
+| **Total** | **475** | **173** | **717** | **887** | **25** |
+
+Notes:
+
+- API markdown headers may report a generated package version label differing from the repository pin.
+- For this skill, treat the repository pin (`v6.0.0`, commit above) as authoritative.
+
+## Package-by-Package Usage Map
+
+### `@aztec-labs/aztec.js` (primary app SDK)
+
+Key domains in this package:
+
+- account wrappers and interfaces
+- contract interaction (`Contract`, `ContractFunctionInteraction`, `BatchCall`)
+- deploy flows (`DeployMethod`, `DeploySentTx`)
+- transaction abstractions (`SentTx`, receipt wait helpers)
+- fee payment method implementations
+- authwit helpers and interaction wrappers
+- node utilities (`createAztecNodeClient`, `waitForNode`)
+
+Preferred subpath imports:
+
+- `@aztec-labs/aztec.js/node`
+- `@aztec-labs/aztec.js/contracts`
+- `@aztec-labs/aztec.js/wallet`
+- `@aztec-labs/aztec.js/fields`
+- `@aztec-labs/aztec.js/addresses`
+- `@aztec-labs/aztec.js/fee`
+- `@aztec-labs/aztec.js/authorization`
+- `@aztec-labs/aztec.js/events`
+- `@aztec-labs/aztec.js/utils`
+
+### `@aztec-labs/accounts`
+
+Use for account contract implementations and helpers:
+
+- Schnorr variants
+- ECDSA variants
+- test-account bootstrapping helpers (`getInitialTestAccountsData`)
+
+### `@aztec-labs/pxe`
+
+Use for direct PXE interactions when wallet abstraction is insufficient:
+
+- execution simulation internals
+- note/event data providers
+- sync and tagging internals
+- PXE creation and config
+
+### `@aztec-labs/entrypoints`
+
+Use when customizing entrypoint behavior and tx request construction:
+
+- default and multicall entrypoints
+- auth witness provider interface
+- request encoding helpers
+
+### `@aztec-labs/wallet-sdk`
+
+Use for browser-extension or wallet-provider integrations:
+
+- wallet discovery
+- encrypted channel/session setup
+- extension wallet adapters
+
+### `@aztec-labs/stdlib`, `@aztec-labs/foundation`, `@aztec-labs/constants`
+
+Use as protocol and utility layers:
+
+- protocol data types (`Tx`, `L2Block`, `GasSettings`, addresses, selectors)
+- crypto/math primitives and serialization
+- protocol constants and gas/tree values
+
+## Workflow API Cheat Sheet
+
+### Node and wallet setup
+
+- `createAztecNodeClient(url)`
+- `waitForNode(node)`
+- `EmbeddedWallet.create(node)` (from `@aztec-labs/wallets/embedded`)
+
+### Accounts
+
+- `wallet.createSchnorrAccount(secret, salt, signingKey?)`
+- `accountManager.getDeployMethod().send(opts)`
+- `wallet.getAccounts()`
+
+### Contract deployment
+
+- `MyContract.deploy(wallet, ...args).send({ from, ...opts })` — waited deploys return `{ contract, receipt, ... }`
+- `MyContract.deployWithOpts({ wallet, method }, ...args).send({ from, ...opts })`
+- `deployMethod.getInstance({ contractAddressSalt, deployer: from })` before `send({ from, contractAddressSalt })`; omit `deployer` only for universal/`NO_FROM` address computation
+- `deployMethod.register()` for batched deployment+call flows
+
+### Contract interaction
+
+- `Contract.at(address, artifact, wallet)`
+- `contract.methods.fn(...).simulate({ from, ...opts })` — returns `{ result, ... }`
+- `contract.methods.fn(...).send({ from, fee, wait })` — waited returns `{ receipt, ... }`, `NO_WAIT` returns `{ txHash, ... }`
+- `new BatchCall(wallet, [call1, call2, ...]).send({ from })` — waited returns `{ receipt, ... }`
+
+### Metadata and registration
+
+- `wallet.getContractMetadata(address)`
+- `wallet.getContractClassMetadata(classId)`
+- `wallet.registerContract(instance, artifact, secretKey?)`
+
+### Fees
+
+- `simulate({ fee: { estimateGas: true, estimatedGasPadding } })`
+- `GasSettings.fallback({ maxFeesPerGas, ... })` for on-chain sends (replaces the v4.1.x `GasSettings.default(...)`; `DEFAULT_GAS_LIMIT` / `DEFAULT_TEARDOWN_GAS_LIMIT` constants were removed)
+- `GasSettings.forEstimation({ maxFeesPerGas, ... })` for simulation/estimation only; must be paired with `skipTxValidation: true` on public simulation (`EmbeddedWallet` wires this automatically)
+- `GasSettings.from(...)` for explicit control over every field
+- supported payment methods:
+  - `SponsoredFeePaymentMethod` (local/devnet)
+  - `FeeJuicePaymentMethodWithClaim` (after bridging Fee Juice from L1)
+- avoid `PrivateFeePaymentMethod` and `PublicFeePaymentMethod`: in v6.0.0 custom-token FPCs are not on the default public setup allowlist, so these methods (and the CLI `fpc-public` / `fpc-private` shortcuts) cannot be used on public/mainnet networks. They remain exported for local/custom-network flows but are deprecated.
+
+### Authwit
+
+- `wallet.createAuthWit(authorizer, intentOrHash)`
+- `computeInnerAuthWitHash(...)`
+- `SetPublicAuthwitContractInteraction.create(...)`
+
+### Events and logs
+
+- `getPublicEvents(node, EventDef, filter)` — returns `{ events, maxLogsHit }`
+- `wallet.getPrivateEvents(EventDef, filter)`
+- `aztecNode.getPublicLogs(filter)` for raw fields
+
+### Transaction lifecycle
+
+- waited send: `await method.send({ from })` — returns `{ receipt, ... }`
+- no-wait: `await method.send({ from, wait: NO_WAIT })` — returns `{ txHash, ... }`
+- receipt polling: `node.getTxReceipt(txHash)` or tx wait helpers
+
+## Complete API Extraction Commands
+
+To list all exported symbols by package from pinned docs:
+
+```bash
+AZTEC_PACKAGES_DIR=/path/to/aztec-packages
+for f in "$AZTEC_PACKAGES_DIR"/docs/static/typescript-api/devnet/*.md; do
+  echo "===== $(basename "$f")"
+  awk '
+    /^## Classes/{sec="classes";next}
+    /^## Interfaces/{sec="interfaces";next}
+    /^## Functions/{sec="functions";next}
+    /^## Types/{sec="types";next}
+    /^## Enums/{sec="enums";next}
+    /^## /{sec="";next}
+    /^### /{if(sec!="") print sec"\t"substr($0,5)}
+  ' "$f"
+done
+```
+
+To recompute package counts:
+
+```bash
+scripts/api_surface_summary.sh /path/to/aztec-packages
+```
+
+## Readiness and Safety Checks
+
+Before first public call on a deployed contract:
+
+1. `metadata = await wallet.getContractMetadata(contractAddress)`
+2. confirm `metadata.instance` exists
+3. confirm `metadata.initializationStatus === ContractInitializationStatus.INITIALIZED` when applicable (enum values: `INITIALIZED`, `UNINITIALIZED`, `UNKNOWN`; `UNKNOWN` means the instance is not registered in this wallet so the status cannot be determined — import `ContractInitializationStatus` from `@aztec-labs/aztec.js/wallet`)
+4. confirm `metadata.isContractPublished` for public calls
+5. fetch class metadata and confirm `isContractClassPubliclyRegistered`
+
+Before sending a cost-sensitive transaction:
+
+1. simulate with gas estimation
+2. decide payment method
+3. set gas settings/padding
+4. send and capture tx hash + receipt
+
+## Troubleshooting
+
+`Cannot find the leaf for nullifier` during deploy:
+
+- deployment attempted with class publication skipped where publication is required
+
+Deploy mined but public function fails:
+
+- instance/class readiness not satisfied (`isContractPublished` or class registration)
+
+Simulation works but send fails:
+
+- fee payment, publication, or init constraints only enforced on network path
+
+Authwit mismatch/replay failure:
+
+- caller/action/nonce tuple mismatch or stale public authwit state
+
+Private reads/events unexpectedly empty:
+
+- missing account scopes, sender registration, or incorrect block range
+
+No-wait tx appears lost:
+
+- treat as pending until receipt polling is exhausted with explicit timeout/retry policy
+
+## Distribution Rules
+
+- Keep this skill self-contained for common Aztec.js workflows.
+- Prefer remote pinned references over machine-local paths.
+- Exclude nightly API docs from generated corpus for this skill.

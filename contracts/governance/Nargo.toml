@@ -1,0 +1,10 @@
+[package]
+name = "governance"
+type = "contract"
+authors = ["Fair Squares"]
+compiler_version = ">=0.18.0"
+
+[dependencies]
+aztec = { git = "https://github.com/aztec-labs-eng/aztec-nr", tag = "v6.0.0", directory = "aztec" }
+deposit_note = { path = "../deposit_note" }
+kyc_verifier = { path = "../kyc_verifier" }

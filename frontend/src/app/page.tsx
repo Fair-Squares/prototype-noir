@@ -1,0 +1,342 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import {
+  AdvancedDetails,
+  Alert,
+  KpiCard,
+  KpiGrid,
+  Section,
+  SkeletonKpi,
+  SkeletonRow,
+} from "@/components/ui";
+import {
+  FundHealthKpis,
+  FundParticipationKpis,
+} from "@/components/overview/FundHealthKpis";
+import { FundingRequestsPreview } from "@/components/overview/FundingRequestsPreview";
+import { DataHealthRail } from "@/components/overview/DataHealthRail";
+import {
+  OverviewNextStep,
+  deriveNextStep,
+} from "@/components/overview/OverviewNextStep";
+import { ProjectsPreview } from "@/components/overview/ProjectsPreview";
+import { ImpactStrip } from "@/components/overview/ImpactStrip";
+import { FeaturedProject } from "@/components/overview/FeaturedProject";
+import { PrototypeIntro } from "@/components/marketing/PrototypeIntro";
+import { JourneyStepper } from "@/components/journey/JourneyStepper";
+import { PersonaHandOff } from "@/components/journey/PersonaHandOff";
+import { PositionSnapshot } from "@/components/journey/PositionSnapshot";
+import { getProjectDossier } from "@/lib/projectDossier";
+import { isVotingEnded } from "@/lib/proposalLifecycle";
+import { useWallet } from "@/contexts/WalletContext";
+import {
+  fetchChainParams,
+  fetchFundStats,
+  fetchKYCProfile,
+  fetchListings,
+  fetchPortfolio,
+  fetchProperties,
+  fetchProposals,
+  formatEUR,
+  type ChainParams,
+  type FundStats,
+  type KYCProfile,
+  type Listing,
+  type PortfolioData,
+  type PropertyDeed,
+  type Proposal,
+} from "@/lib/contracts";
+
+export default function OverviewPage() {
+  const { activeAccount, isConnected } = useWallet();
+  const address = activeAccount?.address ?? null;
+
+  // ── System (public) data — independent of any wallet ─────────────────────
+  const [stats, setStats] = useState<FundStats | null>(null);
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [properties, setProperties] = useState<PropertyDeed[]>([]);
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [chain, setChain] = useState<ChainParams | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // ── Wallet-scoped (private) data — only drives the personalized next step ─
+  const [kyc, setKyc] = useState<KYCProfile | null>(null);
+  const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    Promise.all([
+      fetchFundStats(),
+      fetchProposals(),
+      fetchProperties(),
+      fetchListings(),
+      fetchChainParams(),
+    ])
+      .then(([nextStats, nextProposals, nextProps, nextListings, nextChain]) => {
+        if (!active) return;
+        setStats(nextStats);
+        setProposals(nextProposals);
+        setProperties(nextProps);
+        setListings(nextListings);
+        setChain(nextChain);
+        setError(null);
+      })
+      .catch((e: unknown) => {
+        if (!active) return;
+        setError(e instanceof Error ? e.message : "Could not load fund overview.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // KYC + portfolio are advisory here (they only choose the next-step CTA), so
+  // a wallet-scoped read failure must not break the public overview.
+  useEffect(() => {
+    if (!address) {
+      setKyc(null);
+      setPortfolio(null);
+      return;
+    }
+    let active = true;
+    fetchKYCProfile(address)
+      .then((profile) => {
+        if (active) setKyc(profile);
+      })
+      .catch(() => {
+        if (active) setKyc(null);
+      });
+    // accountIndex is required in live mode: /api/portfolio defaults to account 0
+    // and rejects a mismatched address, which would null the portfolio for every
+    // non-admin account and mis-derive the next step ("Make your first deposit").
+    fetchPortfolio(address, activeAccount?.index)
+      .then((data) => {
+        if (active) setPortfolio(data);
+      })
+      .catch(() => {
+        if (active) setPortfolio(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [address, activeAccount?.index]);
+
+  const nextStep = deriveNextStep(isConnected, kyc, portfolio);
+  // Open = still inside its voting window (as /governance counts them); a past-
+  // deadline proposal awaiting finalisation reads "Voting ended", not open.
+  const liveRequests = proposals.filter((p) => p.status === 0 && !isVotingEnded(p)).length;
+
+  // The one featured project (the seeded Maashaven dossier). Resolves by
+  // proposal id / title-slug; null until proposals load or if none is authored.
+  const featured = proposals.find((p) => getProjectDossier(p) !== null) ?? null;
+  const featuredDossier = featured ? getProjectDossier(featured) : null;
+
+  return (
+    <div className="space-y-8">
+      {stats?.isPaused ? (
+        <Alert tone="warning" title="Fund is paused">
+          Deposits, withdrawals, and acquisitions are temporarily halted by the
+          fund administrator. Existing positions are unaffected.
+        </Alert>
+      ) : null}
+
+      {error ? (
+        <Alert tone="danger" title="Could not load overview">
+          {error}
+        </Alert>
+      ) : null}
+
+      {/* LEAD — connected: the investor's position + single next action;
+          disconnected: the housing mission in one sentence. */}
+      {isConnected ? (
+        <>
+          <header className="max-w-2xl">
+            <p className="text-label mb-1.5">Your journey</p>
+            <h1 className="text-display text-text-1">
+              {activeAccount?.alias ? `Welcome back, ${activeAccount.alias}` : "Welcome back"}
+            </h1>
+          </header>
+          {/* J6: the position snapshot answers "what do I own?" right under
+              "where am I?". */}
+          {portfolio ? <PositionSnapshot portfolio={portfolio} /> : null}
+          <OverviewNextStep step={nextStep} portfolio={portfolio} />
+          <AdvancedDetails summary="Ways to take part">
+            {/* S9: first-run hand-off — one question, three paths. Hidden as
+                soon as the account shows any position or role. */}
+            <PersonaHandOff
+              hasSignal={Boolean(
+                (portfolio?.depositedAmount ?? 0) > 0 ||
+                  (portfolio?.balance ?? 0) > 0 ||
+                  kyc?.isPropertyOwner ||
+                  kyc?.isCouncil
+              )}
+            />
+            {/* J5: the journey stepper — each step derived from real on-chain
+                state, one deep-link action on the active step. */}
+            <JourneyStepper
+              kyc={kyc}
+              portfolio={portfolio}
+              listings={listings}
+              proposals={proposals}
+            />
+          </AdvancedDetails>
+        </>
+      ) : (
+        // Disconnected lead — the prototype front door, not the mission
+        // brochure (that lives on /learn and fair-squares.nl). What this is,
+        // the three things you can do, one action. The FeaturedProject block
+        // below bridges into the live fund sections.
+        <PrototypeIntro
+          rorPct={stats?.rorBps != null ? stats.rorBps / 100 : null}
+        />
+      )}
+
+      {/* FEATURED PROJECT — the housing-first hero (the product). For the
+          disconnected visitor it is the bridge from the marketing stack into the
+          live fund sections; for the investor it follows the next-step block. */}
+      {!loading && featured && featuredDossier ? (
+        <FeaturedProject
+          proposal={featured}
+          dossier={featuredDossier}
+          ctaPrimary={false}
+        />
+      ) : null}
+
+      {/* Three headline fund figures — all real on-chain reads. The full set
+          (impact, participation, raw parameters) lives behind the disclosure. */}
+      <section aria-label="Fund at a glance">
+        {loading || !stats ? (
+          <KpiGrid cols={3}>
+            <SkeletonKpi />
+            <SkeletonKpi />
+            <SkeletonKpi />
+          </KpiGrid>
+        ) : (
+          <KpiGrid cols={3}>
+            <KpiCard
+              label="Fund value"
+              value={stats.navEur != null ? formatEUR(stats.navEur) : "—"}
+              tone="accent"
+                            hint="Net asset value — the pooled capital (deposit principal, and property once marked) backing every Fund Share. Rent is a separate claimable earnings stream and does not inflate NAV; no DeFi yield is included."
+            />
+            <KpiCard
+              label="Available for homes"
+              value={formatEUR(stats.available)}
+              sub={stats.available > 0 ? "Ready for new acquisitions" : "Fully committed"}
+              hint="Capital in the fund not yet parked in yield or committed to a home — what new acquisitions can draw on."
+            />
+            <KpiCard
+              label="Committed to homes"
+              value={formatEUR(stats.totalAllocated)}
+                            hint="Capital committed to acquiring property through approved funding requests."
+            />
+          </KpiGrid>
+        )}
+      </section>
+
+      {/* Live funding requests — the deal-room preview, links to Governance. */}
+      <Section
+        title="Open votes"
+        description={
+          loading
+            ? "Loading current requests…"
+            : liveRequests > 0
+              ? `${liveRequests} request${liveRequests === 1 ? "" : "s"} open for member votes.`
+              : "Proposals to commit fund capital to acquire a home."
+        }
+        actions={
+          <Link href="/governance" className="btn btn-secondary btn-sm">
+            View votes
+          </Link>
+        }
+      >
+        {loading ? (
+          <div className="space-y-2">
+            <SkeletonRow />
+            <SkeletonRow />
+            <SkeletonRow />
+          </div>
+        ) : (
+          <FundingRequestsPreview proposals={proposals} />
+        )}
+      </Section>
+
+      {/* Keep empty acquisition history on Homes, not the overview. */}
+      {loading || properties.length > 0 ? <Section
+        title="Homes acquired"
+        description="Property deeds the fund holds after an approved acquisition."
+        actions={
+          <Link href="/fund" className="btn btn-secondary btn-sm">
+            View all homes
+          </Link>
+        }
+      >
+        {loading ? (
+          <div className="space-y-2">
+            <SkeletonRow />
+            <SkeletonRow />
+          </div>
+        ) : (
+          <ProjectsPreview properties={properties} />
+        )}
+      </Section> : null}
+
+      {/* Fund facts — health, participation and data-freshness detail. Opt-in,
+          kept out of the calm primary flow. Raw protocol parameters (price
+          band, voting window in blocks, block production, allocation splits)
+          were evicted to the sanctioned technical surface (/learn#parameters)
+          per the overhaul plan §4.1 — no user meaning here. */}
+      {stats || chain ? (
+        <AdvancedDetails summary="Fund facts">
+          <div className="space-y-6">
+            {!loading && !error ? <ImpactStrip proposals={proposals} /> : null}
+            {stats ? (
+              <div className="space-y-3">
+                <FundHealthKpis stats={stats} />
+                <FundParticipationKpis stats={stats} />
+              </div>
+            ) : null}
+
+            <DataHealthRail stats={stats} kyc={kyc} isConnected={isConnected} />
+
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+              {stats ? (
+                <RawRow label="Total deposits" value={formatEUR(stats.totalDeposits)} />
+              ) : null}
+              {chain ? (
+                <RawRow
+                  label="Votes needed to decide a request"
+                  value={chain.governance.minQuorumVotes.toLocaleString()}
+                />
+              ) : null}
+            </dl>
+            <p className="text-caption text-text-3">
+              See{" "}
+              <Link href="/learn#parameters" className="text-fs-teal-dark hover:underline">
+                parameters &amp; transparency
+              </Link>{" "}
+              for the full parameter set, contract addresses, and verifier keys.
+            </p>
+          </div>
+        </AdvancedDetails>
+      ) : null}
+
+    </div>
+  );
+}
+
+function RawRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-label">{label}</dt>
+      <dd className="text-body mt-1 text-mono text-text-1 tabular-nums">{value}</dd>
+    </div>
+  );
+}

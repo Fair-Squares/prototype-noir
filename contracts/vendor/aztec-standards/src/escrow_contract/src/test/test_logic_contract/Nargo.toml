@@ -1,0 +1,11 @@
+[package]
+name = "test_logic_contract"
+authors = [""]
+compiler_version = ">=1.0.0"
+type = "contract"
+
+[dependencies]
+aztec = { git = "https://github.com/aztec-labs-eng/aztec-nr", tag = "v6.0.0", directory = "aztec" }
+escrow_contract = { path = "../../../" }
+token = { path = "../../../../token_contract" }
+nft = { path = "../../../../nft_contract" }

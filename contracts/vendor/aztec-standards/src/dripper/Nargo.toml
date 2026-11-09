@@ -1,0 +1,9 @@
+[package]
+name = "dripper"
+authors = [""]
+compiler_version = ">=1.0.0"
+type = "contract"
+
+[dependencies]
+aztec = { git = "https://github.com/aztec-labs-eng/aztec-nr", tag = "v6.0.0", directory = "aztec" }
+token = { path = "../token_contract" }
